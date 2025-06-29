@@ -53,7 +53,7 @@ def make_api_request(endpoint, method="GET", data=None, files=None):
 
 # Streamlit UI
 st.set_page_config(page_title="ExGen Document Generator", layout="wide")
-st.title("📄 ExGen Document Generator")
+st.title("📄 Exa.men")
 
 # Sidebar for navigation
 st.sidebar.title("Navigation")
