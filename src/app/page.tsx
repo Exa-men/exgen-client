@@ -32,6 +32,52 @@ export default function Home() {
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+  // Backend step names (in order, for log matching)
+  const backendStepNames = [
+    "Kwalificatie specificeren",
+    "Overzicht kwalificatie Voorwaarden",
+    "Gedrag beginnend beroepsbeoefenaar",
+    "Essentie van de kwalificatie",
+    "Bepaal de leeropbrengsten",
+    "Conclusie",
+    "Rubriceren",
+    "Examenopdracht Kandidaat",
+    "Exameninstructie Beoordelaar"
+  ];
+  // User-friendly descriptions (for display)
+  const stepDescriptions = [
+    "Stap 1: Over welke kwalificatie hebben we het?",
+    "Stap 2: Wat zijn de harde kwalificatievoorwaarden?",
+    "Stap 3: Welk gedrag verwachten we bij een beginnend beroepsbeoefenaar",
+    "Stap 4: Wat is de essentie van de kwalificatie?",
+    "Stap 5: Welke leeropbrengsten verwachten we van de kandidaat?",
+    "Stap 6: Wat is mijn conclusie over het ontwerp van het examen?",
+    "Stap 7: Rubriceer de leeropbrengsten",
+    "Stap 8: Ik maak de examenopdracht voor de kandidaat",
+    "Stap 9: Ik schrijf de exameninstructie voor de beoordelaar",
+  ];
+
+  // Helper to determine step status from logs using backend step names
+  function getStepStatuses(logs: string[], backendStepNames: string[]) {
+    let foundCurrent = false;
+    return backendStepNames.map((stepName, idx) => {
+      // Step start: "--- Step X/"
+      const started = logs.some(log => log.includes(`--- Step ${idx + 1}/`));
+      // Step done: "✅ Step {stepName} successful" or "❌ Step {stepName} failed"
+      const done = logs.some(
+        log =>
+          (log.includes(`✅ Step ${stepName} successful`) ||
+           log.includes(`❌ Step ${stepName} failed`))
+      );
+      if (done) return "done";
+      if (!foundCurrent && started) {
+        foundCurrent = true;
+        return "current";
+      }
+      return "pending";
+    });
+  }
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -223,6 +269,9 @@ export default function Home() {
     }
   };
 
+  // Temporary debug: print logs from backend
+  console.log("Logs from backend:", logs);
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
@@ -339,6 +388,40 @@ export default function Home() {
                 <h2 className="text-xl font-semibold mb-4 text-gray-800">Processing Status</h2>
                 
                 <div className="space-y-4">
+                  {/* Step Progress Checklist */}
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-2">Workflow Stappen</h3>
+                    <ul className="mb-4">
+                      {(() => {
+                        const stepStatuses = getStepStatuses(logs, backendStepNames);
+                        return stepDescriptions.map((desc, idx) => {
+                          const status = stepStatuses[idx];
+                          let icon = null;
+                          let textClass = "text-gray-700";
+                          if (status === "done") {
+                            icon = <span className="mr-2 text-green-600">✅</span>;
+                            textClass = "text-green-700 font-semibold";
+                          } else if (status === "current") {
+                            icon = <span className="mr-2 animate-spin inline-block" style={{fontSize: '1.2em'}}>
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                              </svg>
+                            </span>;
+                            textClass = "text-blue-700 font-semibold";
+                          } else {
+                            icon = <span className="mr-2 text-gray-400">⬜</span>;
+                          }
+                          return (
+                            <li key={idx} className={`flex items-center mb-1`}>
+                              {icon}
+                              <span className={textClass}>{desc}</span>
+                            </li>
+                          );
+                        });
+                      })()}
+                    </ul>
+                  </div>
                   {/* Status Overview */}
                   <div className="flex items-center space-x-3">
                     <span className="text-2xl">{getStatusIcon(jobStatus.status)}</span>
