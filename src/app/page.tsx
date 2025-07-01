@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 interface JobStatus {
   job_id: string;
@@ -29,8 +29,55 @@ export default function Home() {
   const [templateName, setTemplateName] = useState("Assessment template_1");
   const [logs, setLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  // Backend step names (in order, for log matching)
+  const backendStepNames = [
+    "Kwalificatie specificeren",
+    "Overzicht kwalificatie Voorwaarden",
+    "Gedrag beginnend beroepsbeoefenaar",
+    "Essentie van de kwalificatie",
+    "Bepaal de leeropbrengsten",
+    "Conclusie",
+    "Rubriceren",
+    "Examenopdracht Kandidaat",
+    "Exameninstructie Beoordelaar"
+  ];
+  // User-friendly descriptions (for display)
+  const stepDescriptions = [
+    "Stap 1: Bekijk de inhoud van het kwalificatiebestand",
+    "Stap 2: Inventariseer de kwalificatievoorwaarden",
+    "Stap 3: Inventariseer het gedrag van een beginnend beroepsbeoefenaar",
+    "Stap 4: Bepaal de essentie van de kwalificatie",
+    "Stap 5: Verwachte leeropbrengsten overzichtelijk maken",
+    "Stap 6: Onderbouw de conclusie over het ontwerp van het examen",
+    "Stap 7: Rubriceer de leeropbrengsten",
+    "Stap 8: Schrijf een examenopdracht voor de kandidaat",
+    "Stap 9: Maak een instructie voor de beoordelaar",
+  ];
+
+  // Helper to determine step status from logs using backend step names
+  function getStepStatuses(logs: string[], backendStepNames: string[]) {
+    let foundCurrent = false;
+    return backendStepNames.map((stepName, idx) => {
+      // Step start: "--- Step X/"
+      const started = logs.some(log => log.includes(`--- Step ${idx + 1}/`));
+      // Step done: "✅ Step {stepName} successful" or "❌ Step {stepName} failed"
+      const done = logs.some(
+        log =>
+          (log.includes(`✅ Step ${stepName} successful`) ||
+           log.includes(`❌ Step ${stepName} failed`))
+      );
+      if (done) return "done";
+      if (!foundCurrent && started) {
+        foundCurrent = true;
+        return "current";
+      }
+      return "pending";
+    });
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -223,10 +270,20 @@ export default function Home() {
     }
   };
 
+  // Temporary debug: print logs from backend
+  console.log("Logs from backend:", logs);
+
+  // Scroll to bottom when logs change and logs are visible
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs]);
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">ExGen Dashboard</h1>
+        <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">Exa.men</h1>
         
         {!session ? (
           <div className="text-center">
@@ -257,20 +314,29 @@ export default function Home() {
 
             {/* File Upload Section */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Qualification File</h2>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Qualification</h2>
               
               {/* Template Selection */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Template Name
                 </label>
-                <input
-                  type="text"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Assessment template_1"
-                />
+                <div className="relative">
+                  <select
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-lg"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="Assessment template_1">Assessment template_1</option>
+                  </select>
+                  {/* Custom arrow */}
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                    <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                      <path d="M7 7l3-3 3 3m0 6l-3 3-3-3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Available template: "Assessment template_1"
                 </p>
@@ -336,20 +402,42 @@ export default function Home() {
             {/* Job Status */}
             {jobStatus && (
               <div className="bg-white rounded-lg p-6 shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-800">Processing Status</h2>
+                <h2 className="text-xl font-semibold mb-4 text-gray-800">Status</h2>
                 
                 <div className="space-y-4">
-                  {/* Status Overview */}
-                  <div className="flex items-center space-x-3">
-                    <span className="text-2xl">{getStatusIcon(jobStatus.status)}</span>
-                    <div>
-                      <p className={`font-medium ${getStatusColor(jobStatus.status)}`}>
-                        {jobStatus.status.charAt(0).toUpperCase() + jobStatus.status.slice(1)}
-                      </p>
-                      <p className="text-sm text-gray-600">{jobStatus.current_step}</p>
-                    </div>
+                  {/* Step Progress Checklist */}
+                  <div>
+                    <ul className="mb-4">
+                      {(() => {
+                        const stepStatuses = getStepStatuses(logs, backendStepNames);
+                        return stepDescriptions.map((desc, idx) => {
+                          const status = stepStatuses[idx];
+                          let icon = null;
+                          let textClass = "text-gray-700";
+                          if (status === "done") {
+                            icon = <span className="mr-2 text-green-600">✅</span>;
+                            textClass = "text-green-700 font-semibold";
+                          } else if (status === "current") {
+                            icon = <span className="mr-2 animate-spin inline-block" style={{fontSize: '1.2em'}}>
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                              </svg>
+                            </span>;
+                            textClass = "text-blue-700 font-semibold";
+                          } else {
+                            icon = <span className="mr-2 text-gray-400">⬜</span>;
+                          }
+                          return (
+                            <li key={idx} className={`flex items-center mb-1`}>
+                              {icon}
+                              <span className={textClass}>{desc}</span>
+                            </li>
+                          );
+                        });
+                      })()}
+                    </ul>
                   </div>
-
                   {/* Progress Bar */}
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
@@ -358,19 +446,36 @@ export default function Home() {
                     ></div>
                   </div>
 
-                  {/* Logs */}
-                  {logs.length > 0 && (
-                    <div>
-                      <h3 className="font-medium text-gray-700 mb-2">Processing Logs</h3>
-                      <div className="bg-gray-100 rounded p-3 max-h-64 overflow-y-auto">
-                        {logs.map((log, index) => (
-                          <div key={index} className="text-sm text-gray-700 mb-1">
-                            {log}
-                          </div>
-                        ))}
-                      </div>
+                  {/* Processing Logs (collapsed by default, auto-scroll to bottom) */}
+                  <details className="mt-6" open={false}>
+                    <summary className="cursor-pointer font-semibold text-gray-700 mb-2">Processing Logs</summary>
+                    <div className="bg-gray-100 rounded p-3 max-h-64 overflow-y-auto" style={{ position: 'relative' }}>
+                      {logs.map((log, index) => (
+                        <div key={index} className="text-sm text-gray-700 mb-1">
+                          {log}
+                        </div>
+                      ))}
+                      <div ref={logsEndRef} />
                     </div>
-                  )}
+                  </details>
+
+                  {/* After the checklist and before the document link, show a status indicator if all steps are done but jobStatus.status is not 'completed' */}
+                  {(() => {
+                    const stepStatuses = getStepStatuses(logs, backendStepNames);
+                    const allStepsDone = stepStatuses.every(s => s === 'done');
+                    if (allStepsDone && jobStatus.status !== 'completed') {
+                      return (
+                        <div className="flex items-center space-x-2 text-blue-700 font-semibold text-lg">
+                          <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                          </svg>
+                          <span>Preparing the document...</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* Generated Document Link */}
                   {jobStatus.status === 'completed' && jobStatus.result?.generated_document && (
@@ -416,25 +521,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            {/* Debug Section */}
-            <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Debug Tools</h2>
-              <div className="flex space-x-4">
-                <button
-                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors"
-                  onClick={callApi}
-                >
-                  Test API
-                </button>
-                <button
-                  className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors"
-                  onClick={testCors}
-                >
-                  Test CORS
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
