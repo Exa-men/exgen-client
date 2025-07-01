@@ -30,6 +30,8 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -81,7 +83,7 @@ export default function Home() {
       formData.append('file', selectedFile);
       formData.append('template_name_or_id', templateName);
 
-      const response = await fetch('http://localhost:8000/api/v1/generate', {
+      const response = await fetch(`${backendUrl}/api/v1/generate`, {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer frontend-secret-key',
@@ -111,7 +113,7 @@ export default function Home() {
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/jobs/${jobId}`, {
+        const response = await fetch(`${backendUrl}/api/v1/jobs/${jobId}`, {
           headers: {
             'Authorization': 'Bearer frontend-secret-key',
           },
@@ -151,7 +153,7 @@ export default function Home() {
 
   const callApi = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/health', {
+      const res = await fetch(`${backendUrl}/api/v1/health`, {
         method: 'GET',
         headers: {
           'Authorization': 'Bearer frontend-secret-key',
@@ -178,7 +180,7 @@ export default function Home() {
 
   const testCors = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/test', {
+      const res = await fetch(`${backendUrl}/api/v1/test`, {
         method: 'GET',
         headers: {
           'Authorization': 'Bearer frontend-secret-key',
