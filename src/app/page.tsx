@@ -2,6 +2,7 @@
 
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface JobStatus {
   job_id: string;
@@ -30,6 +31,12 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [prompts, setPrompts] = useState<{ [key: string]: string }>({});
+  const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
+  const [editedPromptContent, setEditedPromptContent] = useState<string>('');
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState<string | null>(null);
+  const [promptError, setPromptError] = useState<string | null>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -280,6 +287,68 @@ export default function Home() {
     }
   }, [logs]);
 
+  // Fetch prompts from backend
+  const fetchPrompts = async () => {
+    setLoadingPrompts(true);
+    setPromptError(null);
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/prompts`, {
+        headers: {
+          'Authorization': 'Bearer frontend-secret-key',
+        },
+      });
+      if (!res.ok) throw new Error('Failed to fetch prompts');
+      const data = await res.json();
+      setPrompts(data);
+    } catch (err) {
+      setPromptError('Failed to load prompts');
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
+
+  // Fetch prompts from backend on mount (for the collapsible section)
+  useEffect(() => {
+    fetchPrompts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Edit prompt
+  const handleEditPrompt = (promptName: string) => {
+    setEditingPrompt(promptName);
+    setEditedPromptContent(prompts[promptName]);
+  };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditingPrompt(null);
+    setEditedPromptContent('');
+  };
+
+  // Save prompt
+  const handleSavePrompt = async (promptName: string) => {
+    setSavingPrompt(promptName);
+    setPromptError(null);
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer frontend-secret-key',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content: editedPromptContent }),
+      });
+      if (!res.ok) throw new Error('Failed to save prompt');
+      setPrompts((prev) => ({ ...prev, [promptName]: editedPromptContent }));
+      setEditingPrompt(null);
+      setEditedPromptContent('');
+    } catch (err) {
+      setPromptError('Failed to save prompt');
+    } finally {
+      setSavingPrompt(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
@@ -311,6 +380,78 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {/* Prompt Settings Collapsible Section */}
+            <details className="bg-white rounded-lg p-6 shadow-md mb-8" open={false}>
+              <summary className="text-xl font-semibold text-gray-800 cursor-pointer select-none mb-4">Prompt Settings</summary>
+              {loadingPrompts ? (
+                <div className="text-gray-600">Loading prompts...</div>
+              ) : promptError ? (
+                <div className="text-red-600">{promptError}</div>
+              ) : (
+                <div className="space-y-6 mt-4">
+                  {Object.entries(prompts)
+                    .sort(([a], [b]) => {
+                      // _base_instructions first
+                      if (a === '_base_instructions') return -1;
+                      if (b === '_base_instructions') return 1;
+                      // Then by numeric prefix if present
+                      const numA = a.match(/^\d+/)?.[0];
+                      const numB = b.match(/^\d+/)?.[0];
+                      if (numA && numB) return Number(numA) - Number(numB);
+                      if (numA) return -1;
+                      if (numB) return 1;
+                      // Otherwise alphabetical
+                      return a.localeCompare(b);
+                    })
+                    .map(([promptName, promptContent]) => (
+                      <div key={promptName} className="border-b pb-4">
+                        <div className="flex items-center mb-2">
+                          <span className="font-medium text-gray-700 flex-1">{promptName.replace(/_/g, ' ')}</span>
+                          {editingPrompt === promptName ? (
+                            <>
+                              <button
+                                className="text-green-600 hover:text-green-800 mr-2"
+                                onClick={() => handleSavePrompt(promptName)}
+                                disabled={savingPrompt === promptName}
+                                title="Save"
+                              >
+                                <CheckIcon className="h-5 w-5" />
+                              </button>
+                              <button
+                                className="text-gray-500 hover:text-gray-700"
+                                onClick={handleCancelEdit}
+                                title="Cancel"
+                              >
+                                <XMarkIcon className="h-5 w-5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="text-blue-600 hover:text-blue-800"
+                              onClick={() => handleEditPrompt(promptName)}
+                              title="Edit"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
+                        {editingPrompt === promptName ? (
+                          <textarea
+                            className="w-full border rounded p-2 text-sm font-mono"
+                            rows={8}
+                            value={editedPromptContent}
+                            onChange={e => setEditedPromptContent(e.target.value)}
+                            disabled={savingPrompt === promptName}
+                          />
+                        ) : (
+                          <pre className="bg-gray-100 rounded p-2 text-sm font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">{promptContent}</pre>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </details>
 
             {/* File Upload Section */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
