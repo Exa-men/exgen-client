@@ -4,6 +4,8 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
+import DocumentApproval from './components/DocumentApproval';
+import ExtractionProgress from './components/ExtractionProgress';
 
 interface JobStatus {
   job_id: string;
@@ -30,6 +32,9 @@ export default function Home() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [templateName, setTemplateName] = useState("Assessment template_1");
   const [logs, setLogs] = useState<string[]>([]);
+  const [showApproval, setShowApproval] = useState(false);
+  const [showExtraction, setShowExtraction] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -190,6 +195,8 @@ export default function Home() {
               console.log("Full result object:", statusData.result);
               if (statusData.result?.generated_document) {
                 console.log("Generated document:", statusData.result.generated_document);
+                // Show approval form when document is generated
+                setShowApproval(true);
               } else {
                 console.log("No generated_document in result");
               }
@@ -277,6 +284,21 @@ export default function Home() {
       case 'failed': return '❌';
       default: return '❓';
     }
+  };
+
+  const handleApprovalComplete = (result: any) => {
+    setShowApproval(false);
+    setShowExtraction(true);
+    setExtractionResult(result);
+  };
+
+  const handleExtractionComplete = (result: any) => {
+    setShowExtraction(false);
+    setExtractionResult(result);
+  };
+
+  const handleApprovalCancel = () => {
+    setShowApproval(false);
   };
 
   // Temporary debug: print logs from backend
@@ -413,6 +435,61 @@ export default function Home() {
               )}
             </div>
 
+            {/* Document Approval */}
+            {showApproval && jobStatus && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <DocumentApproval
+                  jobId={jobStatus.job_id}
+                  onApprovalComplete={handleApprovalComplete}
+                  onCancel={handleApprovalCancel}
+                />
+              </div>
+            )}
+
+            {/* Extraction Progress */}
+            {showExtraction && jobStatus && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <ExtractionProgress
+                  jobId={jobStatus.job_id}
+                  onExtractionComplete={handleExtractionComplete}
+                />
+              </div>
+            )}
+
+            {/* Extraction Result */}
+            {extractionResult && !showApproval && !showExtraction && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-medium text-green-800 mb-2">✅ Extraction Complete!</h3>
+                  <div className="text-sm text-green-700 space-y-2">
+                    <p><strong>Learning Objects:</strong> {extractionResult.learning_objects_count || 'N/A'}</p>
+                    {extractionResult.spreadsheet_url && (
+                      <p><strong>Spreadsheet:</strong> 
+                        <a 
+                          href={extractionResult.spreadsheet_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline ml-1"
+                        >
+                          View Spreadsheet
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setExtractionResult(null);
+                      setJobStatus(null);
+                      setSelectedFile(null);
+                    }}
+                    className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  >
+                    🆕 Start New Document
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Job Status */}
             {jobStatus && (
               <div className="bg-white rounded-lg p-6 shadow-sm">
@@ -492,20 +569,28 @@ export default function Home() {
                   })()}
 
                   {/* Generated Document Link */}
-                  {jobStatus.status === 'completed' && jobStatus.result?.generated_document && (
+                  {jobStatus.status === 'completed' && jobStatus.result?.generated_document && !showApproval && !showExtraction && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <h3 className="font-medium text-green-800 mb-2">Document Generated Successfully!</h3>
                       <p className="text-sm text-green-700 mb-3">
                         {jobStatus.result.generated_document.document_title}
                       </p>
-                      <a
-                        href={jobStatus.result.generated_document.document_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                      >
-                        📄 Open in Google Docs
-                      </a>
+                      <div className="space-y-3">
+                        <a
+                          href={jobStatus.result.generated_document.document_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                        >
+                          📄 Open in Google Docs
+                        </a>
+                        <button
+                          onClick={() => setShowApproval(true)}
+                          className="ml-3 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        >
+                          🚀 Continue with Extraction
+                        </button>
+                      </div>
                     </div>
                   )}
 
