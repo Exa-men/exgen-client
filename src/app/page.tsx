@@ -4,6 +4,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
+import ExamFormSelection from './components/ExamFormSelection';
 
 interface JobStatus {
   job_id: string;
@@ -11,6 +12,12 @@ interface JobStatus {
   progress: number;
   current_step: string;
   logs: string[];
+  requires_user_input?: boolean;
+  user_input_step?: {
+    step_name: string;
+    step_description: string;
+    step_index: number;
+  };
   result?: {
     generated_document?: {
       document_id: string;
@@ -30,6 +37,8 @@ export default function Home() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [templateName, setTemplateName] = useState("Assessment template_1");
   const [logs, setLogs] = useState<string[]>([]);
+  const [isSubmittingUserInput, setIsSubmittingUserInput] = useState(false);
+  const [examFormOptions, setExamFormOptions] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -183,6 +192,31 @@ export default function Home() {
           console.log("Job status:", statusData);
           console.log("Job result:", statusData.result);
           
+          // Check if job requires user input
+          if (statusData.requires_user_input && statusData.user_input_step) {
+            clearInterval(pollInterval);
+            console.log("Job requires user input:", statusData.user_input_step);
+            
+            // Extract exam form options from logs
+            const examFormOptionsLog = statusData.logs.find((log: string) => 
+              log.includes('EXAM_FORM_OPTIONS') || log.includes('suitable_forms')
+            );
+            
+            if (examFormOptionsLog) {
+              try {
+                // Try to extract JSON from the log
+                const jsonMatch = examFormOptionsLog.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  const parsedOptions = JSON.parse(jsonMatch[0]);
+                  setExamFormOptions(parsedOptions);
+                }
+              } catch (e) {
+                console.error("Failed to parse exam form options:", e);
+              }
+            }
+            return;
+          }
+          
           if (statusData.status === 'completed' || statusData.status === 'failed') {
             clearInterval(pollInterval);
             if (statusData.status === 'completed') {
@@ -205,6 +239,44 @@ export default function Home() {
         clearInterval(pollInterval);
       }
     }, 2000); // Poll every 2 seconds
+  };
+
+  const handleUserInputSubmit = async (selectedForms: number[]) => {
+    if (!jobStatus?.job_id) return;
+    
+    setIsSubmittingUserInput(true);
+    try {
+      const response = await fetch(`${backendUrl}/api/v1/jobs/${jobStatus.job_id}/user-input`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer frontend-secret-key',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          selected_forms: selectedForms
+        }),
+      });
+
+      if (response.ok) {
+        console.log("User input submitted successfully");
+        // Continue polling for job status
+        pollJobStatus(jobStatus.job_id);
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Failed to submit user input: ${errorText}`);
+      }
+    } catch (error) {
+      console.error("Error submitting user input:", error);
+      alert(`Failed to submit user input: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSubmittingUserInput(false);
+    }
+  };
+
+  const handleUserInputCancel = () => {
+    setJobStatus(null);
+    setExamFormOptions(null);
+    setLogs([]);
   };
 
   const callApi = async () => {
@@ -417,6 +489,18 @@ export default function Home() {
             {jobStatus && (
               <div className="bg-white rounded-lg p-6 shadow-sm">
                 <h2 className="text-xl font-semibold mb-4 text-gray-800">Status</h2>
+                
+                {/* User Input Section */}
+                {jobStatus.requires_user_input && examFormOptions && (
+                  <div className="mb-6">
+                    <ExamFormSelection
+                      examFormOptions={examFormOptions}
+                      onSubmit={handleUserInputSubmit}
+                      onCancel={handleUserInputCancel}
+                      isLoading={isSubmittingUserInput}
+                    />
+                  </div>
+                )}
                 
                 <div className="space-y-4">
                   {/* Step Progress Checklist */}
