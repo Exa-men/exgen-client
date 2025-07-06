@@ -2,8 +2,10 @@
 
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useState, useRef, useCallback, useEffect } from "react";
-import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, CheckIcon, XMarkIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
+import Phase2Continuation from './components/Phase2Continuation';
+import EnhancedWorkflow from './components/EnhancedWorkflow';
 
 interface JobStatus {
   job_id: string;
@@ -29,7 +31,12 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [templateName, setTemplateName] = useState("Assessment template_1");
+  const [outputTitle, setOutputTitle] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
+  const [showPhase2, setShowPhase2] = useState(false);
+  const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
+  const [originalXmlPath, setOriginalXmlPath] = useState<string | null>(null);
+  const [workflowMode, setWorkflowMode] = useState<'original' | 'phase2' | 'enhanced'>('original');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +131,13 @@ export default function Home() {
     }
   };
 
+  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
+
+  // Reset uploadedFilePath if file or workflow mode changes
+  useEffect(() => {
+    setUploadedFilePath(null);
+  }, [selectedFile, workflowMode]);
+
   const uploadFile = async () => {
     if (!selectedFile) {
       alert("Please select a file");
@@ -149,9 +163,10 @@ export default function Home() {
 
       if (response.ok) {
         const jobData = await response.json();
+        // Try to get file_path from backend, fallback to uploads/selectedFile.name
+        setUploadedFilePath(jobData.file_path || `uploads/${selectedFile.name}`);
         setJobStatus(jobData);
         console.log("Job created:", jobData);
-        
         // Start polling for job status
         pollJobStatus(jobData.job_id);
       } else {
@@ -190,6 +205,12 @@ export default function Home() {
               console.log("Full result object:", statusData.result);
               if (statusData.result?.generated_document) {
                 console.log("Generated document:", statusData.result.generated_document);
+                // Store document ID for Phase 2 continuation
+                setCurrentDocumentId(statusData.result.generated_document.document_id);
+                // Store original XML path if available
+                if (selectedFile?.name) {
+                  setOriginalXmlPath(selectedFile.name);
+                }
               } else {
                 console.log("No generated_document in result");
               }
@@ -289,7 +310,75 @@ export default function Home() {
     }
   }, [logs]);
 
-
+  // Helper: Render the 5-phase stepper (greyed out if no file uploaded)
+  const renderEnhancedStepper = () => {
+    const phases = [
+      {
+        id: 1,
+        name: "Phase 1: Qualification Analysis",
+        description: "AI analyzes the XML document and extracts key information",
+        steps: [
+          "XML to JSON Extraction",
+          "Qualification Summary",
+          "Qualification Requirements",
+          "Behavioral Expectations",
+          "Qualification Essence",
+          "Learning Outcomes",
+          "Assessment Form Suggestions"
+        ]
+      },
+      {
+        id: 2,
+        name: "Phase 2: Expert Revision",
+        description: "User selects assessment forms from AI suggestions",
+        steps: ["Assessment Form Selection"]
+      },
+      {
+        id: 3,
+        name: "Phase 3: Assessment Creation",
+        description: "AI creates assessment documents based on selected forms",
+        steps: [
+          "Conclusion",
+          "Rubric Creation",
+          "Learning Outcomes Mapping",
+          "Assessment Plan",
+          "Candidate Assignment",
+          "Assessor Instructions"
+        ]
+      },
+      {
+        id: 4,
+        name: "Phase 4: Final Review",
+        description: "User reviews generated documents",
+        steps: ["Document Review"]
+      },
+      {
+        id: 5,
+        name: "Phase 5: Assembly",
+        description: "Final assembly and packaging",
+        steps: ["Document Assembly", "Package Creation"]
+      }
+    ];
+    const isGreyed = !selectedFile;
+    return (
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-2 text-gray-800">Workflow Steps</h3>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {phases.map(phase => (
+            <div key={phase.id} className={`rounded-lg p-4 border ${isGreyed ? 'bg-gray-100 border-gray-200 text-gray-400' : 'bg-blue-50 border-blue-200 text-blue-900'}`}>
+              <div className="font-bold mb-1">{phase.name}</div>
+              <div className="text-xs mb-2">{phase.description}</div>
+              <ul className="text-xs list-disc ml-4">
+                {phase.steps.map((step, idx) => (
+                  <li key={idx} className={isGreyed ? 'text-gray-300' : 'text-blue-900'}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -326,8 +415,56 @@ export default function Home() {
             {/* Workflow Configuration Section */}
             <WorkflowConfig backendUrl={backendUrl} />
 
-            {/* File Upload Section */}
+            {/* Workflow Mode Selection */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold mb-4 text-gray-800">Workflow Mode</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => setWorkflowMode('original')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    workflowMode === 'original'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold mb-2">Original Workflow</div>
+                  <div className="text-sm text-gray-600">
+                    Standard 9-step LLM processing chain
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => setWorkflowMode('phase2')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    workflowMode === 'phase2'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold mb-2">Phase 2 Workflow</div>
+                  <div className="text-sm text-gray-600">
+                    Original + Phase 2 automation
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => setWorkflowMode('enhanced')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    workflowMode === 'enhanced'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold mb-2">Enhanced Workflow</div>
+                  <div className="text-sm text-gray-600">
+                    5-phase workflow with user interactions
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Always show file upload section */}
+            <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
               <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Qualification</h2>
               
               {/* Template Selection */}
@@ -413,8 +550,25 @@ export default function Home() {
               )}
             </div>
 
-            {/* Job Status */}
-            {jobStatus && (
+            {/* Enhanced Workflow Stepper (always visible in enhanced mode) */}
+            {workflowMode === 'enhanced' && renderEnhancedStepper()}
+
+            {/* Enhanced Workflow component (only interactive after file upload) */}
+            {workflowMode === 'enhanced' && uploadedFilePath && (
+              <div className="bg-white rounded-lg p-6 shadow-sm mb-8">
+                <EnhancedWorkflow
+                  filePath={uploadedFilePath}
+                  templateNameOrId={templateName}
+                  outputTitle={outputTitle}
+                  onComplete={(result) => {
+                    console.log('Enhanced workflow completed:', result);
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Job Status - Original/Phase2 Workflows */}
+            {(workflowMode === 'original' || workflowMode === 'phase2') && jobStatus && (
               <div className="bg-white rounded-lg p-6 shadow-sm">
                 <h2 className="text-xl font-semibold mb-4 text-gray-800">Status</h2>
                 
@@ -498,14 +652,23 @@ export default function Home() {
                       <p className="text-sm text-green-700 mb-3">
                         {jobStatus.result.generated_document.document_title}
                       </p>
-                      <a
-                        href={jobStatus.result.generated_document.document_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                      >
-                        📄 Open in Google Docs
-                      </a>
+                      <div className="flex space-x-2">
+                        <a
+                          href={jobStatus.result.generated_document.document_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                        >
+                          📄 Open in Google Docs
+                        </a>
+                        <button
+                          onClick={() => setShowPhase2(true)}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        >
+                          <ArrowRightIcon className="h-4 w-4 mr-2" />
+                          Continue to Phase 2
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -533,6 +696,20 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Phase 2 Continuation - Original/Phase2 Workflows */}
+            {(workflowMode === 'original' || workflowMode === 'phase2') && showPhase2 && currentDocumentId && (
+              <div className="mt-8">
+                <Phase2Continuation
+                  documentId={currentDocumentId}
+                  originalXmlPath={originalXmlPath || undefined}
+                  onComplete={(result) => {
+                    console.log('Phase 2 completed:', result);
+                    // You can add additional handling here
+                  }}
+                />
               </div>
             )}
           </div>
