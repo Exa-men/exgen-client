@@ -39,27 +39,29 @@ export default function Home() {
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-  // Fetch step names from backend on mount
+  // Fetch step names and descriptions from backend
+  const fetchStepNamesAndDescriptions = async () => {
+    try {
+      const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
+        headers: {
+          'Authorization': 'Bearer frontend-secret-key',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch workflow config');
+      const data = await response.json();
+      const names = data.steps.map((step: any) => step.name);
+      const descriptions = data.steps.map((step: any) => step.description);
+      setDynamicStepNames(names);
+      setDynamicStepDescriptions(descriptions);
+    } catch (err) {
+      setDynamicStepNames([]);
+      setDynamicStepDescriptions([]);
+    }
+  };
+
+  // Fetch on mount
   useEffect(() => {
-    const fetchStepNames = async () => {
-      try {
-        const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-          headers: {
-            'Authorization': 'Bearer frontend-secret-key',
-          },
-        });
-        if (!response.ok) throw new Error('Failed to fetch workflow config');
-        const data = await response.json();
-        const names = data.steps.map((step: any) => step.name);
-        const descriptions = data.steps.map((step: any) => step.description);
-        setDynamicStepNames(names);
-        setDynamicStepDescriptions(descriptions);
-      } catch (err) {
-        setDynamicStepNames([]);
-        setDynamicStepDescriptions([]);
-      }
-    };
-    fetchStepNames();
+    fetchStepNamesAndDescriptions();
   }, [backendUrl]);
 
   // Helper to determine step status from logs using backend step names
@@ -124,7 +126,9 @@ export default function Home() {
     }
   };
 
+  // Update uploadFile to refetch steps before starting job
   const uploadFile = async () => {
+    await fetchStepNamesAndDescriptions(); // Always get latest steps
     if (!selectedFile) {
       alert("Please select a file");
       return;
@@ -425,7 +429,7 @@ export default function Home() {
                     <ul className="mb-4">
                       {(() => {
                         const stepStatuses = getStepStatuses(logs, dynamicStepNames);
-                        return dynamicStepDescriptions.map((desc, idx) => {
+                        return dynamicStepNames.map((name, idx) => {
                           const status = stepStatuses[idx];
                           let icon = null;
                           let textClass = "text-gray-700";
@@ -444,9 +448,14 @@ export default function Home() {
                             icon = <span className="mr-2 text-gray-400">⬜</span>;
                           }
                           return (
-                            <li key={idx} className={`flex items-center mb-1`}>
-                              {icon}
-                              <span className={textClass}>{desc}</span>
+                            <li key={idx} className={`flex flex-col mb-1`}>
+                              <div className="flex items-center">
+                                {icon}
+                                <span className={textClass}>{`Step ${idx + 1}: ${name}`}</span>
+                              </div>
+                              {dynamicStepDescriptions[idx] && (
+                                <span className="ml-7 text-xs text-gray-500">{dynamicStepDescriptions[idx]}</span>
+                              )}
                             </li>
                           );
                         });
