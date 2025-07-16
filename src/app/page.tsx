@@ -28,7 +28,7 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
-  const [templateName, setTemplateName] = useState("Assessment template_1");
+  const [templateName, setTemplateName] = useState("Examentemplate vanaf 2025-26");
   const [logs, setLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -342,7 +342,8 @@ export default function Home() {
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-lg"
                     style={{ fontWeight: 500 }}
                   >
-                    <option value="Assessment template_1">Assessment template_1</option>
+                    <option value="Examentemplate vanaf 2025-26">Examentemplate vanaf 2025-26</option>
+                    <option value="Kwalificerend Leren vanaf 2025-26">Kwalificerend Leren vanaf 2025-26</option>
                   </select>
                   {/* Custom arrow */}
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
@@ -352,7 +353,7 @@ export default function Home() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Available template: "Assessment template_1"
+                  Available templates: "Examentemplate 2025-26", "Kwalificerend Leren"
                 </p>
               </div>
 
@@ -494,7 +495,7 @@ export default function Home() {
                   {/* Generated Document Link */}
                   {jobStatus.status === 'completed' && jobStatus.result?.generated_document && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <h3 className="font-medium text-green-800 mb-2">Document Generated Successfully!</h3>
+                      <h3 className="font-medium text-green-800 mb-2">Base document ready to use 🫡</h3>
                       <p className="text-sm text-green-700 mb-3">
                         {jobStatus.result.generated_document.document_title}
                       </p>
