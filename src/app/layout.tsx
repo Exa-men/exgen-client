@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>ExGen - Educational Examination Generator</title>
+        <title>ExGen</title>
         <meta name="description" content="Generate examination instruments for Dutch vocational education" />
       </head>
       <body
