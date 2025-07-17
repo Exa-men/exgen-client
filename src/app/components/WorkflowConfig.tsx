@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, ChevronRightIcon, TrashIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/nextjs';
 
 interface StepConfig {
   id: string; // Add optional id for drag-and-drop stability

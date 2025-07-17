@@ -1,6 +1,6 @@
 "use client";
 
-import { SignIn, SignUp, UserButton, useUser, useClerk, useAuth } from '@clerk/clerk-react';
+import { SignIn, SignUp, UserButton, useUser, useClerk, useAuth } from '@clerk/nextjs';
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
