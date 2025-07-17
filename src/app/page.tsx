@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signIn, signOut } from "next-auth/react";
+import { SignIn, SignUp, UserButton, useUser, useClerk, useAuth } from '@clerk/clerk-react';
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
@@ -22,7 +22,9 @@ interface JobStatus {
 }
 
 export default function Home() {
-  const { data: session } = useSession();
+  const { isSignedIn, user, isLoaded } = useUser();
+  const { signOut } = useClerk();
+  const { getToken } = useAuth();
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -42,9 +44,11 @@ export default function Home() {
   // Fetch step names and descriptions from backend
   const fetchStepNamesAndDescriptions = async () => {
     try {
+      const token = await getToken();
+      console.log("[DEBUG] Fetching workflow config, Clerk JWT:", token);
       const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
         },
       });
       if (!response.ok) throw new Error('Failed to fetch workflow config');
@@ -139,6 +143,8 @@ export default function Home() {
     setJobStatus(null);
 
     try {
+      const token = await getToken();
+      console.log("[DEBUG] Upload file, Clerk JWT:", token);
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('template_name_or_id', templateName);
@@ -146,7 +152,7 @@ export default function Home() {
       const response = await fetch(`${backendUrl}/api/v1/generate`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
         },
         body: formData,
       });
@@ -173,9 +179,11 @@ export default function Home() {
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
+        const token = await getToken();
+        console.log("[DEBUG] Poll job status, Clerk JWT:", token);
         const response = await fetch(`${backendUrl}/api/v1/jobs/${jobId}`, {
           headers: {
-            'Authorization': 'Bearer frontend-secret-key',
+            'Authorization': `Bearer ${token}`,
           },
         });
 
@@ -213,10 +221,12 @@ export default function Home() {
 
   const callApi = async () => {
     try {
+      const token = await getToken();
+      console.log("[DEBUG] callApi, Clerk JWT:", token);
       const res = await fetch(`${backendUrl}/api/v1/health`, {
         method: 'GET',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
         },
       });
       
@@ -240,10 +250,12 @@ export default function Home() {
 
   const testCors = async () => {
     try {
+      const token = await getToken();
+      console.log("[DEBUG] testCors, Clerk JWT:", token);
       const res = await fetch(`${backendUrl}/api/v1/test`, {
         method: 'GET',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
         },
       });
       
@@ -293,261 +305,261 @@ export default function Home() {
     }
   }, [logs]);
 
-
-
+  if (!isLoaded) {
+    return <div>Loading authentication...</div>;
+  }
+  if (!isSignedIn) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="w-full max-w-md p-8 bg-white rounded shadow">
+          <SignIn />
+        </div>
+      </main>
+    );
+  }
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <main className="min-h-screen bg-gray-50">
+      <div className="flex justify-end p-4">
+        <UserButton afterSignOutUrl="/" />
+      </div>
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">Exa.men</h1>
         
-        {!session ? (
-          <div className="text-center">
+        {/* User Info */}
+        <div className="bg-white rounded-lg p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Signed in as</p>
+              <p className="font-semibold text-gray-800">{user?.primaryEmailAddress?.emailAddress}</p>
+            </div>
             <button
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-              onClick={() => signIn("google")}
+              className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 transition-colors"
+              onClick={() => signOut()}
             >
-              Sign in with Google
+              Sign out
             </button>
           </div>
-        ) : (
-          <div className="space-y-8">
-            {/* User Info */}
-            <div className="bg-white rounded-lg p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Signed in as</p>
-                  <p className="font-semibold text-gray-800">{session.user?.email}</p>
-                </div>
-                <button
-                  className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 transition-colors"
-                  onClick={() => signOut()}
-                >
-                  Sign out
-                </button>
+        </div>
+
+        {/* Workflow Configuration Section */}
+        <WorkflowConfig backendUrl={backendUrl} />
+
+        {/* File Upload Section */}
+        <div className="bg-white rounded-lg p-6 shadow-sm">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Qualification</h2>
+          
+          {/* Template Selection */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Template Name
+            </label>
+            <div className="relative">
+              <select
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-lg"
+                style={{ fontWeight: 500 }}
+              >
+                <option value="Examentemplate vanaf 2025-26">Examentemplate vanaf 2025-26</option>
+                <option value="Kwalificerend Leren vanaf 2025-26">Kwalificerend Leren vanaf 2025-26</option>
+              </select>
+              {/* Custom arrow */}
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                  <path d="M7 7l3-3 3 3m0 6l-3 3-3-3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </div>
             </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Available templates: "Examentemplate 2025-26", "Kwalificerend Leren"
+            </p>
+          </div>
 
-            {/* Workflow Configuration Section */}
-            <WorkflowConfig backendUrl={backendUrl} />
-
-            {/* File Upload Section */}
-            <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Upload Qualification</h2>
-              
-              {/* Template Selection */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Template Name
-                </label>
-                <div className="relative">
-                  <select
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-lg"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="Examentemplate vanaf 2025-26">Examentemplate vanaf 2025-26</option>
-                    <option value="Kwalificerend Leren vanaf 2025-26">Kwalificerend Leren vanaf 2025-26</option>
-                  </select>
-                  {/* Custom arrow */}
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                    <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-                      <path d="M7 7l3-3 3 3m0 6l-3 3-3-3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Available templates: "Examentemplate 2025-26", "Kwalificerend Leren"
+          {/* Drag & Drop Area */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              isDragOver 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className="space-y-4">
+              <div className="text-4xl">📄</div>
+              <div>
+                <p className="text-lg font-medium text-gray-700">
+                  {selectedFile ? selectedFile.name : "Drag and drop your XML file here"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  or click to browse
                 </p>
               </div>
-
-              {/* Drag & Drop Area */}
-              <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isDragOver 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xml,application/xml,text/xml"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
               >
-                <div className="space-y-4">
-                  <div className="text-4xl">📄</div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-700">
-                      {selectedFile ? selectedFile.name : "Drag and drop your XML file here"}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      or click to browse
-                    </p>
-                  </div>
-                  
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xml,application/xml,text/xml"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
-                  >
-                    Browse Files
-                  </button>
-                </div>
-              </div>
-
-              {/* Upload Button */}
-              {selectedFile && (
-                <div className="mt-4">
-                  <button
-                    onClick={uploadFile}
-                    disabled={isUploading}
-                    className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-                      isUploading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-green-600 hover:bg-green-700 text-white'
-                    }`}
-                  >
-                    {isUploading ? 'Processing...' : 'Generate Document'}
-                  </button>
-                </div>
-              )}
+                Browse Files
+              </button>
             </div>
+          </div>
 
-            {/* Job Status */}
-            {jobStatus && (
-              <div className="bg-white rounded-lg p-6 shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-800">Status</h2>
-                
-                <div className="space-y-4">
-                  {/* Step Progress Checklist */}
-                  <div>
-                    <ul className="mb-4">
-                      {(() => {
-                        const stepStatuses = getStepStatuses(logs, dynamicStepNames);
-                        return dynamicStepNames.map((name, idx) => {
-                          const status = stepStatuses[idx];
-                          let icon = null;
-                          let textClass = "text-gray-700";
-                          if (status === "done") {
-                            icon = <span className="mr-2 text-green-600">✅</span>;
-                            textClass = "text-green-700 font-semibold";
-                          } else if (status === "current") {
-                            icon = <span className="mr-2 animate-spin inline-block" style={{fontSize: '1.2em'}}>
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-600">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                              </svg>
-                            </span>;
-                            textClass = "text-blue-700 font-semibold";
-                          } else {
-                            icon = <span className="mr-2 text-gray-400">⬜</span>;
-                          }
-                          return (
-                            <li key={idx} className={`flex flex-col mb-1`}>
-                              <div className="flex items-center">
-                                {icon}
-                                <span className={textClass}>{`Step ${idx + 1}: ${name}`}</span>
-                              </div>
-                              {dynamicStepDescriptions[idx] && (
-                                <span className="ml-7 text-xs text-gray-500">{dynamicStepDescriptions[idx]}</span>
-                              )}
-                            </li>
-                          );
-                        });
-                      })()}
-                    </ul>
-                  </div>
-                  {/* Progress Bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${jobStatus.progress}%` }}
-                    ></div>
-                  </div>
+          {/* Upload Button */}
+          {selectedFile && (
+            <div className="mt-4">
+              <button
+                onClick={uploadFile}
+                disabled={isUploading}
+                className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+                  isUploading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                {isUploading ? 'Processing...' : 'Generate Document'}
+              </button>
+            </div>
+          )}
+        </div>
 
-                  {/* Processing Logs (collapsed by default, auto-scroll to bottom) */}
-                  <details className="mt-6" open={false}>
-                    <summary className="cursor-pointer font-semibold text-gray-700 mb-2">Processing Logs</summary>
-                    <div className="bg-gray-100 rounded p-3 max-h-64 overflow-y-auto" style={{ position: 'relative' }}>
-                      {logs.map((log, index) => (
-                        <div key={index} className="text-sm text-gray-700 mb-1">
-                          {log}
-                        </div>
-                      ))}
-                      <div ref={logsEndRef} />
-                    </div>
-                  </details>
-
-                  {/* After the checklist and before the document link, show a status indicator if all steps are done but jobStatus.status is not 'completed' */}
+        {/* Job Status */}
+        {jobStatus && (
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">Status</h2>
+            
+            <div className="space-y-4">
+              {/* Step Progress Checklist */}
+              <div>
+                <ul className="mb-4">
                   {(() => {
                     const stepStatuses = getStepStatuses(logs, dynamicStepNames);
-                    const allStepsDone = stepStatuses.every(s => s === 'done');
-                    if (allStepsDone && jobStatus.status !== 'completed') {
-                      return (
-                        <div className="flex items-center space-x-2 text-blue-700 font-semibold text-lg">
-                          <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    return dynamicStepNames.map((name, idx) => {
+                      const status = stepStatuses[idx];
+                      let icon = null;
+                      let textClass = "text-gray-700";
+                      if (status === "done") {
+                        icon = <span className="mr-2 text-green-600">✅</span>;
+                        textClass = "text-green-700 font-semibold";
+                      } else if (status === "current") {
+                        icon = <span className="mr-2 animate-spin inline-block" style={{fontSize: '1.2em'}}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-600">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                           </svg>
-                          <span>Preparing the document...</span>
-                        </div>
+                        </span>;
+                        textClass = "text-blue-700 font-semibold";
+                      } else {
+                        icon = <span className="mr-2 text-gray-400">⬜</span>;
+                      }
+                      return (
+                        <li key={idx} className={`flex flex-col mb-1`}>
+                          <div className="flex items-center">
+                            {icon}
+                            <span className={textClass}>{`Step ${idx + 1}: ${name}`}</span>
+                          </div>
+                          {dynamicStepDescriptions[idx] && (
+                            <span className="ml-7 text-xs text-gray-500">{dynamicStepDescriptions[idx]}</span>
+                          )}
+                        </li>
                       );
-                    }
-                    return null;
+                    });
                   })()}
-
-                  {/* Generated Document Link */}
-                  {jobStatus.status === 'completed' && jobStatus.result?.generated_document && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <h3 className="font-medium text-green-800 mb-2">Base document ready to use 🫡</h3>
-                      <p className="text-sm text-green-700 mb-3">
-                        {jobStatus.result.generated_document.document_title}
-                      </p>
-                      <a
-                        href={jobStatus.result.generated_document.document_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                      >
-                        📄 Open in Google Docs
-                      </a>
-                    </div>
-                  )}
-
-                  {/* Completed but no document link - show raw result */}
-                  {jobStatus.status === 'completed' && !jobStatus.result?.generated_document && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h3 className="font-medium text-blue-800 mb-2">Job Completed</h3>
-                      <p className="text-sm text-blue-700 mb-3">
-                        The job completed successfully, but no document link was found.
-                      </p>
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-blue-600">Show raw result data</summary>
-                        <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto">
-                          {JSON.stringify(jobStatus.result, null, 2)}
-                        </pre>
-                      </details>
-                    </div>
-                  )}
-
-                  {/* Error Display */}
-                  {jobStatus.status === 'failed' && jobStatus.result?.error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <h3 className="font-medium text-red-800 mb-2">Processing Failed</h3>
-                      <p className="text-sm text-red-700">{jobStatus.result.error}</p>
-                    </div>
-                  )}
-                </div>
+                </ul>
               </div>
-            )}
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${jobStatus.progress}%` }}
+                ></div>
+              </div>
+
+              {/* Processing Logs (collapsed by default, auto-scroll to bottom) */}
+              <details className="mt-6" open={false}>
+                <summary className="cursor-pointer font-semibold text-gray-700 mb-2">Processing Logs</summary>
+                <div className="bg-gray-100 rounded p-3 max-h-64 overflow-y-auto" style={{ position: 'relative' }}>
+                  {logs.map((log, index) => (
+                    <div key={index} className="text-sm text-gray-700 mb-1">
+                      {log}
+                    </div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </div>
+              </details>
+
+              {/* After the checklist and before the document link, show a status indicator if all steps are done but jobStatus.status is not 'completed' */}
+              {(() => {
+                const stepStatuses = getStepStatuses(logs, dynamicStepNames);
+                const allStepsDone = stepStatuses.every(s => s === 'done');
+                if (allStepsDone && jobStatus.status !== 'completed') {
+                  return (
+                    <div className="flex items-center space-x-2 text-blue-700 font-semibold text-lg">
+                      <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      <span>Preparing the document...</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Generated Document Link */}
+              {jobStatus.status === 'completed' && jobStatus.result?.generated_document && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-medium text-green-800 mb-2">Base document ready to use 🫡</h3>
+                  <p className="text-sm text-green-700 mb-3">
+                    {jobStatus.result.generated_document.document_title}
+                  </p>
+                  <a
+                    href={jobStatus.result.generated_document.document_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                  >
+                    📄 Open in Google Docs
+                  </a>
+                </div>
+              )}
+
+              {/* Completed but no document link - show raw result */}
+              {jobStatus.status === 'completed' && !jobStatus.result?.generated_document && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-medium text-blue-800 mb-2">Job Completed</h3>
+                  <p className="text-sm text-blue-700 mb-3">
+                    The job completed successfully, but no document link was found.
+                  </p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-blue-600">Show raw result data</summary>
+                    <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto">
+                      {JSON.stringify(jobStatus.result, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+
+              {/* Error Display */}
+              {jobStatus.status === 'failed' && jobStatus.result?.error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <h3 className="font-medium text-red-800 mb-2">Processing Failed</h3>
+                  <p className="text-sm text-red-700">{jobStatus.result.error}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }

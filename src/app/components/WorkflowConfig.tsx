@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, ChevronRightIcon, TrashIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { useAuth } from '@clerk/clerk-react';
 
 interface StepConfig {
   id: string; // Add optional id for drag-and-drop stability
@@ -54,6 +55,7 @@ function ensureStepIds(steps: StepConfig[]): StepConfig[] {
 }
 
 export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
+  const { getToken } = useAuth();
   const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig | null>(null);
   const [availableModels, setAvailableModels] = useState<AvailableModels | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,10 +87,12 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
         setLoading(true);
         setError(null);
 
+        const token = await getToken();
+
         // Fetch workflow config
         const configResponse = await fetch(`${backendUrl}/api/v1/workflow/config`, {
           headers: {
-            'Authorization': 'Bearer frontend-secret-key',
+            'Authorization': `Bearer ${token}`,
           },
         });
         if (!configResponse.ok) throw new Error('Failed to fetch workflow config');
@@ -105,7 +109,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
         // Fetch available models
         const modelsResponse = await fetch(`${backendUrl}/api/v1/models/available`, {
           headers: {
-            'Authorization': 'Bearer frontend-secret-key',
+            'Authorization': `Bearer ${token}`,
           },
         });
         if (!modelsResponse.ok) throw new Error('Failed to fetch available models');
@@ -115,7 +119,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
         // Fetch prompts
         const promptsResponse = await fetch(`${backendUrl}/api/v1/prompts`, {
           headers: {
-            'Authorization': 'Bearer frontend-secret-key',
+            'Authorization': `Bearer ${token}`,
           },
         });
         if (!promptsResponse.ok) throw new Error('Failed to fetch prompts');
@@ -130,7 +134,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     };
 
     fetchData();
-  }, [backendUrl]);
+  }, [backendUrl, getToken]);
 
   // Set base instructions content from prompts when loaded
   useEffect(() => {
@@ -160,11 +164,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
       setSaving(true);
       const updatedSteps = [...workflowConfig.steps];
       updatedSteps[stepIndex] = { ...updatedSteps[stepIndex] };
-      
+      const token = await getToken();
       const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
@@ -192,10 +196,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
 
   const handlePromptSave = async (promptName: string) => {
     try {
+      const token = await getToken();
       const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content: editedPromptContent }),
@@ -221,11 +226,12 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     setDeletingPrompt(promptName);
     setError(null);
     try {
+      const token = await getToken();
       // Call DELETE API (to be implemented in backend)
       const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
         },
       });
       if (!response.ok) throw new Error('Failed to delete prompt');
@@ -248,12 +254,13 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     setDeletingStep(stepIndex);
     setError(null);
     try {
+      const token = await getToken();
       const updatedSteps = workflowConfig.steps.filter((_, idx) => idx !== stepIndex);
       const stepsWithEnabled = withExplicitEnabled(updatedSteps);
       const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }),
@@ -281,10 +288,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     setSavingBaseInstructions(true);
     setError(null);
     try {
+      const token = await getToken();
       const response = await fetch(`${backendUrl}/api/v1/prompts/_base_instructions`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content: baseInstructionsContent }),
@@ -321,10 +329,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     const stepsWithEnabled = withExplicitEnabled(reordered);
     setSaving(true);
     try {
+      const token = await getToken();
       const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }),
@@ -358,10 +367,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     (async () => {
       setSaving(true);
       try {
+        const token = await getToken();
         const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
           method: 'POST',
           headers: {
-            'Authorization': 'Bearer frontend-secret-key',
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
@@ -383,10 +393,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     setAddingPrompt((prev) => ({ ...prev, [stepIndex]: true }));
     try {
       // Save prompt to backend
+      const token = await getToken();
       const response = await fetch(`${backendUrl}/api/v1/prompts/${name}`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
@@ -401,10 +412,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
       };
       setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
       // Save workflow config
+      const token2 = await getToken();
       await fetch(`${backendUrl}/api/v1/workflow/config`, {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer frontend-secret-key',
+          'Authorization': `Bearer ${token2}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
@@ -561,10 +573,11 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
                                     (async () => {
                                       setSaving(true);
                                       try {
+                                        const token = await getToken();
                                         const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
                                           method: 'POST',
                                           headers: {
-                                            'Authorization': 'Bearer frontend-secret-key',
+                                            'Authorization': `Bearer ${token}`,
                                             'Content-Type': 'application/json',
                                           },
                                           body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
