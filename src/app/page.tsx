@@ -372,7 +372,7 @@ export default function Home() {
       {!isSignedIn && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
           <div className="w-full max-w-md p-8 bg-white rounded shadow">
-            <SignIn />
+            <SignIn routing="hash" />
           </div>
         </div>
       )}
