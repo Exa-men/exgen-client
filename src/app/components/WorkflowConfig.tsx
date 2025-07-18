@@ -456,7 +456,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
 
   // Flatten all available models into a single array, but only allow OpenAI models
   const allModels = Object.values(availableModels.available_models).flat().filter(
-    (model) => model.startsWith('gpt-') || model.startsWith('o1-') || model.startsWith('o2-')
+    (model) => model.startsWith('gpt-') || model.startsWith('o1-') || model.startsWith('o2-') || model.startsWith('gemini-')
   );
 
   return (
