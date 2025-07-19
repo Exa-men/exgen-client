@@ -454,9 +454,14 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     );
   }
 
-  // Flatten all available models into a single array, but only allow OpenAI models
+  // Flatten all available models into a single array, but exclude only 'gemini-pro'
   const allModels = Object.values(availableModels.available_models).flat().filter(
-    (model) => model.startsWith('gpt-') || model.startsWith('o1-') || model.startsWith('o2-') || model.startsWith('gemini-')
+    (model) =>
+      model.startsWith('gpt-') ||
+      model.startsWith('o1-') ||
+      model.startsWith('o2-') ||
+      model === 'gemini-1.5-flash' ||
+      model === 'gemini-1.5-pro'
   );
 
   return (
