@@ -4,6 +4,7 @@ import { SignIn, SignUp, UserButton, useUser, useClerk, useAuth } from '@clerk/n
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from './components/WorkflowConfig';
+import WorkflowGroups from './components/WorkflowGroups';
 
 interface JobStatus {
   job_id: string;
@@ -40,6 +41,7 @@ export default function Home() {
   const [dynamicStepNames, setDynamicStepNames] = useState<string[]>([]);
   const [dynamicStepDescriptions, setDynamicStepDescriptions] = useState<string[]>([]);
   const [isLoadingSteps, setIsLoadingSteps] = useState(false);
+  const [selectedWorkflowGroupId, setSelectedWorkflowGroupId] = useState('1');
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -380,6 +382,12 @@ export default function Home() {
       {/* The rest of your app (only visible when signed in) */}
       {isSignedIn && (
         <div className="max-w-4xl mx-auto">
+          {/* Workflow Groups Selector */}
+          <WorkflowGroups
+            selectedGroupId={selectedWorkflowGroupId}
+            onSelect={setSelectedWorkflowGroupId}
+          />
+          {/* Workflow Config and rest of the page */}
           <WorkflowConfig backendUrl={backendUrl} />
           
           {/* Error Display */}
