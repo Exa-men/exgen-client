@@ -365,7 +365,16 @@ export default function Home() {
       {/* Header bar with title and user button */}
       <header className="flex items-center justify-between px-8 py-6 bg-white shadow-sm mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Exa.men</h1>
-        {isSignedIn && <UserButton afterSignOutUrl="/" />}
+        {isSignedIn && (
+          <UserButton 
+            afterSignOutUrl="/"
+            appearance={{
+              elements: {
+                avatarBox: 'w-20 h-20', // Tailwind classes for 80px x 80px avatar
+              },
+            }}
+          />
+        )}
       </header>
 
       {/* Modal overlay for sign-in */}
