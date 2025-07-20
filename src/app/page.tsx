@@ -23,7 +23,7 @@ function HomeContent() {
   useEffect(() => {
     // Only redirect if user is signed in and there's no 'show' parameter
     if (isLoaded && isSignedIn && !searchParams.get('show')) {
-      router.push('/workflows');
+      router.push('/catalogus');
     }
   }, [isLoaded, isSignedIn, router, searchParams]);
 
