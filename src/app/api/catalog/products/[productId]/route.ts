@@ -65,12 +65,9 @@ const mockProducts = [
   },
 ];
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { productId: string } }
-) {
-  try {
-    const { productId } = params;
+// @ts-ignore
+export async function GET(request: NextRequest, context) {
+  const { productId } = context.params;
 
     // TODO: Replace with actual database query
     // const product = await db.examProducts.findUnique({
@@ -95,11 +92,4 @@ export async function GET(
       success: true,
       product,
     });
-  } catch (error) {
-    console.error('Error fetching product:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch product' },
-      { status: 500 }
-    );
-  }
 } 

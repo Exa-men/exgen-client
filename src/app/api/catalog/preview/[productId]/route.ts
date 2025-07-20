@@ -1,79 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { productId: string } }
-) {
-  console.log('🌐 PDF Preview API called for productId:', params.productId);
-  
-  try {
-    const { productId } = params;
+export async function GET(request: NextRequest, context: any) {
+  const { productId } = context.params;
 
+  try {
     // TODO: Replace with actual PDF serving logic
     // This would typically:
     // 1. Fetch the PDF file from storage/database
     // 2. Stream the PDF content
     // 3. Set appropriate headers to prevent download
-    
+
     // For now, return a mock response
     // In production, you would stream the actual PDF file
-    
-    console.log(`Serving PDF preview for product: ${productId}`);
-
-    // Mock PDF content - replace with actual PDF streaming
-    const mockPdfContent = `%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
->>
-endobj
-
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
->>
-endobj
-
-4 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Exam Preview) Tj
-ET
-endstream
-endobj
-
-xref
-0 5
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000204 00000 n 
-trailer
-<<
-/Size 5
-/Root 1 0 R
->>
-startxref
-297
-%%EOF`;
+    const mockPdfContent = `%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [0 0 612 792]\n/Contents 4 0 R\n>>\nendobj\n4 0 obj\n<<\n/Length 44\n>>\nstream\nBT\n/F1 12 Tf\n72 720 Td\n(Exam Preview) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000204 00000 n \ntrailer\n<<\n/Size 5\n/Root 1 0 R\n>>\nstartxref\n297\n%%EOF`;
 
     // Set headers to prevent download and force inline viewing
     const headers = new Headers();
@@ -82,8 +21,6 @@ startxref
     headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     headers.set('Pragma', 'no-cache');
     headers.set('Expires', '0');
-    
-    // Prevent right-click and other download methods
     headers.set('X-Content-Type-Options', 'nosniff');
     headers.set('X-Frame-Options', 'DENY');
 
