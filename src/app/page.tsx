@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import UnifiedHeader from './components/UnifiedHeader';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -15,7 +15,7 @@ import Footer from './components/Footer';
 
 import { CookieNotification } from './components/CookieNotification';
 
-export default function Home() {
+function HomeContent() {
   const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,5 +58,20 @@ export default function Home() {
       <Footer />
       <CookieNotification />
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-gray-600">Loading...</div>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
