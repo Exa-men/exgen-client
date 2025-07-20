@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 import UnifiedHeader from './components/UnifiedHeader';
 import Hero from './components/Hero';
@@ -18,12 +18,14 @@ import { CookieNotification } from './components/CookieNotification';
 export default function Home() {
   const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    // Only redirect if user is signed in and there's no 'show' parameter
+    if (isLoaded && isSignedIn && !searchParams.get('show')) {
       router.push('/workflows');
     }
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, router, searchParams]);
 
   // Show loading state while checking authentication
   if (!isLoaded) {
@@ -37,8 +39,8 @@ export default function Home() {
     );
   }
 
-  // If user is signed in, don't render the homepage content (they'll be redirected)
-  if (isSignedIn) {
+  // If user is signed in and no 'show' parameter, don't render the homepage content (they'll be redirected)
+  if (isSignedIn && !searchParams.get('show')) {
     return null;
   }
 

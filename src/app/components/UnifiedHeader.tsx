@@ -42,7 +42,7 @@ const UnifiedHeader = () => {
             
             {/* Show Home button for authenticated users */}
             {isSignedIn && (
-              <Link href="/">
+              <Link href="/?show=true">
                 <Button variant="ghost" className="text-gray-700 hover:text-examen-cyan transition-colors">
                   Home
                 </Button>
@@ -111,7 +111,7 @@ const UnifiedHeader = () => {
               
               {/* Show Home button for authenticated users */}
               {isSignedIn && (
-                <Link href="/">
+                <Link href="/?show=true">
                   <Button variant="ghost" className="text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start">
                     Home
                   </Button>
