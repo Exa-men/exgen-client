@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app',
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/catalog/:path*',
+        destination: 'http://localhost:8000/api/catalog/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
