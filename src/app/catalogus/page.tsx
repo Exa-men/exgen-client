@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare } from 'lucide-react';
+import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -14,6 +14,7 @@ import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import { cn } from '../../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 
 interface Version {
   version: string;
@@ -39,12 +40,11 @@ type SortField = 'code' | 'title' | 'cost' | 'validFrom' | 'version';
 type SortDirection = 'asc' | 'desc';
 
 export default function CatalogusPage() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
   
   const [products, setProducts] = useState<ExamProduct[]>([]);
-  const [allProducts, setAllProducts] = useState<ExamProduct[]>([]); // for mock all data
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -52,15 +52,87 @@ export default function CatalogusPage() {
   const observerRef = useRef<HTMLDivElement | null>(null);
   const PAGE_SIZE = 10;
   const [error, setError] = useState<string | null>(null);
+  const [showCreditsError, setShowCreditsError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('code');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(null);
+  // State for purchase confirmation modal
+  const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ExamProduct | null>(null);
   const [filter, setFilter] = useState<'alles' | 'ingekocht' | 'beschikbaar'>('alles');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackProduct, setFeedbackProduct] = useState<ExamProduct | null>(null);
+  // State for delete modal
+  const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  // State for purchase terms checkbox
+  const [purchaseTermsChecked, setPurchaseTermsChecked] = useState(false);
+
+  // State for new product input row
+  const [newProduct, setNewProduct] = useState({
+    code: '',
+    title: '',
+    description: '',
+    cost: '',
+    validFrom: '2025-16',
+    version: '1.0',
+  });
+  const [savingNewProduct, setSavingNewProduct] = useState(false);
+
+  // Handler for input changes
+  const handleNewProductChange = (field: string, value: string) => {
+    setNewProduct((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Handler for clearing input fields
+  const handleClearNewProduct = () => {
+    setNewProduct({
+      code: '',
+      title: '',
+      description: '',
+      cost: '',
+      validFrom: '2025-16',
+      version: '1.0',
+    });
+  };
+
+  // Handler for saving new product
+  const handleSaveNewProduct = async () => {
+    setSavingNewProduct(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/catalog/products', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: newProduct.code,
+          title: newProduct.title,
+          description: newProduct.description,
+          cost: Number(newProduct.cost),
+          validFrom: newProduct.validFrom,
+          version: newProduct.version,
+        }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add product');
+      }
+      const created = await response.json();
+      setProducts((prev) => [created, ...prev]);
+      handleClearNewProduct();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add product');
+    } finally {
+      setSavingNewProduct(false);
+    }
+  };
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -71,64 +143,49 @@ export default function CatalogusPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  // Fetch exam products
-  useEffect(() => {
-    const fetchProducts = async () => {
-      if (!isSignedIn) return;
-      
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Simulate fetching all products (mocked)
-        // In real app, fetch only PAGE_SIZE and use page param
-        const token = await getToken();
-        const response = await fetch(`/api/catalog/products`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch products: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setAllProducts(data.products || []);
-        setProducts((data.products || []).slice(0, PAGE_SIZE));
-        setHasMore((data.products || []).length > PAGE_SIZE);
-        setPage(1);
-      } catch (err) {
-        console.error('Error fetching products:', err);
-        setError('Failed to load exam products');
-        setAllProducts([]);
-        setProducts([]);
-        setHasMore(false);
-        setPage(1);
-      } finally {
-        setLoading(false);
+  // Fetch products from backend with pagination
+  const fetchProducts = async (pageNum = 1, append = false) => {
+    if (!isSignedIn) return;
+    try {
+      if (pageNum === 1) setLoading(true);
+      setError(null);
+      const token = await getToken();
+      const response = await fetch(`/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch products: ${response.status}`);
       }
-    };
+      const data = await response.json();
+      setProducts(prev => append ? [...prev, ...(data.products || [])] : (data.products || []));
+      setHasMore(data.hasMore);
+      setPage(data.page);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Failed to load exam products');
+      setProducts([]);
+      setHasMore(false);
+      setPage(1);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
 
-    fetchProducts();
-  }, [isSignedIn, getToken, backendUrl]);
+  // Initial fetch and on search/filter change
+  useEffect(() => {
+    fetchProducts(1, false);
+  }, [isSignedIn, getToken, backendUrl, searchTerm, filter]);
 
-  // Infinite scroll observer
+  // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
     if (!hasMore || loadingMore || loading) return;
     const observer = new window.IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         setLoadingMore(true);
-        setTimeout(() => {
-          setProducts(prev => {
-            const nextPage = page + 1;
-            const nextProducts = allProducts.slice(0, nextPage * PAGE_SIZE);
-            setHasMore(nextProducts.length < allProducts.length);
-            setPage(nextPage);
-            return nextProducts;
-          });
-          setLoadingMore(false);
-        }, 700); // Simulate network delay
+        fetchProducts(page + 1, true);
       }
     }, { threshold: 1 });
     if (observerRef.current) {
@@ -137,44 +194,24 @@ export default function CatalogusPage() {
     return () => {
       if (observerRef.current) observer.unobserve(observerRef.current);
     };
-  }, [hasMore, loadingMore, loading, allProducts, page]);
+  }, [hasMore, loadingMore, loading, page, isSignedIn, getToken, backendUrl, searchTerm, filter]);
 
-  // Filtered and sorted products
+  // Filtered and sorted products (sorting only, filtering is now backend-driven)
   const filteredAndSortedProducts = useMemo(() => {
-    let filtered = products.filter(product =>
-      product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.title.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    if (filter === 'ingekocht') {
-      filtered = filtered.filter(product => product.isPurchased);
-    } else if (filter === 'beschikbaar') {
-      filtered = filtered.filter(product => !product.isPurchased);
-    }
-
-    filtered.sort((a, b) => {
+    let sorted = [...products];
+    sorted.sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
-
-      // Handle cohort sorting (treat as string)
-      if (sortField === 'validFrom') {
-        // Sort cohorts as strings (YYYY-YY format)
-        aValue = aValue;
-        bValue = bValue;
-      }
-
-      // Handle cost sorting
       if (sortField === 'cost') {
         aValue = Number(aValue);
         bValue = Number(bValue);
       }
-
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-
-    return filtered;
-  }, [products, searchTerm, sortField, sortDirection, filter]);
+    return sorted;
+  }, [products, sortField, sortDirection]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -185,8 +222,16 @@ export default function CatalogusPage() {
     }
   };
 
-  const handlePurchase = async (productId: string) => {
-    setPurchasingProduct(productId);
+  // Show modal, then confirm purchase
+  const handlePurchase = (productId: string) => {
+    setPurchaseConfirmId(productId);
+  };
+
+  const handleConfirmPurchase = async () => {
+    if (!purchaseConfirmId) return;
+    setPurchasingProduct(purchaseConfirmId);
+    setPurchaseLoading(true);
+    setError(null);
     try {
       const token = await getToken();
       const response = await fetch(`/api/catalog/purchase`, {
@@ -195,37 +240,38 @@ export default function CatalogusPage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ productId }),
+        body: JSON.stringify({ productId: purchaseConfirmId }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
+        if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
+          setShowCreditsError(true);
+          setPurchaseConfirmId(null);
+          return;
+        }
         throw new Error(errorData.error || 'Purchase failed');
       }
-
       const result = await response.json();
-      
       // Update the product to show as purchased
       setProducts(prev => prev.map(product =>
-        product.id === productId
+        product.id === purchaseConfirmId
           ? { ...product, isPurchased: true, downloadUrl: result.downloadUrl }
           : product
       ));
-      
+      setPurchaseConfirmId(null);
       console.log('✅ Purchase successful, remaining credits:', result.remainingCredits);
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');
     } finally {
       setPurchasingProduct(null);
+      setPurchaseLoading(false);
     }
   };
 
   const handleReview = (product: ExamProduct) => {
-    console.log('🔍 Inkijken button clicked for product:', product);
     setSelectedProduct(product);
     setPdfViewerOpen(true);
-    console.log('📄 PDF viewer should now be open');
   };
 
   const handleDownload = (downloadUrl: string) => {
@@ -242,10 +288,57 @@ export default function CatalogusPage() {
     setFeedbackProduct(product);
     setFeedbackOpen(true);
   };
-  const handleSubmitFeedback = (feedback: any) => {
-    console.log('Feedback submitted:', feedback);
-    setFeedbackOpen(false);
-    setFeedbackProduct(null);
+  const handleSubmitFeedback = async (feedback: any) => {
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/catalog/feedback', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(feedback),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit feedback');
+      }
+      const result = await response.json();
+      console.log('✅ Feedback submitted successfully:', result);
+      // Optionally show a success message
+    } catch (err) {
+      console.error('Feedback submission error:', err);
+      // Optionally show an error message
+    } finally {
+      setFeedbackOpen(false);
+      setFeedbackProduct(null);
+    }
+  };
+
+  // Handler for delete
+  const handleDeleteProduct = async () => {
+    if (!deleteProductId) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/catalog/products/${deleteProductId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to delete product');
+      }
+      setProducts(prev => prev.filter(p => p.id !== deleteProductId));
+      setDeleteProductId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete product');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const formatCohort = (cohort: string) => {
@@ -259,6 +352,14 @@ export default function CatalogusPage() {
     return `${credits} credits`;
   };
 
+  // Helper to get product cost for modal
+  const purchaseProduct = purchaseConfirmId ? products.find(p => p.id === purchaseConfirmId) : null;
+
+  // Reset checkbox when modal closes
+  useEffect(() => {
+    if (!purchaseConfirmId) setPurchaseTermsChecked(false);
+  }, [purchaseConfirmId]);
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -269,19 +370,15 @@ export default function CatalogusPage() {
 
       {/* PDF Viewer Overlay */}
       {selectedProduct && (
-        <>
-          {console.log('🎯 Rendering PDF viewer with product:', selectedProduct)}
-          <PDFViewer
-            isOpen={pdfViewerOpen}
-            onClose={() => {
-              console.log('❌ Closing PDF viewer');
-              setPdfViewerOpen(false);
-              setSelectedProduct(null);
-            }}
-            pdfUrl={`/api/catalog/preview/${selectedProduct.id}`}
-            title={selectedProduct.title}
-          />
-        </>
+        <PDFViewer
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false);
+            setSelectedProduct(null);
+          }}
+          pdfUrl={`/api/catalog/preview/${selectedProduct.id}`}
+          title={selectedProduct.title}
+        />
       )}
     </div>
   );
@@ -354,7 +451,19 @@ export default function CatalogusPage() {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {showCreditsError ? (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex flex-row items-center justify-between">
+            <span className="text-red-600">
+              Je hebt onvoldoende credits. {user && typeof user.publicMetadata?.credits === 'number' ? `Je hebt nog ${user.publicMetadata.credits} credits.` : ''}
+            </span>
+            <a
+              href="/credits-bestellen"
+              className="px-4 py-2 bg-examen-cyan text-white rounded hover:bg-examen-cyan/90 transition-colors ml-4"
+            >
+              Bestel Credits
+            </a>
+          </div>
+        ) : error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-600">{error}</p>
           </div>
@@ -430,6 +539,75 @@ export default function CatalogusPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {/* New Product Input Row */}
+                    <TableRow>
+                      <TableCell>
+                        <Input
+                          value={newProduct.code}
+                          onChange={e => handleNewProductChange('code', e.target.value)}
+                          placeholder="Code"
+                          className="min-w-[80px]"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={newProduct.title}
+                          onChange={e => handleNewProductChange('title', e.target.value)}
+                          placeholder="Titel"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={newProduct.description}
+                          onChange={e => handleNewProductChange('description', e.target.value)}
+                          placeholder="Beschrijving"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={newProduct.cost}
+                          onChange={e => handleNewProductChange('cost', e.target.value)}
+                          placeholder="Credits"
+                          min={0}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={newProduct.validFrom}
+                          onChange={e => handleNewProductChange('validFrom', e.target.value)}
+                          placeholder="Cohort"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={newProduct.version}
+                          onChange={e => handleNewProductChange('version', e.target.value)}
+                          placeholder="Versie"
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex gap-2 justify-center">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="bg-examen-cyan text-white"
+                            onClick={handleSaveNewProduct}
+                            disabled={savingNewProduct || !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.cost}
+                          >
+                            {savingNewProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Opslaan'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleClearNewProduct}
+                            disabled={savingNewProduct}
+                          >
+                            Wissen
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                     {filteredAndSortedProducts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-gray-500">
@@ -523,6 +701,15 @@ export default function CatalogusPage() {
                                   Feedback
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDeleteProductId(product.id)}
+                                className="flex items-center justify-center w-full transition-colors hover:bg-red-100 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Verwijderen
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -660,6 +847,76 @@ export default function CatalogusPage() {
           defaultVersion={feedbackProduct.versions.find(v => v.isLatest)?.version || feedbackProduct.version}
         />
       )}
+      {/* Delete confirmation modal */}
+      <Dialog open={!!deleteProductId} onOpenChange={open => !open && setDeleteProductId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Weet je het zeker?</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">Weet je zeker dat je dit examenproduct wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.</div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteProductId(null)} disabled={deleting}>
+              Annuleren
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDeleteProduct}
+              disabled={deleting}
+              className="transition-colors hover:bg-red-100 hover:text-red-700"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verwijderen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Purchase confirmation modal */}
+      <Dialog open={!!purchaseConfirmId} onOpenChange={open => !open && setPurchaseConfirmId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bevestig aankoop</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {purchaseProduct && (
+              <>
+                Dit product kost <span className="font-semibold">{purchaseProduct.cost} credits</span>. Bevestig hieronder je aankoop.
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="checkbox"
+              id="purchase-terms"
+              checked={purchaseTermsChecked}
+              onChange={e => setPurchaseTermsChecked(e.target.checked)}
+              className="accent-examen-cyan w-5 h-5"
+            />
+            <label htmlFor="purchase-terms" className="text-sm select-none">
+              Ik ga akkoord met de{' '}
+              <a
+                href="/inkoopvoorwaarden.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline text-examen-cyan hover:text-examen-cyan/80"
+              >
+                inkoopvoorwaarden
+              </a>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurchaseConfirmId(null)} disabled={purchaseLoading}>
+              Annuleren
+            </Button>
+            <Button
+              variant="default"
+              className="bg-examen-cyan text-white"
+              onClick={handleConfirmPurchase}
+              disabled={purchaseLoading || !purchaseTermsChecked}
+            >
+              {purchaseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Bevestigen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

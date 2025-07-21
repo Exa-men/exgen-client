@@ -19,36 +19,50 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [pdfData, setPdfData] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfUrlObject, setPdfUrlObject] = useState<string | null>(null);
 
   // Load PDF when modal opens
   useEffect(() => {
-    console.log('🔄 PDFViewer useEffect triggered:', { isOpen, pdfUrl });
-    
     if (isOpen && pdfUrl) {
-      console.log('📥 Loading PDF from URL:', pdfUrl);
       setCurrentPage(1);
       setScale(1);
       setRotation(0);
       setLoading(true);
-      
-      // Load PDF data
+      setPdfError(null);
+      // Clean up previous object URL
+      setPdfUrlObject((oldUrl) => {
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+        return null;
+      });
       fetch(pdfUrl)
         .then(response => {
-          console.log('📡 PDF fetch response:', response.status, response.statusText);
-          if (!response.ok) throw new Error('Failed to load PDF');
-          return response.text();
+          if (!response.ok) throw new Error('PDF niet gevonden of niet toegankelijk.');
+          return response.blob();
         })
-        .then(data => {
-          console.log('✅ PDF data loaded, length:', data.length);
-          setPdfData(data);
+        .then(blob => {
+          // Check if blob is a PDF
+          if (blob.type !== 'application/pdf') {
+            setPdfError('Het bestand is geen geldig PDF-document.');
+            setLoading(false);
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          setPdfUrlObject(url);
           setLoading(false);
         })
         .catch(error => {
-          console.error('❌ Error loading PDF:', error);
+          setPdfError(error.message || 'PDF kon niet geladen worden.');
           setLoading(false);
         });
     }
+    // Cleanup on close
+    return () => {
+      setPdfUrlObject((oldUrl) => {
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+        return null;
+      });
+    };
   }, [isOpen, pdfUrl]);
 
   const handlePreviousPage = () => {
@@ -182,102 +196,26 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
           )}
           
           <div className="w-full h-full overflow-auto bg-gray-100 flex items-center justify-center">
-            <div 
-              className="bg-white shadow-lg"
-              style={{
-                transform: `scale(${scale}) rotate(${rotation}deg)`,
-                transformOrigin: 'center',
-                transition: 'transform 0.2s ease-in-out'
-              }}
-            >
-              {/* PDF Content */}
-              <div className="w-[800px] h-[1100px] p-8 border border-gray-300">
-                {pdfData ? (
-                  // In a real implementation, you would use a PDF.js or similar library
-                  // For now, we show a mock representation
-                  <div className="text-center">
-                    <h1 className="text-2xl font-bold mb-4">{title}</h1>
-                    <p className="text-gray-600 mb-4">PDF Preview - Pagina {currentPage}</p>
-                    <div className="bg-gray-100 p-4 rounded border">
-                      <p className="text-sm text-gray-500">
-                        Dit is een voorbeeld van het examen document. 
-                        In de echte implementatie zou hier de PDF van het examen staan.
-                      </p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        PDF data geladen: {pdfData.substring(0, 50)}...
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-center mb-8">
-                  <h1 className="text-2xl font-bold mb-2">{title}</h1>
-                  <p className="text-gray-600">Voorbeeld PDF Document</p>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="border-b border-gray-200 pb-4">
-                    <h2 className="text-lg font-semibold mb-2">Instructies</h2>
-                    <p className="text-gray-700">
-                      Dit is een voorbeeld van het examen document. In de echte implementatie zou hier de PDF van het examen staan.
-                    </p>
-                  </div>
-                  
-                  <div className="border-b border-gray-200 pb-4">
-                    <h2 className="text-lg font-semibold mb-2">Vraag 1</h2>
-                    <p className="text-gray-700 mb-3">
-                      Wat is de hoofdstad van Nederland?
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center">
-                        <input type="radio" name="q1" id="q1a" className="mr-2" />
-                        <label htmlFor="q1a">Amsterdam</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="radio" name="q1" id="q1b" className="mr-2" />
-                        <label htmlFor="q1b">Den Haag</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="radio" name="q1" id="q1c" className="mr-2" />
-                        <label htmlFor="q1c">Rotterdam</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="radio" name="q1" id="q1d" className="mr-2" />
-                        <label htmlFor="q1d">Utrecht</label>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="border-b border-gray-200 pb-4">
-                    <h2 className="text-lg font-semibold mb-2">Vraag 2</h2>
-                    <p className="text-gray-700 mb-3">
-                      Welke kleur heeft de Nederlandse vlag?
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center">
-                        <input type="radio" name="q2" id="q2a" className="mr-2" />
-                        <label htmlFor="q2a">Rood, wit en blauw</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="radio" name="q2" id="q2b" className="mr-2" />
-                        <label htmlFor="q2b">Oranje, wit en blauw</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="radio" name="q2" id="q2c" className="mr-2" />
-                        <label htmlFor="q2c">Groen, wit en rood</label>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-center text-gray-500 mt-8">
-                    <p>Pagina {currentPage} van {totalPages}</p>
-                    <p className="text-sm mt-2">Dit is een voorbeeld document voor demonstratie doeleinden.</p>
-                  </div>
-                </div>
-                  </>
-                )}
-              </div>
-            </div>
+            {loading ? (
+              <div className="text-center text-gray-400">PDF laden...</div>
+            ) : pdfError ? (
+              <div className="text-center text-red-500">{pdfError}</div>
+            ) : pdfUrlObject ? (
+              <iframe
+                src={pdfUrlObject}
+                title={title}
+                className="w-[800px] h-[1100px] border border-gray-300 bg-white shadow-lg"
+                style={{
+                  transform: `scale(${scale}) rotate(${rotation}deg)`,
+                  transformOrigin: 'center',
+                  transition: 'transform 0.2s ease-in-out'
+                }}
+                frameBorder={0}
+                allowFullScreen
+              />
+            ) : (
+              <div className="text-center text-gray-400">PDF niet beschikbaar</div>
+            )}
           </div>
         </div>
 
