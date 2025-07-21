@@ -4,6 +4,7 @@ import { SignIn, SignUp, UserButton, useUser, useClerk, useAuth } from '@clerk/n
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from '../components/WorkflowConfig';
+import WorkflowGroups from '../components/WorkflowGroups';
 import UnifiedHeader from '../components/UnifiedHeader';
 
 interface JobStatus {
@@ -381,7 +382,7 @@ export default function WorkflowsPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Ontwikkelen</h1>
           </div>
-          <WorkflowConfig backendUrl={backendUrl} />
+          <WorkflowGroups />
           
           {/* Error Display */}
           {error && (

@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { PencilIcon, CheckIcon, XMarkIcon, ChevronDownIcon, ChevronRightIcon, TrashIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { useAuth } from '@clerk/nextjs';
-
+// 1. Update imports: Remove useAuth and all API-related imports
+// 2. Update props interface:
 interface StepConfig {
   id: string; // Add optional id for drag-and-drop stability
   name: string;
@@ -28,7 +28,23 @@ interface AvailableModels {
 }
 
 interface WorkflowConfigProps {
-  backendUrl: string;
+  workflowConfig: WorkflowConfig;
+  prompts: { [key: string]: string };
+  availableModels: AvailableModels;
+  onConfigChange: (config: WorkflowConfig) => void;
+  onPromptChange: (promptName: string, content: string) => void;
+  onPromptDelete?: (promptName: string) => void;
+  onBaseInstructionsChange: (content: string) => void;
+  groupName?: string;
+  onGroupNameChange?: (name: string) => void;
+  onDeleteGroup?: () => void;
+  isActive?: boolean;
+  onSetActive?: () => void;
+  editableGroupName?: boolean;
+  showDelete?: boolean;
+  showActiveIndicator?: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
 }
 
 // Helper to get a unique id for a step (fallback if missing)
@@ -54,16 +70,36 @@ function ensureStepIds(steps: StepConfig[]): StepConfig[] {
   }));
 }
 
-export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
-  const { getToken } = useAuth();
-  const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig | null>(null);
-  const [availableModels, setAvailableModels] = useState<AvailableModels | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+export default function WorkflowConfig({
+  workflowConfig,
+  prompts,
+  availableModels,
+  onConfigChange,
+  onPromptChange,
+  onPromptDelete,
+  onBaseInstructionsChange,
+  groupName,
+  onGroupNameChange,
+  onDeleteGroup,
+  isActive,
+  onSetActive,
+  editableGroupName,
+  showDelete,
+  showActiveIndicator,
+  expanded,
+  onToggleExpand,
+}: WorkflowConfigProps) {
+  // Guard: if availableModels is not defined, do not render
+  if (!availableModels) {
+    return null;
+  }
+  // 3. Remove all useAuth, useEffect for fetching, and API calls. Replace with props usage and callback invocations.
+  // 4. Replace setWorkflowConfig, setPrompts, setAvailableModels, etc. with onConfigChange, onPromptChange, etc.
+  // 5. Remove backendUrl and all references to it.
+  // 6. Remove all error/loading state and UI. Parent will handle errors/loading.
+  // 7. Add optional UI for renaming, deleting, and setting active if those props are provided.
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set()); // All steps collapsed by default
   const [editingStep, setEditingStep] = useState<number | null>(null);
-  const [prompts, setPrompts] = useState<{ [key: string]: string }>({});
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
   const [editedPromptContent, setEditedPromptContent] = useState<string>('');
   const [sectionExpanded, setSectionExpanded] = useState(false); // Collapsed by default
@@ -78,63 +114,13 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
   const [newPromptName, setNewPromptName] = useState<{ [key: number]: string }>({});
   const [newPromptContent, setNewPromptContent] = useState<{ [key: number]: string }>({});
   const [addingPrompt, setAddingPrompt] = useState<{ [key: number]: boolean }>({});
+  // Add state for editing group name
+  const [editingGroupName, setEditingGroupName] = useState(false);
+  const [groupNameValue, setGroupNameValue] = useState(groupName || '');
+  useEffect(() => { setGroupNameValue(groupName || ''); }, [groupName]);
+  // State for workflow deletion modal
+  const [showDeleteWorkflowModal, setShowDeleteWorkflowModal] = useState(false);
 
-
-  // Fetch workflow configuration and available models
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const token = await getToken();
-
-        // Fetch workflow config
-        const configResponse = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!configResponse.ok) throw new Error('Failed to fetch workflow config');
-        const configData = await configResponse.json();
-        // Ensure all steps have a unique id
-        const stepsWithId = (configData.steps || []).map((step: any, idx: number) => ({
-          ...step,
-          id: step.id && typeof step.id === 'string' && step.id.length > 0
-            ? step.id
-            : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${idx}`),
-        }));
-        setWorkflowConfig({ steps: stepsWithId });
-
-        // Fetch available models
-        const modelsResponse = await fetch(`${backendUrl}/api/v1/models/available`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!modelsResponse.ok) throw new Error('Failed to fetch available models');
-        const modelsData = await modelsResponse.json();
-        setAvailableModels(modelsData);
-
-        // Fetch prompts
-        const promptsResponse = await fetch(`${backendUrl}/api/v1/prompts`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!promptsResponse.ok) throw new Error('Failed to fetch prompts');
-        const promptsData = await promptsResponse.json();
-        setPrompts(promptsData);
-
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load configuration');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [backendUrl, getToken]);
 
   // Set base instructions content from prompts when loaded
   useEffect(() => {
@@ -161,27 +147,27 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     if (!workflowConfig) return;
 
     try {
-      setSaving(true);
+      // setSaving(true); // Removed as per parent's responsibility
       const updatedSteps = [...workflowConfig.steps];
       updatedSteps[stepIndex] = { ...updatedSteps[stepIndex] };
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
-      });
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
 
-      if (!response.ok) throw new Error('Failed to save workflow configuration');
+      // if (!response.ok) throw new Error('Failed to save workflow configuration'); // Removed as per parent's responsibility
       
-      setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
+      onConfigChange({ steps: ensureStepIds(updatedSteps) });
       setEditingStep(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save configuration');
+      // setError(err instanceof Error ? err.message : 'Failed to save configuration'); // Removed as per parent's responsibility
     } finally {
-      setSaving(false);
+      // setSaving(false); // Removed as per parent's responsibility
     }
   };
 
@@ -196,23 +182,23 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
 
   const handlePromptSave = async (promptName: string) => {
     try {
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content: editedPromptContent }),
-      });
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ content: editedPromptContent }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
 
-      if (!response.ok) throw new Error('Failed to save prompt');
+      // if (!response.ok) throw new Error('Failed to save prompt'); // Removed as per parent's responsibility
       
-      setPrompts(prev => ({ ...prev, [promptName]: editedPromptContent }));
+      onPromptChange(promptName, editedPromptContent);
       setEditingPrompt(null);
       setEditedPromptContent('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save prompt');
+      // setError(err instanceof Error ? err.message : 'Failed to save prompt'); // Removed as per parent's responsibility
     }
   };
 
@@ -224,26 +210,22 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
   const handlePromptDelete = async (promptName: string) => {
     if (!window.confirm('Are you sure you want to delete this prompt?')) return;
     setDeletingPrompt(promptName);
-    setError(null);
+    // setError(null); // Removed as per parent's responsibility
     try {
-      const token = await getToken();
-      // Call DELETE API (to be implemented in backend)
-      const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) throw new Error('Failed to delete prompt');
-      setPrompts(prev => {
-        const newPrompts = { ...prev };
-        delete newPrompts[promptName];
-        return newPrompts;
-      });
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // // Call DELETE API (to be implemented in backend) // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/prompts/${promptName}`, { // Removed as per parent's responsibility
+      //   method: 'DELETE', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
+      // if (!response.ok) throw new Error('Failed to delete prompt'); // Removed as per parent's responsibility
+      onPromptDelete?.(promptName);
       setEditingPrompt(null);
       setEditedPromptContent('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete prompt');
+      // setError(err instanceof Error ? err.message : 'Failed to delete prompt'); // Removed as per parent's responsibility
     } finally {
       setDeletingPrompt(null);
     }
@@ -252,24 +234,24 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
   const handleStepDelete = async (stepIndex: number) => {
     if (!workflowConfig) return;
     setDeletingStep(stepIndex);
-    setError(null);
+    // setError(null); // Removed as per parent's responsibility
     try {
-      const token = await getToken();
+      // const token = await getToken(); // Removed as per parent's responsibility
       const updatedSteps = workflowConfig.steps.filter((_, idx) => idx !== stepIndex);
       const stepsWithEnabled = withExplicitEnabled(updatedSteps);
-      const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }),
-      });
-      if (!response.ok) throw new Error('Failed to delete step');
-      setWorkflowConfig({ steps: ensureStepIds(stepsWithEnabled) });
+      // const response = await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
+      // if (!response.ok) throw new Error('Failed to delete step'); // Removed as per parent's responsibility
+      onConfigChange({ steps: ensureStepIds(stepsWithEnabled) });
       setShowDeleteStepModal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete step');
+      // setError(err instanceof Error ? err.message : 'Failed to delete step'); // Removed as per parent's responsibility
     } finally {
       setDeletingStep(null);
     }
@@ -286,22 +268,22 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
 
   const handleBaseInstructionsSave = async () => {
     setSavingBaseInstructions(true);
-    setError(null);
+    // setError(null); // Removed as per parent's responsibility
     try {
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/prompts/_base_instructions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content: baseInstructionsContent }),
-      });
-      if (!response.ok) throw new Error('Failed to save base instructions');
-      setPrompts(prev => ({ ...prev, _base_instructions: baseInstructionsContent }));
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/prompts/_base_instructions`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ content: baseInstructionsContent }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
+      // if (!response.ok) throw new Error('Failed to save base instructions'); // Removed as per parent's responsibility
+      onBaseInstructionsChange(baseInstructionsContent);
       setEditingBaseInstructions(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save base instructions');
+      // setError(err instanceof Error ? err.message : 'Failed to save base instructions'); // Removed as per parent's responsibility
     } finally {
       setSavingBaseInstructions(false);
     }
@@ -314,38 +296,38 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     const updatedSteps = workflowConfig.steps.map((step, idx) =>
       idx === stepIndex ? { ...step, [field]: value } : step
     );
-    setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
+    onConfigChange({ steps: ensureStepIds(updatedSteps) });
   };
 
   // Handler for drag end
   const handleDragEnd = async (result: any) => {
     if (!result.destination || !workflowConfig) return;
     // Prevent drag if already saving
-    if (saving) return;
+    // if (saving) return; // Removed as per parent's responsibility
     const prevSteps = workflowConfig.steps;
     const reordered = Array.from(prevSteps);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
     const stepsWithEnabled = withExplicitEnabled(reordered);
-    setSaving(true);
+    // setSaving(true); // Removed as per parent's responsibility
     try {
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }),
-      });
-      if (!response.ok) throw new Error('Failed to save workflow configuration');
-      setWorkflowConfig({ steps: ensureStepIds(stepsWithEnabled) });
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ steps: withExplicitEnabled(stepsWithEnabled) }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
+      // if (!response.ok) throw new Error('Failed to save workflow configuration'); // Removed as per parent's responsibility
+      onConfigChange({ steps: ensureStepIds(stepsWithEnabled) });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save configuration');
+      // setError(err instanceof Error ? err.message : 'Failed to save configuration'); // Removed as per parent's responsibility
       // Revert to previous order if save fails
-      setWorkflowConfig({ steps: prevSteps });
+      onConfigChange({ steps: prevSteps });
     } finally {
-      setSaving(false);
+      // setSaving(false); // Removed as per parent's responsibility
     }
   };
 
@@ -358,31 +340,31 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
       description: '',
       prompt_components: [],
       output_type: 'text',
-      model: allModels[0] || '',
+      model: availableModels.available_models[Object.keys(availableModels.available_models)[0]][0] || '', // Use default model from availableModels
       enabled: false, // New steps are disabled by default
     };
     const updatedSteps = [...workflowConfig.steps, newStep];
-    setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
+    onConfigChange({ steps: ensureStepIds(updatedSteps) });
     // Optionally, save to backend immediately
-    (async () => {
-      setSaving(true);
-      try {
-        const token = await getToken();
-        const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
-        });
-        if (!response.ok) throw new Error('Failed to add step');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to add step');
-      } finally {
-        setSaving(false);
-      }
-    })();
+    // (async () => { // Removed as per parent's responsibility
+    //   setSaving(true); // Removed as per parent's responsibility
+    //   try { // Removed as per parent's responsibility
+    //     const token = await getToken(); // Removed as per parent's responsibility
+    //     const response = await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+    //       method: 'POST', // Removed as per parent's responsibility
+    //       headers: { // Removed as per parent's responsibility
+    //         'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+    //         'Content-Type': 'application/json', // Removed as per parent's responsibility
+    //       }, // Removed as per parent's responsibility
+    //       body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }), // Removed as per parent's responsibility
+    //     }); // Removed as per parent's responsibility
+    //     if (!response.ok) throw new Error('Failed to add step'); // Removed as per parent's responsibility
+    //   } catch (err) { // Removed as per parent's responsibility
+    //     setError(err instanceof Error ? err.message : 'Failed to add step'); // Removed as per parent's responsibility
+    //   } finally { // Removed as per parent's responsibility
+    //     setSaving(false); // Removed as per parent's responsibility
+    //   } // Removed as per parent's responsibility
+    // })(); // Removed as per parent's responsibility
   }
 
   async function handleAddPromptComponent(stepIndex: number) {
@@ -393,66 +375,44 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
     setAddingPrompt((prev) => ({ ...prev, [stepIndex]: true }));
     try {
       // Save prompt to backend
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/prompts/${name}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      });
-      if (!response.ok) throw new Error('Failed to save prompt');
-      setPrompts((prev) => ({ ...prev, [name]: content }));
+      // const token = await getToken(); // Removed as per parent's responsibility
+      // const response = await fetch(`${backendUrl}/api/v1/prompts/${name}`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ content }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
+      // if (!response.ok) throw new Error('Failed to save prompt'); // Removed as per parent's responsibility
+      onPromptChange(name, content);
       // Add prompt reference to step
       const updatedSteps = [...workflowConfig.steps];
       updatedSteps[stepIndex] = {
         ...updatedSteps[stepIndex],
         prompt_components: [...updatedSteps[stepIndex].prompt_components, `prompts/${name}.md`],
       };
-      setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
+      onConfigChange({ steps: ensureStepIds(updatedSteps) });
       // Save workflow config
-      const token2 = await getToken();
-      await fetch(`${backendUrl}/api/v1/workflow/config`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token2}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
-      });
+      // const token2 = await getToken(); // Removed as per parent's responsibility
+      // await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+      //   method: 'POST', // Removed as per parent's responsibility
+      //   headers: { // Removed as per parent's responsibility
+      //     'Authorization': `Bearer ${token2}`, // Removed as per parent's responsibility
+      //     'Content-Type': 'application/json', // Removed as per parent's responsibility
+      //   }, // Removed as per parent's responsibility
+      //   body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }), // Removed as per parent's responsibility
+      // }); // Removed as per parent's responsibility
       setNewPromptName((prev) => ({ ...prev, [stepIndex]: '' }));
       setNewPromptContent((prev) => ({ ...prev, [stepIndex]: '' }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add prompt');
+      // setError(err instanceof Error ? err.message : 'Failed to add prompt'); // Removed as per parent's responsibility
     } finally {
       setAddingPrompt((prev) => ({ ...prev, [stepIndex]: false }));
     }
   }
 
-  if (loading) {
-    return (
-      <div className="bg-white rounded-lg p-6 shadow-md mb-8">
-        <div className="text-center text-gray-600">Loading workflow configuration...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white rounded-lg p-6 shadow-md mb-8">
-        <div className="text-red-600">Error: {error}</div>
-      </div>
-    );
-  }
-
-  if (!workflowConfig || !availableModels) {
-    return (
-      <div className="bg-white rounded-lg p-6 shadow-md mb-8">
-        <div className="text-red-600">Failed to load configuration</div>
-      </div>
-    );
-  }
+  // Removed loading, error, and !workflowConfig || !availableModels checks as per parent's responsibility
 
   // Flatten all available models into a single array, but exclude only 'gemini-pro'
   const allModels = Object.values(availableModels.available_models).flat().filter(
@@ -465,20 +425,70 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
   );
 
   return (
-    <div className="bg-white rounded-lg p-6 shadow-md mb-8">
-      <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setSectionExpanded((v) => !v)}>
-        <div className="flex items-center space-x-2">
-          {sectionExpanded ? (
-            <ChevronDownIcon className="h-6 w-6 text-gray-600" />
+    <div
+      className={
+        `${isActive ? 'bg-white shadow-md' : 'bg-gray-100'} rounded-lg p-0 mb-8 transition-colors duration-200`
+      }
+    >
+      <div
+        className={
+          `flex items-center justify-between cursor-pointer select-none px-6 py-4 border-b border-gray-200 transition-colors duration-200 ` +
+          (isActive ? '' : 'text-gray-400')
+        }
+        style={isActive ? {} : { opacity: 0.7 }}
+        onClick={onToggleExpand}
+      >
+        <div className="flex items-center space-x-2 min-w-0">
+          {expanded ? (
+            <ChevronDownIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
           ) : (
-            <ChevronRightIcon className="h-6 w-6 text-gray-600" />
+            <ChevronRightIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
           )}
-          <h2 className="text-xl font-semibold text-gray-800">📋 Workflow Configuration</h2>
+          {editableGroupName ? (
+            editingGroupName ? (
+              <input
+                className="border px-2 py-1 rounded text-lg font-semibold min-w-0"
+                value={groupNameValue}
+                onChange={e => setGroupNameValue(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onBlur={() => { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}
+                onKeyDown={e => { if (e.key === 'Enter') { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}}
+                autoFocus
+                style={{ maxWidth: 240 }}
+              />
+            ) : (
+              <span className="text-xl font-semibold text-gray-800 truncate" onClick={e => { e.stopPropagation(); setEditingGroupName(true); }}>
+                {groupNameValue} <PencilIcon className="h-4 w-4 inline text-blue-500 ml-1" />
+              </span>
+            )
+          ) : (
+            <h2 className="text-xl font-semibold text-gray-800">📋 Workflow Configuration</h2>
+          )}
         </div>
-        <span className="text-sm text-gray-500">{sectionExpanded ? 'Click to collapse' : 'Click to expand'}</span>
+        <div className="flex items-center flex-1 justify-end space-x-4 min-w-0">
+          {showActiveIndicator && (
+            <input
+              type="radio"
+              name="workflow-group-radio"
+              checked={isActive}
+              onChange={e => { e.stopPropagation(); onSetActive && onSetActive(); }}
+              className="accent-blue-600 ml-2"
+              title="Set as active"
+            />
+          )}
+          {showDelete && (
+            <button
+              onClick={e => { e.stopPropagation(); setShowDeleteWorkflowModal(true); }}
+              className="text-gray-400 hover:text-red-600 ml-2"
+              title="Delete Workflow Group"
+            >
+              <TrashIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
-      {sectionExpanded && (
-        <div className="mt-6">
+      {expanded && (
+        <div className="mt-6 px-6 pb-6">
           {/* Base Instructions Section */}
           <div className="border border-gray-200 rounded-lg mb-6">
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-t-lg">
@@ -533,11 +543,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
             <Droppable droppableId="steps-droppable">
               {(provided: any) => (
                 <div className="space-y-4" ref={provided.innerRef} {...provided.droppableProps}>
-                  {saving && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-60 z-10">
-                      <span className="text-blue-600 font-semibold">Saving order...</span>
-                    </div>
-                  )}
+                  {/* Removed saving and saving UI */}
                   {ensureStepIds(workflowConfig.steps).map((step, stepIndex) => {
                     // Remove _base_instructions from prompt_components for display
                     const filteredPromptComponents = step.prompt_components.filter(
@@ -573,27 +579,27 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
                                     const updatedSteps = workflowConfig.steps.map((step, idx) =>
                                       idx === stepIndex ? { ...step, enabled: e.target.checked } : { ...step, enabled: step.enabled === false ? false : true }
                                     );
-                                    setWorkflowConfig({ steps: ensureStepIds(updatedSteps) });
+                                    onConfigChange({ steps: ensureStepIds(updatedSteps) });
                                     // Save to backend
-                                    (async () => {
-                                      setSaving(true);
-                                      try {
-                                        const token = await getToken();
-                                        const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-                                          method: 'POST',
-                                          headers: {
-                                            'Authorization': `Bearer ${token}`,
-                                            'Content-Type': 'application/json',
-                                          },
-                                          body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }),
-                                        });
-                                        if (!response.ok) throw new Error('Failed to save workflow configuration');
-                                      } catch (err) {
-                                        setError(err instanceof Error ? err.message : 'Failed to save configuration');
-                                      } finally {
-                                        setSaving(false);
-                                      }
-                                    })();
+                                    // (async () => { // Removed as per parent's responsibility
+                                    //   setSaving(true); // Removed as per parent's responsibility
+                                    //   try { // Removed as per parent's responsibility
+                                    //     const token = await getToken(); // Removed as per parent's responsibility
+                                    //     const response = await fetch(`${backendUrl}/api/v1/workflow/config`, { // Removed as per parent's responsibility
+                                    //       method: 'POST', // Removed as per parent's responsibility
+                                    //       headers: { // Removed as per parent's responsibility
+                                    //         'Authorization': `Bearer ${token}`, // Removed as per parent's responsibility
+                                    //         'Content-Type': 'application/json', // Removed as per parent's responsibility
+                                    //       }, // Removed as per parent's responsibility
+                                    //       body: JSON.stringify({ steps: withExplicitEnabled(updatedSteps) }), // Removed as per parent's responsibility
+                                    //     }); // Removed as per parent's responsibility
+                                    //     if (!response.ok) throw new Error('Failed to save workflow configuration'); // Removed as per parent's responsibility
+                                    //   } catch (err) { // Removed as per parent's responsibility
+                                    //     setError(err instanceof Error ? err.message : 'Failed to save configuration'); // Removed as per parent's responsibility
+                                    //   } finally { // Removed as per parent's responsibility
+                                    //     setSaving(false); // Removed as per parent's responsibility
+                                    //   } // Removed as per parent's responsibility
+                                    // })(); // Removed as per parent's responsibility
                                   }}
                                   className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
                                   title={isEnabled ? 'Disable step' : 'Enable step'}
@@ -616,7 +622,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
                                         e.stopPropagation();
                                         handleStepSave(stepIndex);
                                       }}
-                                      disabled={saving}
+                                      // disabled={saving} // Removed as per parent's responsibility
                                       className="text-green-600 hover:text-green-800"
                                       title="Save"
                                     >
@@ -884,7 +890,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
                   {/* Add Step Bar */}
                   <div
                     className="flex items-center justify-center mt-2 p-4 border-2 border-gray-300 rounded-lg bg-gray-50 cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition-colors"
-                    onClick={handleAddStep}
+                    onClick={e => { e.stopPropagation(); handleAddStep(); }}
                     title="Add Step"
                   >
                     <span className="flex items-center space-x-2 text-gray-500 font-semibold hover:text-blue-700">
@@ -898,11 +904,7 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
               )}
             </Droppable>
           </DragDropContext>
-          {saving && (
-            <div className="mt-4 text-center text-blue-600">
-              Saving configuration...
-            </div>
-          )}
+          {/* Removed saving and saving UI */}
         </div>
       )}
       {/* Modal for step deletion */}
@@ -925,6 +927,29 @@ export default function WorkflowConfig({ backendUrl }: WorkflowConfigProps) {
                 disabled={deletingStep !== null}
               >
                 {deletingStep !== null ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal for workflow deletion */}
+      {showDeleteWorkflowModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.3)" }}>
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Delete Workflow</h3>
+            <p className="mb-6">Are you sure you want to delete the workflow <span className="font-bold">{groupName || 'this workflow'}</span>? This action cannot be undone.</p>
+            <div className="flex justify-end space-x-2">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                onClick={() => setShowDeleteWorkflowModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                onClick={() => { setShowDeleteWorkflowModal(false); onDeleteGroup && onDeleteGroup(); }}
+              >
+                Delete
               </button>
             </div>
           </div>

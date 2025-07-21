@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
         source: '/api/catalog/:path*',
         destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app'}/api/catalog/:path*`,
       },
+      {
+        source: '/api/v1/:path*',
+        destination: 'http://localhost:8000/api/v1/:path*',
+      },
     ];
   },
 };
