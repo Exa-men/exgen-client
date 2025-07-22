@@ -11,16 +11,20 @@ const nextConfig: NextConfig = {
   },
   env: {
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app',
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://exgen-production.up.railway.app'),
   },
   async rewrites() {
+    // Use the environment-based API base URL
+    const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://exgen-production.up.railway.app');
+    
     return [
       {
         source: '/api/catalog/:path*',
-        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app'}/api/catalog/:path*`,
+        destination: `${backendUrl}/api/catalog/:path*`,
       },
       {
         source: '/api/v1/:path*',
-        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app'}/api/v1/:path*`,
+        destination: `${backendUrl}/api/v1/:path*`,
       },
     ];
   },
