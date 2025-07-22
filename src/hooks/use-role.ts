@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 export interface UserRole {
   user_id: string | null;
   role: 'user' | 'admin' | null;
-  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
 }
 
 export const useRole = () => {
@@ -12,14 +13,15 @@ export const useRole = () => {
   const [userRole, setUserRole] = useState<UserRole>({
     user_id: null,
     role: null,
-    username: null
+    first_name: null,
+    last_name: null
   });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchUserRole = async () => {
       if (!isLoaded || !isSignedIn) {
-        setUserRole({ user_id: null, role: null, username: null });
+        setUserRole({ user_id: null, role: null, first_name: null, last_name: null });
         setIsLoading(false);
         return;
       }
@@ -38,11 +40,13 @@ export const useRole = () => {
           setUserRole(data);
         } else {
           console.error('Failed to fetch user role:', response.status);
-          setUserRole({ user_id: null, role: null, username: null });
+          // Default to user role instead of null for better UX
+          setUserRole({ user_id: null, role: 'user', first_name: null, last_name: null });
         }
       } catch (error) {
         console.error('Error fetching user role:', error);
-        setUserRole({ user_id: null, role: null, username: null });
+        // Default to user role for any error (including 500 errors)
+        setUserRole({ user_id: null, role: 'user', first_name: null, last_name: null });
       } finally {
         setIsLoading(false);
       }
@@ -61,10 +65,10 @@ export const useRole = () => {
     isAdmin,
     isUser,
     hasRole,
-    refetch: () => {
-      setIsLoading(true);
-      // Trigger a re-fetch by updating the dependency
-      setUserRole({ user_id: null, role: null, username: null });
-    }
+          refetch: () => {
+        setIsLoading(true);
+        // Trigger a re-fetch by updating the dependency
+        setUserRole({ user_id: null, role: 'user', first_name: null, last_name: null });
+      }
   };
 }; 

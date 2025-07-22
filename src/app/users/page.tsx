@@ -15,7 +15,8 @@ import { cn } from '../../lib/utils';
 
 interface UserData {
   id: string;
-  username: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: 'user' | 'admin';
   credits: number;
@@ -27,7 +28,7 @@ interface UserListResponse {
   total: number;
 }
 
-type SortField = 'username' | 'email' | 'role' | 'credits' | 'created_at';
+type SortField = 'first_name' | 'last_name' | 'email' | 'role' | 'credits' | 'created_at';
 type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
@@ -38,7 +39,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('username');
+  const [sortField, setSortField] = useState<SortField>('first_name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
@@ -136,6 +137,35 @@ export default function UsersPage() {
     }
   };
 
+  const updateUserEmail = async (userId: string, email: string) => {
+    try {
+      setUpdatingUser(userId);
+      const token = await (window as any).Clerk?.session?.getToken();
+      const response = await fetch(`/api/v1/admin/users/${userId}/email`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user email');
+      }
+
+      // Update the user in the local state
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, email } : user
+      ));
+    } catch (err) {
+      console.error('Error updating user email:', err);
+      setError('Failed to update user email');
+    } finally {
+      setUpdatingUser(null);
+    }
+  };
+
   // Initial fetch
   useEffect(() => {
     fetchUsers();
@@ -144,7 +174,8 @@ export default function UsersPage() {
   // Filtered and sorted users
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = users.filter(user => {
-      const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            user.email.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
       return matchesSearch && matchesRole;
@@ -226,7 +257,7 @@ export default function UsersPage() {
               <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400 h-10 w-10" />
               <Input
                 type="text"
-                placeholder="Search by username or email..."
+                placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-16 h-20 !text-3xl w-full shadow-lg border-2 border-examen-cyan focus:border-examen-cyan focus:ring-2 focus:ring-examen-cyan/30 transition-all"
@@ -294,10 +325,20 @@ export default function UsersPage() {
                         <TableHead>
                           <Button
                             variant="ghost"
-                            onClick={() => handleSort('username')}
+                            onClick={() => handleSort('first_name')}
                             className="h-auto p-0 font-semibold"
                           >
-                            Username
+                            First Name
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
+                            onClick={() => handleSort('last_name')}
+                            className="h-auto p-0 font-semibold"
+                          >
+                            Last Name
                             <ArrowUpDown className="ml-2 h-4 w-4" />
                           </Button>
                         </TableHead>
@@ -347,7 +388,7 @@ export default function UsersPage() {
                     <TableBody>
                       {filteredAndSortedUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                             {searchTerm ? 'No users found for your search.' : 'No users available.'}
                           </TableCell>
                         </TableRow>
@@ -355,10 +396,28 @@ export default function UsersPage() {
                         filteredAndSortedUsers.map((userData) => (
                           <TableRow key={userData.id}>
                             <TableCell className="font-medium">
-                              {userData.username}
+                              {userData.first_name}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {userData.last_name}
                             </TableCell>
                             <TableCell>
-                              {userData.email}
+                              <div className="flex items-center space-x-2">
+                                <span>{userData.email}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newEmail = prompt(`Enter new email for ${userData.first_name} ${userData.last_name}:`, userData.email);
+                                    if (newEmail && newEmail.includes('@')) {
+                                      updateUserEmail(userData.id, newEmail);
+                                    }
+                                  }}
+                                  disabled={updatingUser === userData.id}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-2">
@@ -379,7 +438,7 @@ export default function UsersPage() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    const newCredits = prompt(`Enter new credits for ${userData.username}:`, userData.credits.toString());
+                                    const newCredits = prompt(`Enter new credits for ${userData.first_name} ${userData.last_name}:`, userData.credits.toString());
                                     if (newCredits && !isNaN(Number(newCredits))) {
                                       updateUserCredits(userData.id, Number(newCredits));
                                     }
