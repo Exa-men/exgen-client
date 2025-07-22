@@ -302,9 +302,9 @@ export default function WorkflowGroups() {
       // Optimistically update local state immediately
       setGroups(prev => prev.map(g => g.id === id ? {
         ...g,
-        config: { 
-          steps: g.config?.steps || [],
-          base_instructions: content
+        prompts: { 
+          ...g.prompts,
+          _base_instructions: content
         }
       } : g));
       
