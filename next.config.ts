@@ -10,17 +10,17 @@ const nextConfig: NextConfig = {
     return config;
   },
   env: {
-    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app',
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
   },
   async rewrites() {
     return [
       {
         source: '/api/catalog/:path*',
-        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app'}/api/catalog/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/catalog/:path*`,
       },
       {
         source: '/api/v1/:path*',
-        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://exgen-production.up.railway.app'}/api/v1/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/:path*`,
       },
     ];
   },

@@ -7,9 +7,11 @@ import Link from 'next/link';
 import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
+import { useRole } from '../../hooks/use-role';
 
 const UnifiedHeader = () => {
   const { isSignedIn, isLoaded } = useUser();
+  const { isAdmin } = useRole();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
 
@@ -17,6 +19,9 @@ const UnifiedHeader = () => {
   const isActive = (href: string) => {
     if (href === '/catalogus') return pathname.startsWith('/catalogus');
     if (href === '/workflows') return pathname.startsWith('/workflows');
+    if (href === '/users') return pathname.startsWith('/users');
+    if (href === '/system') return pathname.startsWith('/system');
+    if (href === '/analytics') return pathname.startsWith('/analytics');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
     return pathname === href;
   };
@@ -88,6 +93,46 @@ const UnifiedHeader = () => {
                       Ontwikkelen
                     </Button>
                   </Link>
+                  {isAdmin && (
+                    <>
+                      <Link href="/users">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/users')
+                              ? "text-examen-cyan font-bold underline underline-offset-4"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors"
+                          }
+                        >
+                          Users
+                        </Button>
+                      </Link>
+                      <Link href="/system">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/system')
+                              ? "text-examen-cyan font-bold underline underline-offset-4"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors"
+                          }
+                        >
+                          System
+                        </Button>
+                      </Link>
+                      <Link href="/analytics">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/analytics')
+                              ? "text-examen-cyan font-bold underline underline-offset-4"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors"
+                          }
+                        >
+                          Analytics
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -178,6 +223,46 @@ const UnifiedHeader = () => {
                       Ontwikkelen
                     </Button>
                   </Link>
+                  {isAdmin && (
+                    <>
+                      <Link href="/users">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/users')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          Users
+                        </Button>
+                      </Link>
+                      <Link href="/system">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/system')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          System
+                        </Button>
+                      </Link>
+                      <Link href="/analytics">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/analytics')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          Analytics
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </>
               )}
               
