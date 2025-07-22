@@ -15,6 +15,7 @@ import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import { cn } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { useRole } from '../../hooks/use-role';
 
 interface Version {
   version: string;
@@ -43,6 +44,7 @@ export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
+  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
   
   const [products, setProducts] = useState<ExamProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -539,75 +541,77 @@ export default function CatalogusPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* New Product Input Row */}
-                    <TableRow>
-                      <TableCell>
-                        <Input
-                          value={newProduct.code}
-                          onChange={e => handleNewProductChange('code', e.target.value)}
-                          placeholder="Code"
-                          className="min-w-[80px]"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={newProduct.title}
-                          onChange={e => handleNewProductChange('title', e.target.value)}
-                          placeholder="Titel"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={newProduct.description}
-                          onChange={e => handleNewProductChange('description', e.target.value)}
-                          placeholder="Beschrijving"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={newProduct.cost}
-                          onChange={e => handleNewProductChange('cost', e.target.value)}
-                          placeholder="Credits"
-                          min={0}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={newProduct.validFrom}
-                          onChange={e => handleNewProductChange('validFrom', e.target.value)}
-                          placeholder="Cohort"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={newProduct.version}
-                          onChange={e => handleNewProductChange('version', e.target.value)}
-                          placeholder="Versie"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex gap-2 justify-center">
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="bg-examen-cyan text-white"
-                            onClick={handleSaveNewProduct}
-                            disabled={savingNewProduct || !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.cost}
-                          >
-                            {savingNewProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Opslaan'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleClearNewProduct}
-                            disabled={savingNewProduct}
-                          >
-                            Wissen
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                    {/* New Product Input Row - Admin Only */}
+                    {isAdmin && (
+                      <TableRow>
+                        <TableCell>
+                          <Input
+                            value={newProduct.code}
+                            onChange={e => handleNewProductChange('code', e.target.value)}
+                            placeholder="Code"
+                            className="min-w-[80px]"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={newProduct.title}
+                            onChange={e => handleNewProductChange('title', e.target.value)}
+                            placeholder="Titel"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={newProduct.description}
+                            onChange={e => handleNewProductChange('description', e.target.value)}
+                            placeholder="Beschrijving"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={newProduct.cost}
+                            onChange={e => handleNewProductChange('cost', e.target.value)}
+                            placeholder="Credits"
+                            min={0}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={newProduct.validFrom}
+                            onChange={e => handleNewProductChange('validFrom', e.target.value)}
+                            placeholder="Cohort"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={newProduct.version}
+                            onChange={e => handleNewProductChange('version', e.target.value)}
+                            placeholder="Versie"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-examen-cyan text-white"
+                              onClick={handleSaveNewProduct}
+                              disabled={savingNewProduct || !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.cost}
+                            >
+                              {savingNewProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Opslaan'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleClearNewProduct}
+                              disabled={savingNewProduct}
+                            >
+                              Wissen
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {filteredAndSortedProducts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-gray-500">
@@ -701,15 +705,17 @@ export default function CatalogusPage() {
                                   Feedback
                                 </Button>
                               )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setDeleteProductId(product.id)}
-                                className="flex items-center justify-center w-full transition-colors hover:bg-red-100 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Verwijderen
-                              </Button>
+                              {isAdmin && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setDeleteProductId(product.id)}
+                                  className="flex items-center justify-center w-full transition-colors hover:bg-red-100 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Verwijderen
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
