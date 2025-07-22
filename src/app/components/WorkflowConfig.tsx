@@ -43,6 +43,7 @@ interface WorkflowConfigProps {
   editableGroupName?: boolean;
   showDelete?: boolean;
   showActiveIndicator?: boolean;
+  isDefault?: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
 }
@@ -86,6 +87,7 @@ export default function WorkflowConfig({
   editableGroupName,
   showDelete,
   showActiveIndicator,
+  isDefault,
   expanded,
   onToggleExpand,
 }: WorkflowConfigProps) {
@@ -116,8 +118,12 @@ export default function WorkflowConfig({
   const [addingPrompt, setAddingPrompt] = useState<{ [key: number]: boolean }>({});
   // Add state for editing group name
   const [editingGroupName, setEditingGroupName] = useState(false);
-  const [groupNameValue, setGroupNameValue] = useState(groupName || '');
-  useEffect(() => { setGroupNameValue(groupName || ''); }, [groupName]);
+  const [groupNameValue, setGroupNameValue] = useState<string>('');
+  
+  // Update groupNameValue when groupName prop changes, ensuring it's always a string
+  useEffect(() => { 
+    setGroupNameValue(groupName ?? ''); 
+  }, [groupName]);
   // State for workflow deletion modal
   const [showDeleteWorkflowModal, setShowDeleteWorkflowModal] = useState(false);
 
@@ -430,63 +436,136 @@ export default function WorkflowConfig({
         `${isActive ? 'bg-white shadow-md' : 'bg-gray-100'} rounded-lg p-0 mb-8 transition-colors duration-200`
       }
     >
-      <div
-        className={
-          `flex items-center justify-between cursor-pointer select-none px-6 py-4 border-b border-gray-200 transition-colors duration-200 ` +
-          (isActive ? '' : 'text-gray-400')
-        }
-        style={isActive ? {} : { opacity: 0.7 }}
-        onClick={onToggleExpand}
-      >
-        <div className="flex items-center space-x-2 min-w-0">
-          {expanded ? (
-            <ChevronDownIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
-          ) : (
-            <ChevronRightIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
-          )}
-          {editableGroupName ? (
-            editingGroupName ? (
-              <input
-                className="border px-2 py-1 rounded text-lg font-semibold min-w-0"
-                value={groupNameValue}
-                onChange={e => setGroupNameValue(e.target.value)}
-                onClick={e => e.stopPropagation()}
-                onBlur={() => { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}
-                onKeyDown={e => { if (e.key === 'Enter') { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}}
-                autoFocus
-                style={{ maxWidth: 240 }}
-              />
-            ) : (
-              <span className="text-xl font-semibold text-gray-800 truncate" onClick={e => { e.stopPropagation(); setEditingGroupName(true); }}>
-                {groupNameValue} <PencilIcon className="h-4 w-4 inline text-blue-500 ml-1" />
-              </span>
-            )
-          ) : (
-            <h2 className="text-xl font-semibold text-gray-800">📋 Workflow Configuration</h2>
-          )}
-        </div>
-        <div className="flex items-center flex-1 justify-end space-x-4 min-w-0">
-          {showActiveIndicator && (
+      {/* Radio Button - Positioned on the left outside the accordion header */}
+      {showActiveIndicator && (
+        <div className="flex items-center">
+          <div className="flex items-center justify-center w-12 h-12">
             <input
               type="radio"
               name="workflow-group-radio"
-              checked={isActive}
-              onChange={e => { e.stopPropagation(); onSetActive && onSetActive(); }}
-              className="accent-blue-600 ml-2"
+              checked={Boolean(isActive)}
+              onChange={e => { 
+                e.stopPropagation(); 
+                onSetActive && onSetActive(); 
+              }}
+              onClick={e => e.stopPropagation()}
+              className="accent-blue-600 h-5 w-5"
               title="Set as active"
             />
-          )}
-          {showDelete && (
-            <button
-              onClick={e => { e.stopPropagation(); setShowDeleteWorkflowModal(true); }}
-              className="text-gray-400 hover:text-red-600 ml-2"
-              title="Delete Workflow Group"
-            >
-              <TrashIcon className="h-5 w-5" />
-            </button>
-          )}
+          </div>
+          
+          {/* Accordion Header - Now separate from radio button */}
+          <div
+            className={
+              `flex items-center justify-between cursor-pointer select-none px-6 py-4 border-b border-gray-200 transition-colors duration-200 flex-1 ` +
+              (isActive ? '' : 'text-gray-400')
+            }
+            style={isActive ? {} : { opacity: 0.7 }}
+            onClick={onToggleExpand}
+          >
+            <div className="flex items-center space-x-2 min-w-0">
+              {expanded ? (
+                <ChevronDownIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
+              ) : (
+                <ChevronRightIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
+              )}
+              {editableGroupName ? (
+                editingGroupName ? (
+                  <input
+                    className="border px-2 py-1 rounded text-lg font-semibold min-w-0"
+                    value={groupNameValue}
+                    onChange={e => setGroupNameValue(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    onBlur={() => { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}}
+                    autoFocus
+                    style={{ maxWidth: 240 }}
+                  />
+                ) : (
+                  <span className="text-xl font-semibold text-gray-800 truncate" onClick={e => { e.stopPropagation(); setEditingGroupName(true); }}>
+                    {groupNameValue} <PencilIcon className="h-4 w-4 inline text-blue-500 ml-1" />
+                  </span>
+                )
+              ) : (
+                <h2 className="text-xl font-semibold text-gray-800">📋 Workflow Configuration</h2>
+              )}
+            </div>
+            <div className="flex items-center space-x-4 min-w-0">
+              {showDelete && !isDefault && (
+                <button
+                  onClick={e => { e.stopPropagation(); setShowDeleteWorkflowModal(true); }}
+                  className="text-gray-400 hover:text-red-600"
+                  title="Delete Workflow Group"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
+              {isDefault && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded" title="Default workflow group cannot be deleted">
+                  Default
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+      
+      {/* Fallback for when showActiveIndicator is false - keep original layout */}
+      {!showActiveIndicator && (
+        <div
+          className={
+            `flex items-center justify-between cursor-pointer select-none px-6 py-4 border-b border-gray-200 transition-colors duration-200 ` +
+            (isActive ? '' : 'text-gray-400')
+          }
+          style={isActive ? {} : { opacity: 0.7 }}
+          onClick={onToggleExpand}
+        >
+          <div className="flex items-center space-x-2 min-w-0">
+            {expanded ? (
+              <ChevronDownIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
+            ) : (
+              <ChevronRightIcon className="h-6 w-6 text-gray-600 flex-shrink-0" />
+            )}
+            {editableGroupName ? (
+              editingGroupName ? (
+                <input
+                  className="border px-2 py-1 rounded text-lg font-semibold min-w-0"
+                  value={groupNameValue}
+                  onChange={e => setGroupNameValue(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  onBlur={() => { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { setEditingGroupName(false); onGroupNameChange && onGroupNameChange(groupNameValue); }}}
+                  autoFocus
+                  style={{ maxWidth: 240 }}
+                />
+              ) : (
+                <span className="text-xl font-semibold text-gray-800 truncate" onClick={e => { e.stopPropagation(); setEditingGroupName(true); }}>
+                  {groupNameValue} <PencilIcon className="h-4 w-4 inline text-blue-500 ml-1" />
+                </span>
+              )
+            ) : (
+              <h2 className="text-xl font-semibold text-gray-800">📋 Workflow Configuration</h2>
+            )}
+          </div>
+          <div className="flex items-center space-x-4 min-w-0">
+            {showDelete && !isDefault && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowDeleteWorkflowModal(true); }}
+                className="text-gray-400 hover:text-red-600"
+                title="Delete Workflow Group"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
+            )}
+            {isDefault && (
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded" title="Default workflow group cannot be deleted">
+                Default
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      
       {expanded && (
         <div className="mt-6 px-6 pb-6">
           {/* Base Instructions Section */}
