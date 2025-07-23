@@ -47,7 +47,7 @@ function HomeContent() {
   // Only show homepage content for non-authenticated users
   return (
     <main>
-      <UnifiedHeader />
+      <UnifiedHeader onOrderCredits={() => {}} />
       <Hero />
       <Features />
       <Benefits />
