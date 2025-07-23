@@ -47,14 +47,14 @@ interface BackendAssessmentCriteria {
   id: string;
   criteria: string;
   order: number;
-  assessment_levels: BackendAssessmentLevel[];
+  levels: BackendAssessmentLevel[];
 }
 
 interface BackendAssessmentComponent {
   id: string;
   component: string;  // Fixed: backend returns "component" not "name"
   order: number;
-  assessment_criteria: BackendAssessmentCriteria[];
+  criteria: BackendAssessmentCriteria[];
 }
 
 interface BackendVersionDocument {
@@ -69,7 +69,7 @@ interface BackendVersionDocument {
 
 interface BackendProductVersion {
   id: string;
-  version_number: string;
+  version: string;
   release_date: string;
   is_latest: boolean;
   is_enabled: boolean;
@@ -217,6 +217,11 @@ export default function EditExamPage() {
     }
   }, [product]);
 
+  // Debug dialog state
+  useEffect(() => {
+    console.log('showCriteriaDeleteConfirm changed:', showCriteriaDeleteConfirm);
+  }, [showCriteriaDeleteConfirm]);
+
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
   // Helper functions for assessment criteria management
@@ -333,8 +338,9 @@ export default function EditExamPage() {
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
 
+    // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
-    debouncedSave.save();
+    performSave();
 
     toast({
       title: "Onderdeel verwijderd",
@@ -347,7 +353,9 @@ export default function EditExamPage() {
   };
 
   const handleDeleteCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
+    console.log('handleDeleteCriteria called:', { versionId, onderdeelId, criteriaId });
     setShowCriteriaDeleteConfirm({ versionId, onderdeelId, criteriaId });
+    console.log('Dialog state set to:', { versionId, onderdeelId, criteriaId });
   };
 
   const handleDeleteDocument = (versionId: string, documentId: string) => {
@@ -394,6 +402,7 @@ export default function EditExamPage() {
   };
 
   const removeCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
+    console.log('removeCriteria called:', { versionId, onderdeelId, criteriaId });
     if (!product) return;
     
     setProduct(prev => {
@@ -418,9 +427,9 @@ export default function EditExamPage() {
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
     
-    // Trigger auto-save
+    // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
-    debouncedSave.save();
+    performSave();
   };
 
   const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
@@ -428,6 +437,9 @@ export default function EditExamPage() {
     
     // Validate field immediately
     validateField(value, `onderdeel-${onderdeelId}`);
+    
+    // Only trigger auto-save if there's meaningful content (more than 3 characters)
+    const shouldAutoSave = value && value.trim().length >= 3;
     
     setProduct(prev => {
       if (!prev) return prev;
@@ -451,9 +463,11 @@ export default function EditExamPage() {
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
     
-    // Trigger auto-save
-    setSaveStatus('dirty');
-    debouncedSave.save();
+    // Trigger auto-save only if there's meaningful content
+    if (shouldAutoSave) {
+      setSaveStatus('dirty');
+      debouncedSave.save();
+    }
   };
 
   // Validation functions
@@ -598,7 +612,7 @@ export default function EditExamPage() {
           debouncedSave.cancel();
           timeoutId = setTimeout(() => {
             performSave();
-          }, 2000); // 2 second delay
+          }, 5000); // 5 second delay
         }
       };
     },
@@ -616,6 +630,9 @@ export default function EditExamPage() {
     } else if (field === 'level' && levelId && value !== undefined) {
       validateField(value, `level-${levelId}`);
     }
+    
+    // Only trigger auto-save if there's meaningful content (more than 3 characters)
+    const shouldAutoSave = value && value.trim().length >= 3;
     
     setProduct(prev => {
       if (!prev) return prev;
@@ -659,9 +676,11 @@ export default function EditExamPage() {
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
     
-    // Trigger auto-save
-    setSaveStatus('dirty');
-    debouncedSave.save();
+    // Trigger auto-save only if there's meaningful content
+    if (shouldAutoSave) {
+      setSaveStatus('dirty');
+      debouncedSave.save();
+    }
   };
 
   // Redirect if not signed in or not admin
@@ -727,7 +746,7 @@ export default function EditExamPage() {
           validFrom: backendProduct.valid_from,
           versions: backendProduct.versions?.map(version => ({
             id: version.id,
-            version: version.version_number,
+            version: version.version,
             releaseDate: version.release_date,
             isLatest: version.is_latest,
             isEnabled: version.is_enabled,
@@ -743,10 +762,10 @@ export default function EditExamPage() {
             assessmentOnderdelen: version.assessment_components?.map(component => ({
               id: component.id,
               onderdeel: component.component,  // Fixed: use component.component instead of component.name
-              criteria: component.assessment_criteria?.map(criteria => ({
+              criteria: component.criteria?.map(criteria => ({
                 id: criteria.id,
                 criteria: criteria.criteria,
-                levels: criteria.assessment_levels?.map(level => ({
+                levels: criteria.levels?.map(level => ({
                   id: level.id,
                   label: level.label,
                   value: level.value
@@ -973,16 +992,13 @@ export default function EditExamPage() {
     const currentData = JSON.stringify(product);
     const isDataSaved = lastSavedData === currentData;
     
-    // Check if there are any unsaved changes (dirty state)
-    const hasUnsavedChanges = saveStatus === 'dirty';
-    
     if (saveStatus === 'saving') {
       return { text: 'Opslaan...', variant: 'outline' as const, disabled: true, className: 'text-yellow-600 border-yellow-600' };
     }
     if (saveStatus === 'error' || validationErrors.size > 0) {
       return { text: 'Opslaan', variant: 'outline' as const, disabled: false, className: 'text-red-600 border-red-600 hover:bg-red-50' };
     }
-    if (isDataSaved && !hasUnsavedChanges) {
+    if (saveStatus === 'saved' || (isDataSaved && saveStatus !== 'dirty')) {
       return { text: 'Opgeslagen', variant: 'outline' as const, disabled: true, className: 'text-green-600 border-green-600' };
     }
     return { text: 'Opslaan', variant: 'default' as const, disabled: false, className: '' };
@@ -990,27 +1006,39 @@ export default function EditExamPage() {
 
   // Document management functions
   const handleDrag = useCallback((e: React.DragEvent) => {
+    console.log('Drag event:', e.type);
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
+      console.log('Setting drag active to true');
       setDragActive(true);
     } else if (e.type === "dragleave") {
+      console.log('Setting drag active to false');
       setDragActive(false);
     }
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent, versionId: string) => {
+    console.log('Drop event triggered for version:', versionId);
+    console.log('Files in drop:', e.dataTransfer.files);
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      console.log('Processing files:', Array.from(e.dataTransfer.files).map(f => f.name));
       await handleFileUpload(Array.from(e.dataTransfer.files), versionId);
+    } else {
+      console.log('No files found in drop event');
     }
   }, []);
 
   const handleFileUpload = async (files: File[], versionId: string) => {
-    if (!product) return;
+    console.log('handleFileUpload called with files:', files.map(f => f.name), 'for version:', versionId);
+    if (!product) {
+      console.log('No product found, returning');
+      return;
+    }
 
     setUploadingDocuments(true);
     
@@ -1207,51 +1235,82 @@ export default function EditExamPage() {
     setShowVersionDialog(true);
   };
 
-  const handleCreateVersion = () => {
+  const handleCreateVersion = async () => {
     if (!product || !newVersionNumber.trim()) return;
     
-    const latestVersion = product.versions.find(v => v.isLatest);
-    
-    // Create new version with default structure if no existing versions
-    const newVersion: Version = {
-      id: `v${Date.now()}`,
-      version: newVersionNumber.trim(),
-      releaseDate: new Date().toISOString().split('T')[0],
-      isLatest: true, // First version is latest
-      isEnabled: false, // New versions are disabled by default
-      password: generatePassword(),
-      rubricLevels: latestVersion ? latestVersion.rubricLevels : 4, // Default to 4 levels
-      assessmentOnderdelen: latestVersion ? latestVersion.assessmentOnderdelen.map(onderdeel => ({
-        ...onderdeel,
-        id: generateId(),
-        criteria: onderdeel.criteria.map(criteria => ({
-          ...criteria,
+    try {
+      const latestVersion = product.versions.find(v => v.isLatest);
+      
+      // Prepare version data for API
+      const versionData = {
+        version: newVersionNumber.trim(),
+        release_date: new Date().toISOString().split('T')[0],
+        is_latest: true,
+        is_enabled: false,
+        rubric_levels: latestVersion ? latestVersion.rubricLevels : 4
+      };
+
+      // Call API to create version
+      console.log('Creating version with data:', versionData);
+      const result = await api.createVersion(product.id, versionData);
+      
+      console.log('API response:', result);
+      
+      if (result.error) {
+        throw new Error(result.error.detail);
+      }
+
+      // Get the created version from the API response
+      const createdVersion = result.data as BackendProductVersion;
+      
+      // Transform the backend response to frontend format
+      const newVersion: Version = {
+        id: createdVersion.id,
+        version: createdVersion.version,
+        releaseDate: createdVersion.release_date,
+        isLatest: createdVersion.is_latest,
+        isEnabled: createdVersion.is_enabled,
+        password: createdVersion.password,
+        rubricLevels: createdVersion.rubric_levels,
+        assessmentOnderdelen: latestVersion ? latestVersion.assessmentOnderdelen.map(onderdeel => ({
+          ...onderdeel,
           id: generateId(),
-          levels: criteria.levels.map(level => ({
-            ...level,
-            id: generateId()
+          criteria: onderdeel.criteria.map(criteria => ({
+            ...criteria,
+            id: generateId(),
+            levels: criteria.levels.map(level => ({
+              ...level,
+              id: generateId()
+            }))
           }))
-        }))
-      })) : [], // Empty array if no existing versions
-      documents: latestVersion ? [...latestVersion.documents] : [] // Empty array if no existing versions
-    };
+        })) : [],
+        documents: latestVersion ? [...latestVersion.documents] : []
+      };
 
-    // Update all versions to set isLatest to false (if any exist)
-    const updatedVersions = product.versions.map(v => ({ ...v, isLatest: false }));
-    
-    setProduct(prev => prev ? {
-      ...prev,
-      versions: [newVersion, ...updatedVersions],
-      version: newVersion.version
-    } : null);
+      // Update all versions to set isLatest to false (if any exist)
+      const updatedVersions = product.versions.map(v => ({ ...v, isLatest: false }));
+      
+      setProduct(prev => prev ? {
+        ...prev,
+        versions: [newVersion, ...updatedVersions],
+        version: newVersion.version
+      } : null);
 
-    setShowVersionDialog(false);
-    setNewVersionNumber('');
+      setShowVersionDialog(false);
+      setNewVersionNumber('');
 
-    toast({
-      title: "Nieuwe versie aangemaakt",
-      description: `Versie ${newVersion.version} is succesvol aangemaakt.`,
-    });
+      toast({
+        title: "Nieuwe versie aangemaakt",
+        description: `Versie ${newVersion.version} is succesvol aangemaakt.`,
+      });
+    } catch (error) {
+      console.error('Error creating version:', error);
+      toast({
+        title: "Fout bij aanmaken versie",
+        description: error instanceof Error ? error.message : "Er is een fout opgetreden bij het aanmaken van de versie.",
+        variant: "destructive",
+      });
+    }
   };
 
   const generatePassword = () => {
@@ -2145,7 +2204,12 @@ export default function EditExamPage() {
                                            <div className="flex items-center justify-between mb-3">
                                              <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
                                              <div
-                                               onClick={() => handleDeleteCriteria(version.id, onderdeel.id, criteria.id)}
+                                               onClick={(e) => {
+                                                 console.log('Trashcan clicked!', { versionId: version.id, onderdeelId: onderdeel.id, criteriaId: criteria.id });
+                                                 e.preventDefault();
+                                                 e.stopPropagation();
+                                                 handleDeleteCriteria(version.id, onderdeel.id, criteria.id);
+                                               }}
                                                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 text-red-600 hover:text-red-700 cursor-pointer"
                                              >
                                                <Trash2 className="h-4 w-4" />
@@ -2478,7 +2542,10 @@ export default function EditExamPage() {
       </Dialog>
 
       {/* Criteria Delete Confirmation Modal */}
-      <Dialog open={!!showCriteriaDeleteConfirm} onOpenChange={(open) => !open && setShowCriteriaDeleteConfirm(null)}>
+      <Dialog open={!!showCriteriaDeleteConfirm} onOpenChange={(open) => {
+        console.log('Dialog onOpenChange:', open, 'showCriteriaDeleteConfirm:', showCriteriaDeleteConfirm);
+        if (!open) setShowCriteriaDeleteConfirm(null);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Criterium Verwijderen</DialogTitle>
