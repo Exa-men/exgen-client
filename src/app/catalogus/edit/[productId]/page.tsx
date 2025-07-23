@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../components/ui/collapsible';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../../components/ui/accordion';
 import { Separator } from '../../../components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { useToast } from '../../../../hooks/use-toast';
 import UnifiedHeader from '../../../components/UnifiedHeader';
 import { useRole } from '../../../../hooks/use-role';
@@ -116,6 +117,9 @@ export default function EditExamPage() {
   const [deleting, setDeleting] = useState(false);
   const [showVersionDeleteConfirm, setShowVersionDeleteConfirm] = useState<string | null>(null);
   const [deletingVersion, setDeletingVersion] = useState(false);
+  const [showOnderdeelDeleteConfirm, setShowOnderdeelDeleteConfirm] = useState<{versionId: string, onderdeelId: string} | null>(null);
+  const [showCriteriaDeleteConfirm, setShowCriteriaDeleteConfirm] = useState<{versionId: string, onderdeelId: string, criteriaId: string} | null>(null);
+  const [showDocumentDeleteConfirm, setShowDocumentDeleteConfirm] = useState<{versionId: string, documentId: string} | null>(null);
 
   // Save state management
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
@@ -128,6 +132,27 @@ export default function EditExamPage() {
 
   // Password copy feedback
   const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
+
+  // Version validation feedback
+  const [incompleteVersions, setIncompleteVersions] = useState<Set<string>>(new Set());
+  
+  // Product publication status
+  const [productPublicationStatus, setProductPublicationStatus] = useState<'draft' | 'published'>('draft');
+  
+  // Track if product was published to detect changes
+  const [wasPublished, setWasPublished] = useState(false);
+
+  // Initialize versionStates when product loads
+  useEffect(() => {
+    if (product) {
+      const initialVersionStates: Record<string, boolean> = {};
+      product.versions.forEach(version => {
+        initialVersionStates[version.id] = version.isEnabled;
+      });
+      setVersionStates(initialVersionStates);
+      console.log('Initialized versionStates:', initialVersionStates);
+    }
+  }, [product]);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -207,6 +232,9 @@ export default function EditExamPage() {
         )
       };
     });
+
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
   };
 
   const removeOnderdeel = (versionId: string, onderdeelId: string) => {
@@ -223,6 +251,29 @@ export default function EditExamPage() {
         )
       };
     });
+
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
+
+    setSaveStatus('dirty');
+    debouncedSave.save();
+
+    toast({
+      title: "Onderdeel verwijderd",
+      description: "Het onderdeel is succesvol verwijderd.",
+    });
+  };
+
+  const handleDeleteOnderdeel = (versionId: string, onderdeelId: string) => {
+    setShowOnderdeelDeleteConfirm({ versionId, onderdeelId });
+  };
+
+  const handleDeleteCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
+    setShowCriteriaDeleteConfirm({ versionId, onderdeelId, criteriaId });
+  };
+
+  const handleDeleteDocument = (versionId: string, documentId: string) => {
+    setShowDocumentDeleteConfirm({ versionId, documentId });
   };
 
   const addCriteria = (versionId: string, onderdeelId: string) => {
@@ -255,6 +306,9 @@ export default function EditExamPage() {
         )
       };
     });
+
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
   };
 
   const removeCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
@@ -278,6 +332,9 @@ export default function EditExamPage() {
         )
       };
     });
+
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
   };
 
   const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
@@ -304,6 +361,9 @@ export default function EditExamPage() {
         )
       };
     });
+    
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
     
     // Trigger auto-save
     setSaveStatus('dirty');
@@ -463,6 +523,9 @@ export default function EditExamPage() {
       };
     });
     
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
+    
     // Trigger auto-save
     setSaveStatus('dirty');
     debouncedSave.save();
@@ -528,7 +591,7 @@ export default function EditExamPage() {
               releaseDate: '2024-01-15',
               isLatest: true,
               isEnabled: true,
-              password: 'Examen2024!',
+              password: generatePassword(),
               rubricLevels: 3,
               assessmentOnderdelen: [
                 {
@@ -577,7 +640,7 @@ export default function EditExamPage() {
               releaseDate: '2024-01-20',
               isLatest: false,
               isEnabled: false,
-              password: 'Examen2024!',
+              password: generatePassword(),
               rubricLevels: 3,
               assessmentOnderdelen: [],
               documents: []
@@ -644,6 +707,9 @@ export default function EditExamPage() {
         ...editValues,
         credits: parseInt(editValues.credits) || 0
       } : null);
+
+      // Check for changes and revert to draft if published
+      checkForChangesAndRevert();
 
       setIsEditing(false);
       toast({
@@ -771,6 +837,9 @@ export default function EditExamPage() {
         };
       });
 
+      // Check for changes and revert to draft if published
+      checkForChangesAndRevert();
+
       setSaveStatus('dirty');
       debouncedSave.save();
 
@@ -803,6 +872,9 @@ export default function EditExamPage() {
         )
       };
     });
+
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
 
     setSaveStatus('dirty');
     debouncedSave.save();
@@ -837,6 +909,9 @@ export default function EditExamPage() {
       };
     });
 
+    // Check for changes and revert to draft if published
+    checkForChangesAndRevert();
+
     setSaveStatus('dirty');
     debouncedSave.save();
 
@@ -861,10 +936,15 @@ export default function EditExamPage() {
     if (!product) return;
     
     const latestVersion = product.versions.find(v => v.isLatest);
-    if (!latestVersion) return;
-
-    const suggestedVersion = (parseFloat(latestVersion.version) + 0.1).toFixed(1);
-    setNewVersionNumber(suggestedVersion);
+    
+    // If no versions exist, suggest version 1.0
+    if (!latestVersion) {
+      setNewVersionNumber('1.0');
+    } else {
+      const suggestedVersion = (parseFloat(latestVersion.version) + 0.1).toFixed(1);
+      setNewVersionNumber(suggestedVersion);
+    }
+    
     setShowVersionDialog(true);
   };
 
@@ -872,17 +952,17 @@ export default function EditExamPage() {
     if (!product || !newVersionNumber.trim()) return;
     
     const latestVersion = product.versions.find(v => v.isLatest);
-    if (!latestVersion) return;
-
+    
+    // Create new version with default structure if no existing versions
     const newVersion: Version = {
       id: `v${Date.now()}`,
       version: newVersionNumber.trim(),
       releaseDate: new Date().toISOString().split('T')[0],
-      isLatest: false, // New versions start as draft
+      isLatest: true, // First version is latest
       isEnabled: false, // New versions are disabled by default
       password: generatePassword(),
-      rubricLevels: latestVersion.rubricLevels,
-      assessmentOnderdelen: latestVersion.assessmentOnderdelen.map(onderdeel => ({
+      rubricLevels: latestVersion ? latestVersion.rubricLevels : 4, // Default to 4 levels
+      assessmentOnderdelen: latestVersion ? latestVersion.assessmentOnderdelen.map(onderdeel => ({
         ...onderdeel,
         id: generateId(),
         criteria: onderdeel.criteria.map(criteria => ({
@@ -893,11 +973,11 @@ export default function EditExamPage() {
             id: generateId()
           }))
         }))
-      })),
-      documents: [...latestVersion.documents]
+      })) : [], // Empty array if no existing versions
+      documents: latestVersion ? [...latestVersion.documents] : [] // Empty array if no existing versions
     };
 
-    // Update all versions to set isLatest to false
+    // Update all versions to set isLatest to false (if any exist)
     const updatedVersions = product.versions.map(v => ({ ...v, isLatest: false }));
     
     setProduct(prev => prev ? {
@@ -955,8 +1035,8 @@ export default function EditExamPage() {
     debouncedSave.save();
 
     toast({
-      title: "Nieuw wachtwoord gegenereerd",
-      description: "Het wachtwoord is succesvol vernieuwd.",
+      title: "Nieuwe protector gegenereerd",
+      description: "De spreadsheet protector is succesvol vernieuwd.",
     });
   };
 
@@ -969,8 +1049,97 @@ export default function EditExamPage() {
     return hasOnderdelen && hasCriteria && hasDocuments;
   };
 
+  // Check if product is ready for publication
+  const isProductReadyForPublication = (): boolean => {
+    if (!product) return false;
+    
+    // Check if basic product information is complete
+    const hasBasicInfo = Boolean(product.code && product.title && product.description && product.credits && product.cohort);
+    
+    // Check if there's at least one enabled version
+    const hasEnabledVersion = product.versions.some(version => version.isEnabled);
+    
+    return hasBasicInfo && hasEnabledVersion;
+  };
+
+  // Get product publication status
+  const getProductPublicationStatus = () => {
+    const isReady = isProductReadyForPublication();
+    return {
+      status: productPublicationStatus,
+      isReady,
+      canPublish: isReady,
+      canUnpublish: productPublicationStatus === 'published'
+    };
+  };
+
+  // Handle product publication status change
+  const handleProductPublicationChange = async (newStatus: 'draft' | 'published') => {
+    if (!product) return;
+    
+    const status = getProductPublicationStatus();
+    
+    // If trying to publish, check if product is ready
+    if (newStatus === 'published' && !status.canPublish) {
+      toast({
+        title: "Product niet klaar voor publicatie",
+        description: "Zorg ervoor dat alle basisinformatie is ingevuld en er minimaal één actieve versie is.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // For now, simulate backend call
+      // TODO: Replace with actual API call when backend is ready
+      console.log('Simulating backend call for product publication:', { productId, newStatus });
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Update local state
+      setProductPublicationStatus(newStatus);
+      
+      // Track if product is now published
+      if (newStatus === 'published') {
+        setWasPublished(true);
+      }
+      
+      toast({
+        title: newStatus === 'published' ? "Product gepubliceerd" : "Product teruggezet naar concept",
+        description: newStatus === 'published' 
+          ? "Het product is nu beschikbaar voor gebruikers." 
+          : "Het product is niet meer zichtbaar voor gebruikers.",
+      });
+    } catch (err) {
+      console.error('Error updating product publication status:', err);
+      toast({
+        title: "Fout",
+        description: "Er is een fout opgetreden bij het bijwerken van de publicatiestatus.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Check for changes and revert to draft if product was published
+  const checkForChangesAndRevert = () => {
+    if (productPublicationStatus === 'published' && wasPublished) {
+      setProductPublicationStatus('draft');
+      toast({
+        title: "Product teruggezet naar concept",
+        description: "Het product is automatisch teruggezet naar concept omdat er wijzigingen zijn gemaakt.",
+        variant: "default",
+      });
+    }
+  };
+
   // Get version status for display
   const getVersionStatus = (version: Version) => {
+    // Check if this version is showing incomplete feedback
+    if (incompleteVersions.has(version.id)) {
+      return { label: 'Incompleet', variant: 'default', className: 'bg-red-100 text-red-800' };
+    }
+    
     if (version.isLatest) {
       return { label: 'Nieuwste', variant: 'default', className: 'bg-green-100 text-green-800' };
     } else if (version.isEnabled) {
@@ -1021,17 +1190,13 @@ export default function EditExamPage() {
     
     try {
       setDeletingVersion(true);
-      const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}/versions/${showVersionDeleteConfirm}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete version');
-      }
+      
+      // For now, simulate backend call with mock data
+      // TODO: Replace with actual API call when backend is ready
+      console.log('Simulating backend call for version deletion:', { versionId: showVersionDeleteConfirm });
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Update local state
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
@@ -1060,8 +1225,24 @@ export default function EditExamPage() {
     const version = product.versions.find(v => v.id === versionId);
     if (!version) return;
 
+    console.log('Toggle attempt:', { versionId, isEnabled, currentState: versionStates[versionId], backendState: version.isEnabled });
+
     // If trying to enable, check if version is ready for publication
     if (isEnabled && !isVersionReadyForPublication(version)) {
+      console.log('Validation failed for version:', versionId);
+      
+      // Show incomplete feedback
+      setIncompleteVersions(prev => new Set([...prev, versionId]));
+      
+      // Hide incomplete feedback after 3 seconds
+      setTimeout(() => {
+        setIncompleteVersions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(versionId);
+          return newSet;
+        });
+      }, 3000);
+      
       toast({
         title: "Versie niet klaar voor publicatie",
         description: "Zorg ervoor dat de versie minimaal 1 onderdeel, 1 criterium en 3 documenten heeft.",
@@ -1074,27 +1255,25 @@ export default function EditExamPage() {
     }
     
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}/versions/${versionId}/toggle`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isEnabled }),
-      });
+      // For now, simulate backend call with mock data
+      // TODO: Replace with actual API call when backend is ready
+      console.log('Simulating backend call for version toggle:', { versionId, isEnabled });
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (!response.ok) {
-        throw new Error('Failed to update version status');
-      }
-
-      // Update the main product state only on success
+      // Update the main product state (simulating successful backend response)
       setProduct(prev => prev ? {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId ? { ...v, isEnabled } : v
         )
       } : null);
+
+      // Check for changes and revert to draft if published
+      checkForChangesAndRevert();
+
+      console.log('Toggle successful:', { versionId, isEnabled });
 
       toast({
         title: isEnabled ? "Versie ingeschakeld" : "Versie uitgeschakeld",
@@ -1162,6 +1341,40 @@ export default function EditExamPage() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Terug
           </Button>
+          
+          {/* Product Publication Status */}
+          <div className="flex flex-col items-end space-y-1">
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-medium text-gray-700">Publicatiestatus:</span>
+              <Select
+                value={productPublicationStatus}
+                onValueChange={(value: 'draft' | 'published') => handleProductPublicationChange(value)}
+                disabled={!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft'}
+              >
+                <SelectTrigger className={`w-40 ${
+                  productPublicationStatus === 'published' 
+                    ? 'bg-green-50 border-green-500 text-green-700 focus:ring-green-500 focus:border-green-500' 
+                    : ''
+                }`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Concept</SelectItem>
+                  <SelectItem 
+                    value="published"
+                    disabled={!getProductPublicationStatus().canPublish}
+                  >
+                    Gepubliceerd
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft' && (
+              <span className="text-xs text-red-600">
+                Product niet klaar voor publicatie
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Exam Information */}
@@ -1337,14 +1550,33 @@ export default function EditExamPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {product.versions.map((version) => (
-                <div key={version.id} className="border rounded-lg p-4">
+              {product.versions.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+                  <div className="mb-4">
+                    <FileText className="h-12 w-12 mx-auto text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">Geen versies beschikbaar</h3>
+                  <p className="text-gray-500 mb-4">Er zijn nog geen versies aangemaakt voor dit examenproduct.</p>
+                  <Button
+                    variant="outline"
+                    onClick={duplicateVersion}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Eerste Versie Aanmaken
+                  </Button>
+                </div>
+              ) : (
+                product.versions
+                  .sort((a, b) => parseFloat(b.version) - parseFloat(a.version))
+                  .map((version) => (
+                  <div key={version.id} className="border rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                          checked={versionStates[version.id] ?? version.isEnabled}
+                          checked={versionStates[version.id] !== undefined ? versionStates[version.id] : version.isEnabled}
                           onChange={(e) => {
                             const newState = e.target.checked;
                             setVersionStates(prev => ({ ...prev, [version.id]: newState }));
@@ -1355,7 +1587,7 @@ export default function EditExamPage() {
                         <div>
                           <h3 className="font-semibold">Versie {version.version}</h3>
                           <p className="text-sm text-gray-600">
-                            Uitgegeven op {new Date(version.releaseDate).toLocaleDateString('nl-NL')}
+                            Gepubliceerd op {new Date(version.releaseDate).toLocaleDateString('nl-NL')}
                           </p>
                         </div>
                       </div>
@@ -1476,7 +1708,7 @@ export default function EditExamPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => removeOnderdeel(version.id, onderdeel.id)}
+                                    onClick={() => handleDeleteOnderdeel(version.id, onderdeel.id)}
                                     className="text-red-600 hover:text-red-700"
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -1568,7 +1800,7 @@ export default function EditExamPage() {
                                              <Button
                                                size="sm"
                                                variant="outline"
-                                               onClick={() => removeCriteria(version.id, onderdeel.id, criteria.id)}
+                                               onClick={() => handleDeleteCriteria(version.id, onderdeel.id, criteria.id)}
                                                className="text-red-600 hover:text-red-700"
                                              >
                                                <Trash2 className="h-4 w-4" />
@@ -1739,7 +1971,7 @@ export default function EditExamPage() {
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            onClick={() => removeDocument(version.id, doc.id)}
+                                            onClick={() => handleDeleteDocument(version.id, doc.id)}
                                             className="text-red-600 hover:text-red-700"
                                             title="Document verwijderen"
                                           >
@@ -1759,28 +1991,28 @@ export default function EditExamPage() {
                         </div>
                       </div>
 
-                      {/* Password */}
+                      {/* Spreadsheet Protector */}
                       <div>
-                        <h4 className="font-medium mb-3">Spreadsheet Wachtwoord</h4>
+                        <h4 className="font-medium mb-3">Spreadsheet Protector</h4>
                         <div className="flex items-center space-x-2">
                           <Input
-                            type={copiedPasswordId === version.id ? "text" : "password"}
+                            type={copiedPasswordId === version.id ? "text" : "text"}
                             value={copiedPasswordId === version.id ? "Gekopieerd!" : version.password}
                             readOnly
-                            className={`flex-1 cursor-pointer transition-all duration-200 ${
+                            className={`flex-1 cursor-pointer transition-all duration-200 font-mono text-sm ${
                               copiedPasswordId === version.id 
                                 ? 'bg-green-100 border-green-500 text-green-700' 
                                 : 'hover:bg-gray-50'
                             }`}
                             onClick={() => copyPassword(version.password, version.id)}
-                            title="Klik om wachtwoord te kopiëren"
+                            title="Klik om protector te kopiëren"
                           />
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => regeneratePassword(version.id)}
                             className="p-2"
-                            title="Nieuw wachtwoord genereren"
+                            title="Nieuwe protector genereren"
                           >
                             <RotateCcw className="h-4 w-4" />
                           </Button>
@@ -1789,7 +2021,8 @@ export default function EditExamPage() {
                     </CollapsibleContent>
                   </Collapsible>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1865,6 +2098,93 @@ export default function EditExamPage() {
               className="text-red-600 hover:text-red-700 hover:bg-red-50"
             >
               {deletingVersion ? 'Verwijderen...' : 'Verwijderen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Onderdeel Delete Confirmation Modal */}
+      <Dialog open={!!showOnderdeelDeleteConfirm} onOpenChange={(open) => !open && setShowOnderdeelDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Onderdeel Verwijderen</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            Weet je zeker dat je dit onderdeel wilt verwijderen? Alle criteria binnen dit onderdeel worden ook verwijderd. Deze actie kan niet ongedaan worden gemaakt.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowOnderdeelDeleteConfirm(null)}>
+              Annuleren
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (showOnderdeelDeleteConfirm) {
+                  removeOnderdeel(showOnderdeelDeleteConfirm.versionId, showOnderdeelDeleteConfirm.onderdeelId);
+                  setShowOnderdeelDeleteConfirm(null);
+                }
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              Verwijderen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Criteria Delete Confirmation Modal */}
+      <Dialog open={!!showCriteriaDeleteConfirm} onOpenChange={(open) => !open && setShowCriteriaDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criterium Verwijderen</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            Weet je zeker dat je dit criterium wilt verwijderen? Alle beoordelingsniveaus binnen dit criterium worden ook verwijderd. Deze actie kan niet ongedaan worden gemaakt.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCriteriaDeleteConfirm(null)}>
+              Annuleren
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (showCriteriaDeleteConfirm) {
+                  removeCriteria(showCriteriaDeleteConfirm.versionId, showCriteriaDeleteConfirm.onderdeelId, showCriteriaDeleteConfirm.criteriaId);
+                  setShowCriteriaDeleteConfirm(null);
+                }
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              Verwijderen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document Delete Confirmation Modal */}
+      <Dialog open={!!showDocumentDeleteConfirm} onOpenChange={(open) => !open && setShowDocumentDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Document Verwijderen</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            Weet je zeker dat je dit document wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDocumentDeleteConfirm(null)}>
+              Annuleren
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (showDocumentDeleteConfirm) {
+                  removeDocument(showDocumentDeleteConfirm.versionId, showDocumentDeleteConfirm.documentId);
+                  setShowDocumentDeleteConfirm(null);
+                }
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              Verwijderen
             </Button>
           </DialogFooter>
         </DialogContent>
