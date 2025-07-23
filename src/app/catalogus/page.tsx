@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2 } from 'lucide-react';
+import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -274,6 +274,10 @@ export default function CatalogusPage() {
   const handleReview = (product: ExamProduct) => {
     setSelectedProduct(product);
     setPdfViewerOpen(true);
+  };
+
+  const handleEdit = (product: ExamProduct) => {
+    router.push(`/catalogus/edit/${product.id}`);
   };
 
   const handleDownload = (downloadUrl: string) => {
@@ -709,11 +713,11 @@ export default function CatalogusPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setDeleteProductId(product.id)}
-                                  className="flex items-center justify-center w-full transition-colors hover:bg-red-100 hover:text-red-700"
+                                  onClick={() => handleEdit(product)}
+                                  className="flex items-center justify-center w-full"
                                 >
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  Verwijderen
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Bewerken
                                 </Button>
                               )}
                             </div>
@@ -818,6 +822,17 @@ export default function CatalogusPage() {
                         >
                           <MessageSquare className="h-4 w-4 mr-1" />
                           Feedback
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(product)}
+                          className="flex items-center justify-center w-full"
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Bewerken
                         </Button>
                       )}
                     </div>
