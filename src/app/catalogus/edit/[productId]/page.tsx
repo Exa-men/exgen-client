@@ -33,21 +33,23 @@ import { useRole } from '../../../../hooks/use-role';
 
 interface AssessmentCriteria {
   id: string;
-  onderdeel: string;
   criteria: string;
   insufficient: string;
   sufficient: string;
   good: string;
-  excellent?: string;
-  outstanding?: string;
-  exceptional?: string;
+}
+
+interface AssessmentOnderdeel {
+  id: string;
+  onderdeel: string;
+  criteria: AssessmentCriteria[];
 }
 
 interface Version {
   id: string;
   version: string;
   releaseDate: string;
-  assessmentCriteria: AssessmentCriteria[];
+  assessmentOnderdelen: AssessmentOnderdeel[];
   documents: Document[];
   password: string;
   isLatest: boolean;
@@ -107,6 +109,154 @@ export default function EditExamPage() {
   const [deletingVersion, setDeletingVersion] = useState(false);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+  // Helper functions for assessment criteria management
+  const generateId = () => Math.random().toString(36).substr(2, 9);
+
+  const addOnderdeel = (versionId: string) => {
+    if (!product) return;
+    
+    const newOnderdeel: AssessmentOnderdeel = {
+      id: generateId(),
+      onderdeel: 'Nieuw Onderdeel',
+      criteria: []
+    };
+
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? { ...v, assessmentOnderdelen: [...v.assessmentOnderdelen, newOnderdeel] }
+            : v
+        )
+      };
+    });
+  };
+
+  const removeOnderdeel = (versionId: string, onderdeelId: string) => {
+    if (!product) return;
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? { ...v, assessmentOnderdelen: v.assessmentOnderdelen.filter(o => o.id !== onderdeelId) }
+            : v
+        )
+      };
+    });
+  };
+
+  const addCriteria = (versionId: string, onderdeelId: string) => {
+    if (!product) return;
+    
+    const newCriteria: AssessmentCriteria = {
+      id: generateId(),
+      criteria: '',
+      insufficient: '',
+      sufficient: '',
+      good: ''
+    };
+
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(o =>
+                  o.id === onderdeelId
+                    ? { ...o, criteria: [...o.criteria, newCriteria] }
+                    : o
+                )
+              }
+            : v
+        )
+      };
+    });
+  };
+
+  const removeCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
+    if (!product) return;
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(o =>
+                  o.id === onderdeelId
+                    ? { ...o, criteria: o.criteria.filter(c => c.id !== criteriaId) }
+                    : o
+                )
+              }
+            : v
+        )
+      };
+    });
+  };
+
+  const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
+    if (!product) return;
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(o =>
+                  o.id === onderdeelId
+                    ? { ...o, onderdeel: value }
+                    : o
+                )
+              }
+            : v
+        )
+      };
+    });
+  };
+
+  const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: keyof AssessmentCriteria, value: string) => {
+    if (!product) return;
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(o =>
+                  o.id === onderdeelId
+                    ? {
+                        ...o,
+                        criteria: o.criteria.map(c =>
+                          c.id === criteriaId
+                            ? { ...c, [field]: value }
+                            : c
+                        )
+                      }
+                    : o
+                )
+              }
+            : v
+        )
+      };
+    });
+  };
 
   // Redirect if not signed in or not admin
   useEffect(() => {
@@ -168,14 +318,39 @@ export default function EditExamPage() {
               isLatest: true,
               isEnabled: true,
               password: 'Examen2024!',
-              assessmentCriteria: [
+              assessmentOnderdelen: [
                 {
-                  id: 'ac1',
-                  onderdeel: 'Onderdeel 1',
-                  criteria: 'Verzamelde informatie (D1-K1: Verzamelt informatie, gegevens en content)',
-                  insufficient: 'De verzamelde informatie is onvoldoende en/of sluit onvoldoende aan bij het gekozen onderwerp.',
-                  sufficient: 'De verzamelde informatie is voldoende en passend bij het gekozen onderwerp.',
-                  good: 'De prestatie van de kandidaat overtreft duidelijk de beschrijving van voldoende.'
+                  id: 'od1',
+                  onderdeel: 'Informatie Verzameling',
+                  criteria: [
+                    {
+                      id: 'ac1',
+                      criteria: 'Verzamelde informatie (D1-K1: Verzamelt informatie, gegevens en content)',
+                      insufficient: 'De verzamelde informatie is onvoldoende en/of sluit onvoldoende aan bij het gekozen onderwerp.',
+                      sufficient: 'De verzamelde informatie is voldoende en passend bij het gekozen onderwerp.',
+                      good: 'De prestatie van de kandidaat overtreft duidelijk de beschrijving van voldoende.'
+                    },
+                    {
+                      id: 'ac2',
+                      criteria: 'Bronnen en referenties (D1-K2: Gebruikt betrouwbare bronnen)',
+                      insufficient: 'Bronnen zijn niet of onvoldoende vermeld of niet betrouwbaar.',
+                      sufficient: 'Bronnen zijn adequaat vermeld en grotendeels betrouwbaar.',
+                      good: 'Uitstekende selectie en gebruik van betrouwbare bronnen.'
+                    }
+                  ]
+                },
+                {
+                  id: 'od2',
+                  onderdeel: 'Analyse en Verwerking',
+                  criteria: [
+                    {
+                      id: 'ac3',
+                      criteria: 'Kritische analyse (D2-K1: Voert kritische analyse uit)',
+                      insufficient: 'Analyse ontbreekt of is oppervlakkig zonder diepgang.',
+                      sufficient: 'Analyse is aanwezig en toont begrip van het onderwerp.',
+                      good: 'Diepgaande en doordachte analyse die nieuwe inzichten toont.'
+                    }
+                  ]
                 }
               ],
               documents: [
@@ -304,7 +479,14 @@ export default function EditExamPage() {
       isLatest: true,
       isEnabled: true,
       password: generatePassword(),
-      assessmentCriteria: [...latestVersion.assessmentCriteria],
+      assessmentOnderdelen: latestVersion.assessmentOnderdelen.map(onderdeel => ({
+        ...onderdeel,
+        id: generateId(),
+        criteria: onderdeel.criteria.map(criteria => ({
+          ...criteria,
+          id: generateId()
+        }))
+      })),
       documents: [...latestVersion.documents]
     };
 
@@ -751,71 +933,148 @@ export default function EditExamPage() {
                       
                       {/* Assessment Criteria */}
                       <div>
-                        <h4 className="font-medium mb-3">Beoordelingscriteria</h4>
-                        <div className="space-y-4">
-                          {version.assessmentCriteria.map((criteria, index) => (
-                            <div key={criteria.id} className="border rounded-lg p-4">
-                              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                                <div className="lg:col-span-1">
-                                  <label className="text-sm font-medium">Onderdeel</label>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium">Beoordelingscriteria</h4>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => addOnderdeel(version.id)}
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Onderdeel Toevoegen
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-6">
+                          {version.assessmentOnderdelen.map((onderdeel) => (
+                            <div key={onderdeel.id} className="border rounded-lg p-4 bg-gray-50">
+                              {/* Onderdeel Header */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex-1 mr-4">
+                                  <label className="text-sm font-medium text-gray-700">Onderdeel</label>
                                   <Input
-                                    value={criteria.onderdeel}
-                                    onChange={(e) => {
-                                      // Update criteria logic would go here
-                                    }}
+                                    value={onderdeel.onderdeel}
+                                    onChange={(e) => updateOnderdeel(version.id, onderdeel.id, e.target.value)}
                                     className="mt-1"
+                                    placeholder="Voer onderdeel naam in"
                                   />
                                 </div>
-                                <div className="lg:col-span-3">
-                                  <label className="text-sm font-medium">Criteria</label>
-                                  <Textarea
-                                    value={criteria.criteria}
-                                    onChange={(e) => {
-                                      // Update criteria logic would go here
-                                    }}
-                                    className="mt-1"
-                                    rows={2}
-                                  />
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => addCriteria(version.id, onderdeel.id)}
+                                    className="text-green-600 hover:text-green-700"
+                                  >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Criteria Toevoegen
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => removeOnderdeel(version.id, onderdeel.id)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                                <div>
-                                  <label className="text-sm font-medium text-red-600">Onvoldoende</label>
-                                  <Textarea
-                                    value={criteria.insufficient}
-                                    onChange={(e) => {
-                                      // Update criteria logic would go here
-                                    }}
-                                    className="mt-1"
-                                    rows={3}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-sm font-medium text-yellow-600">Voldoende</label>
-                                  <Textarea
-                                    value={criteria.sufficient}
-                                    onChange={(e) => {
-                                      // Update criteria logic would go here
-                                    }}
-                                    className="mt-1"
-                                    rows={3}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-sm font-medium text-green-600">Goed</label>
-                                  <Textarea
-                                    value={criteria.good}
-                                    onChange={(e) => {
-                                      // Update criteria logic would go here
-                                    }}
-                                    className="mt-1"
-                                    rows={3}
-                                  />
-                                </div>
+
+                              {/* Criteria Rows */}
+                              <div className="space-y-4">
+                                {onderdeel.criteria.length === 0 ? (
+                                  <div className="text-center py-4 text-gray-500">
+                                    <p>Nog geen criteria toegevoegd</p>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => addCriteria(version.id, onderdeel.id)}
+                                      className="mt-2 text-blue-600 hover:text-blue-700"
+                                    >
+                                      <Plus className="h-4 w-4 mr-1" />
+                                      Eerste Criteria Toevoegen
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  onderdeel.criteria.map((criteria, index) => (
+                                    <div key={criteria.id} className="border rounded-lg p-4 bg-white">
+                                      {/* Criteria Row Header */}
+                                      <div className="flex items-center justify-between mb-3">
+                                        <h6 className="font-medium text-gray-700">Criteria {index + 1}</h6>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => removeCriteria(version.id, onderdeel.id, criteria.id)}
+                                          className="text-red-600 hover:text-red-700"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+
+                                      {/* Four Column Layout for Desktop */}
+                                      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                                        <div>
+                                          <label className="text-sm font-medium text-gray-700">Criteria</label>
+                                          <Textarea
+                                            value={criteria.criteria}
+                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', e.target.value)}
+                                            className="mt-1"
+                                            rows={3}
+                                            placeholder="Beschrijf de criteria..."
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium text-red-600">Onvoldoende</label>
+                                          <Textarea
+                                            value={criteria.insufficient}
+                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'insufficient', e.target.value)}
+                                            className="mt-1"
+                                            rows={3}
+                                            placeholder="Beschrijf onvoldoende prestatie..."
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium text-yellow-600">Voldoende</label>
+                                          <Textarea
+                                            value={criteria.sufficient}
+                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'sufficient', e.target.value)}
+                                            className="mt-1"
+                                            rows={3}
+                                            placeholder="Beschrijf voldoende prestatie..."
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium text-green-600">Goed</label>
+                                          <Textarea
+                                            value={criteria.good}
+                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'good', e.target.value)}
+                                            className="mt-1"
+                                            rows={3}
+                                            placeholder="Beschrijf goede prestatie..."
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
                           ))}
+                          
+                          {version.assessmentOnderdelen.length === 0 && (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                              <p className="text-gray-500 mb-4">Nog geen beoordelingscriteria toegevoegd</p>
+                              <Button
+                                variant="outline"
+                                onClick={() => addOnderdeel(version.id)}
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Eerste Onderdeel Toevoegen
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
