@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useParams } from 'next/navigation';
 import { 
@@ -17,7 +17,8 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -67,6 +68,7 @@ interface Document {
   name: string;
   url: string;
   uploadedAt: string;
+  isPreview?: boolean;
 }
 
 interface ExamProduct {
@@ -114,6 +116,18 @@ export default function EditExamPage() {
   const [deleting, setDeleting] = useState(false);
   const [showVersionDeleteConfirm, setShowVersionDeleteConfirm] = useState<string | null>(null);
   const [deletingVersion, setDeletingVersion] = useState(false);
+
+  // Save state management
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+  const [lastSavedData, setLastSavedData] = useState<string>('');
+
+  // Document management
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadingDocuments, setUploadingDocuments] = useState<boolean>(false);
+
+  // Password copy feedback
+  const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -269,6 +283,9 @@ export default function EditExamPage() {
   const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
     if (!product) return;
     
+    // Validate field immediately
+    validateField(value, `onderdeel-${onderdeelId}`);
+    
     setProduct(prev => {
       if (!prev) return prev;
       return {
@@ -287,10 +304,127 @@ export default function EditExamPage() {
         )
       };
     });
+    
+    // Trigger auto-save
+    setSaveStatus('dirty');
+    debouncedSave.save();
   };
+
+  // Validation functions
+  const validateField = (value: string, fieldId: string): boolean => {
+    const isValid = value.trim().length > 0;
+    setValidationErrors(prev => {
+      const newErrors = new Set(prev);
+      if (isValid) {
+        newErrors.delete(fieldId);
+      } else {
+        newErrors.add(fieldId);
+      }
+      return newErrors;
+    });
+    return isValid;
+  };
+
+  const validateAllFields = (): boolean => {
+    if (!product) return false;
+    
+    const errors = new Set<string>();
+    
+    product.versions.forEach(version => {
+      version.assessmentOnderdelen.forEach(onderdeel => {
+        // Validate onderdeel name
+        if (!onderdeel.onderdeel.trim()) {
+          errors.add(`onderdeel-${onderdeel.id}`);
+        }
+        
+        // Validate criteria and levels
+        onderdeel.criteria.forEach(criteria => {
+          if (!criteria.criteria.trim()) {
+            errors.add(`criteria-${criteria.id}`);
+          }
+          
+          criteria.levels.forEach(level => {
+            if (!level.value.trim()) {
+              errors.add(`level-${level.id}`);
+            }
+          });
+        });
+      });
+    });
+    
+    setValidationErrors(errors);
+    return errors.size === 0;
+  };
+
+  const performSave = async (): Promise<boolean> => {
+    if (!product) return false;
+    
+    const isValid = validateAllFields();
+    if (!isValid) {
+      setSaveStatus('error');
+      toast({
+        title: "Validatie fout",
+        description: "Niet alle velden zijn ingevuld. Controleer de rode velden.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    
+    try {
+      setSaveStatus('saving');
+      
+      // TODO: Implement actual save to database
+      // For now, simulate save
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setSaveStatus('saved');
+      setLastSavedData(JSON.stringify(product));
+      
+      toast({
+        title: "Opgeslagen",
+        description: "Beoordelingscriteria zijn succesvol opgeslagen.",
+      });
+      
+      return true;
+    } catch (error) {
+      setSaveStatus('error');
+      toast({
+        title: "Opslaan mislukt",
+        description: "Er is een fout opgetreden bij het opslaan.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Debounced auto-save
+  const debouncedSave = useMemo(
+    () => {
+      let timeoutId: NodeJS.Timeout;
+      return {
+        cancel: () => {
+          if (timeoutId) clearTimeout(timeoutId);
+        },
+        save: () => {
+          debouncedSave.cancel();
+          timeoutId = setTimeout(() => {
+            performSave();
+          }, 2000); // 2 second delay
+        }
+      };
+    },
+    [product]
+  );
 
   const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: 'criteria' | 'level', levelId?: string, value?: string) => {
     if (!product) return;
+    
+    // Validate field immediately
+    if (field === 'criteria' && value !== undefined) {
+      validateField(value, `criteria-${criteriaId}`);
+    } else if (field === 'level' && levelId && value !== undefined) {
+      validateField(value, `level-${levelId}`);
+    }
     
     setProduct(prev => {
       if (!prev) return prev;
@@ -328,6 +462,10 @@ export default function EditExamPage() {
         )
       };
     });
+    
+    // Trigger auto-save
+    setSaveStatus('dirty');
+    debouncedSave.save();
   };
 
   // Redirect if not signed in or not admin
@@ -359,6 +497,7 @@ export default function EditExamPage() {
 
         const data = await response.json();
         setProduct(data.product);
+        setLastSavedData(JSON.stringify(data.product)); // Initialize as saved
         
         // Initialize edit values
         setEditValues({
@@ -391,19 +530,62 @@ export default function EditExamPage() {
               isEnabled: true,
               password: 'Examen2024!',
               rubricLevels: 3,
-              assessmentOnderdelen: [],
+              assessmentOnderdelen: [
+                {
+                  id: 'onderdeel1',
+                  onderdeel: 'Grammatica',
+                  criteria: [
+                    {
+                      id: 'criteria1',
+                      criteria: 'Correct gebruik van werkwoorden',
+                      levels: [
+                        { id: 'level1', label: 'Onvoldoende', value: 'Veel fouten in werkwoordvervoeging' },
+                        { id: 'level2', label: 'Voldoende', value: 'Enkele fouten in werkwoordvervoeging' },
+                        { id: 'level3', label: 'Goed', value: 'Correcte werkwoordvervoeging' }
+                      ]
+                    }
+                  ]
+                }
+              ],
               documents: [
                 {
                   id: 'doc1',
                   name: 'Beoordelingscriteria.pdf',
                   url: '/documents/criteria.pdf',
-                  uploadedAt: '2024-01-15'
+                  uploadedAt: '2024-01-15',
+                  isPreview: false
+                },
+                {
+                  id: 'doc2',
+                  name: 'Instructies.pdf',
+                  url: '/documents/instructions.pdf',
+                  uploadedAt: '2024-01-15',
+                  isPreview: false
+                },
+                {
+                  id: 'doc3',
+                  name: 'Voorbeelden.pdf',
+                  url: '/documents/examples.pdf',
+                  uploadedAt: '2024-01-15',
+                  isPreview: false
                 }
               ]
+            },
+            {
+              id: 'v2',
+              version: '2.2',
+              releaseDate: '2024-01-20',
+              isLatest: false,
+              isEnabled: false,
+              password: 'Examen2024!',
+              rubricLevels: 3,
+              assessmentOnderdelen: [],
+              documents: []
             }
           ]
         };
         setProduct(mockProduct);
+        setLastSavedData(JSON.stringify(mockProduct)); // Initialize as saved
         setEditValues({
           code: mockProduct.code,
           title: mockProduct.title,
@@ -418,6 +600,20 @@ export default function EditExamPage() {
 
     fetchProduct();
   }, [isSignedIn, productId, getToken]);
+
+  // Warn user about unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (saveStatus === 'dirty' || saveStatus === 'saving') {
+        e.preventDefault();
+        e.returnValue = 'Je hebt niet-opgeslagen wijzigingen. Weet je zeker dat je wilt vertrekken?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveStatus]);
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -500,6 +696,163 @@ export default function EditExamPage() {
     setExpandedCriteria(newExpanded);
   };
 
+  const handleManualSave = async () => {
+    // Cancel any pending auto-save and save immediately
+    debouncedSave.cancel();
+    await performSave();
+  };
+
+  const getSaveButtonState = () => {
+    // Check if current state matches last saved state
+    const currentData = JSON.stringify(product);
+    const isDataSaved = lastSavedData === currentData;
+    
+    // Check if there are any unsaved changes (dirty state)
+    const hasUnsavedChanges = saveStatus === 'dirty';
+    
+    if (saveStatus === 'saving') {
+      return { text: 'Opslaan...', variant: 'outline' as const, disabled: true, className: 'text-yellow-600 border-yellow-600' };
+    }
+    if (saveStatus === 'error' || validationErrors.size > 0) {
+      return { text: 'Opslaan', variant: 'outline' as const, disabled: false, className: 'text-red-600 border-red-600 hover:bg-red-50' };
+    }
+    if (isDataSaved && !hasUnsavedChanges) {
+      return { text: 'Opgeslagen', variant: 'outline' as const, disabled: true, className: 'text-green-600 border-green-600' };
+    }
+    return { text: 'Opslaan', variant: 'default' as const, disabled: false, className: '' };
+  };
+
+  // Document management functions
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, versionId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      await handleFileUpload(Array.from(e.dataTransfer.files), versionId);
+    }
+  }, []);
+
+  const handleFileUpload = async (files: File[], versionId: string) => {
+    if (!product) return;
+
+    setUploadingDocuments(true);
+    
+    try {
+      // Simulate file upload - replace with actual upload logic
+      const newDocuments: Document[] = files.map((file, index) => ({
+        id: generateId(),
+        name: file.name,
+        url: `/uploads/${file.name}`,
+        uploadedAt: new Date().toISOString(),
+        isPreview: false
+      }));
+
+      // Add documents to the version
+      setProduct(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          versions: prev.versions.map(v => 
+            v.id === versionId 
+              ? { ...v, documents: [...v.documents, ...newDocuments] }
+              : v
+          )
+        };
+      });
+
+      setSaveStatus('dirty');
+      debouncedSave.save();
+
+      toast({
+        title: "Documenten geüpload",
+        description: `${files.length} document(en) succesvol geüpload.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Upload mislukt",
+        description: "Er is een fout opgetreden bij het uploaden van de documenten.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingDocuments(false);
+    }
+  };
+
+  const removeDocument = (versionId: string, documentId: string) => {
+    if (!product) return;
+
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? { ...v, documents: v.documents.filter(d => d.id !== documentId) }
+            : v
+        )
+      };
+    });
+
+    setSaveStatus('dirty');
+    debouncedSave.save();
+
+    toast({
+      title: "Document verwijderd",
+      description: "Document is succesvol verwijderd.",
+    });
+  };
+
+  const setPreviewDocument = (versionId: string, documentId: string) => {
+    if (!product) return;
+
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                documents: v.documents.map(doc => {
+                  const isCurrentlyPreview = doc.id === documentId;
+                  return {
+                    ...doc,
+                    isPreview: isCurrentlyPreview ? !doc.isPreview : false
+                  };
+                })
+              }
+            : v
+        )
+      };
+    });
+
+    setSaveStatus('dirty');
+    debouncedSave.save();
+
+    // Find the document to get its current state for the toast message
+    const version = product.versions.find(v => v.id === versionId);
+    const document = version?.documents.find(d => d.id === documentId);
+    const isNowPreview = document ? !document.isPreview : false;
+
+    toast({
+      title: isNowPreview ? "Preview ingeschakeld" : "Preview uitgeschakeld",
+      description: isNowPreview 
+        ? "Document is nu beschikbaar voor gratis preview." 
+        : "Document is niet meer beschikbaar voor gratis preview.",
+    });
+  };
+
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [newVersionNumber, setNewVersionNumber] = useState('');
   const [versionStates, setVersionStates] = useState<Record<string, boolean>>({});
@@ -525,8 +878,8 @@ export default function EditExamPage() {
       id: `v${Date.now()}`,
       version: newVersionNumber.trim(),
       releaseDate: new Date().toISOString().split('T')[0],
-      isLatest: true,
-      isEnabled: true,
+      isLatest: false, // New versions start as draft
+      isEnabled: false, // New versions are disabled by default
       password: generatePassword(),
       rubricLevels: latestVersion.rubricLevels,
       assessmentOnderdelen: latestVersion.assessmentOnderdelen.map(onderdeel => ({
@@ -571,12 +924,60 @@ export default function EditExamPage() {
     return password;
   };
 
-  const copyPassword = (password: string) => {
+  const copyPassword = (password: string, versionId: string) => {
     navigator.clipboard.writeText(password);
-    toast({
-      title: "Wachtwoord gekopieerd",
-      description: "Het wachtwoord is naar het klembord gekopieerd.",
+    setCopiedPasswordId(versionId);
+    
+    // Reset the copied state after 2 seconds
+    setTimeout(() => {
+      setCopiedPasswordId(null);
+    }, 2000);
+  };
+
+  const regeneratePassword = (versionId: string) => {
+    if (!product) return;
+    
+    const newPassword = generatePassword();
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? { ...v, password: newPassword }
+            : v
+        )
+      };
     });
+
+    setSaveStatus('dirty');
+    debouncedSave.save();
+
+    toast({
+      title: "Nieuw wachtwoord gegenereerd",
+      description: "Het wachtwoord is succesvol vernieuwd.",
+    });
+  };
+
+  // Check if version meets publication requirements
+  const isVersionReadyForPublication = (version: Version): boolean => {
+    const hasOnderdelen = version.assessmentOnderdelen.length > 0;
+    const hasCriteria = version.assessmentOnderdelen.some(onderdeel => onderdeel.criteria.length > 0);
+    const hasDocuments = version.documents.length >= 3;
+    
+    return hasOnderdelen && hasCriteria && hasDocuments;
+  };
+
+  // Get version status for display
+  const getVersionStatus = (version: Version) => {
+    if (version.isLatest) {
+      return { label: 'Nieuwste', variant: 'default', className: 'bg-green-100 text-green-800' };
+    } else if (version.isEnabled) {
+      return { label: 'Actief', variant: 'default', className: 'bg-blue-100 text-blue-800' };
+    } else {
+      return { label: 'Draft', variant: 'outline', className: 'text-blue-600 border-blue-300' };
+    }
   };
 
   const handleDeleteProduct = async () => {
@@ -655,6 +1056,22 @@ export default function EditExamPage() {
 
   const handleToggleVersionStatus = async (versionId: string, isEnabled: boolean) => {
     if (!product) return;
+    
+    const version = product.versions.find(v => v.id === versionId);
+    if (!version) return;
+
+    // If trying to enable, check if version is ready for publication
+    if (isEnabled && !isVersionReadyForPublication(version)) {
+      toast({
+        title: "Versie niet klaar voor publicatie",
+        description: "Zorg ervoor dat de versie minimaal 1 onderdeel, 1 criterium en 3 documenten heeft.",
+        variant: "destructive",
+      });
+      
+      // Revert the checkbox state
+      setVersionStates(prev => ({ ...prev, [versionId]: false }));
+      return;
+    }
     
     try {
       const token = await getToken();
@@ -942,18 +1359,30 @@ export default function EditExamPage() {
                           </p>
                         </div>
                       </div>
-                      {version.isLatest && (
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          Nieuwste
-                        </Badge>
-                      )}
-                      {!version.isEnabled && (
-                        <Badge variant="outline" className="text-gray-500 border-gray-300">
-                          Uitgeschakeld
-                        </Badge>
-                      )}
+                      {(() => {
+                        const status = getVersionStatus(version);
+                        return (
+                          <Badge variant={status.variant as any} className={status.className}>
+                            {status.label}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center space-x-2">
+                      {(() => {
+                        const buttonState = getSaveButtonState();
+                        return (
+                          <Button
+                            size="sm"
+                            variant={buttonState.variant}
+                            onClick={handleManualSave}
+                            disabled={buttonState.disabled}
+                            className={buttonState.className}
+                          >
+                            {buttonState.text}
+                          </Button>
+                        );
+                      })()}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1030,7 +1459,7 @@ export default function EditExamPage() {
                                   <Input
                                     value={onderdeel.onderdeel}
                                     onChange={(e) => updateOnderdeel(version.id, onderdeel.id, e.target.value)}
-                                    className="mt-1"
+                                    className={`mt-1 ${validationErrors.has(`onderdeel-${onderdeel.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
                                     placeholder="Voer onderdeel naam in"
                                   />
                                 </div>
@@ -1101,7 +1530,7 @@ export default function EditExamPage() {
                                                    <Textarea
                                                      value={criteria.criteria}
                                                      onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
-                                                     className="mt-1"
+                                                     className={`mt-1 ${validationErrors.has(`criteria-${criteria.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
                                                      rows={3}
                                                      placeholder="Beschrijf de criteria..."
                                                    />
@@ -1120,7 +1549,7 @@ export default function EditExamPage() {
                                                      <Textarea
                                                        value={level.value}
                                                        onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
-                                                       className="mt-1"
+                                                       className={`mt-1 ${validationErrors.has(`level-${level.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
                                                        rows={3}
                                                        placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
                                                      />
@@ -1153,7 +1582,7 @@ export default function EditExamPage() {
                                                <Textarea
                                                  value={criteria.criteria}
                                                  onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
-                                                 className="mt-1"
+                                                 className={`mt-1 ${validationErrors.has(`criteria-${criteria.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
                                                  rows={3}
                                                  placeholder="Beschrijf de criteria..."
                                                />
@@ -1172,7 +1601,7 @@ export default function EditExamPage() {
                                                  <Textarea
                                                    value={level.value}
                                                    onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
-                                                   className="mt-1"
+                                                   className={`mt-1 ${validationErrors.has(`level-${level.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
                                                    rows={3}
                                                    placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
                                                  />
@@ -1206,63 +1635,154 @@ export default function EditExamPage() {
 
                       {/* Documents */}
                       <div>
-                        <h4 className="font-medium mb-3">Documenten</h4>
-                        <div className="space-y-2">
-                          {version.documents.map((doc) => (
-                            <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg">
-                              <div className="flex items-center space-x-3">
-                                <FileText className="h-5 w-5 text-gray-400" />
-                                <div>
-                                  <p className="font-medium">{doc.name}</p>
-                                  <p className="text-sm text-gray-600">
-                                    Geüpload op {new Date(doc.uploadedAt).toLocaleDateString('nl-NL')}
-                                  </p>
-                                </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {/* Left Column */}
+                          <div>
+                            <h4 className="font-medium mb-3">Documenten</h4>
+                            {/* Drag and Drop Area */}
+                            <div
+                              className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                                dragActive 
+                                  ? 'border-blue-500 bg-blue-50' 
+                                  : 'border-gray-300 hover:border-gray-400'
+                              } ${uploadingDocuments ? 'opacity-50 pointer-events-none' : ''}`}
+                              onDragEnter={handleDrag}
+                              onDragLeave={handleDrag}
+                              onDragOver={handleDrag}
+                              onDrop={(e) => handleDrop(e, version.id)}
+                            >
+                              <div className="text-center">
+                                <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                                <h5 className="text-lg font-medium text-gray-700 mb-2">
+                                  Sleep documenten hierheen
+                                </h5>
+                                <p className="text-sm text-gray-500 mb-4">
+                                  Of klik om bestanden te selecteren
+                                </p>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    // TODO: Implement file picker
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.multiple = true;
+                                    input.accept = '.pdf,.doc,.docx,.xls,.xlsx';
+                                    input.onchange = (e) => {
+                                      const files = Array.from((e.target as HTMLInputElement).files || []);
+                                      if (files.length > 0) {
+                                        handleFileUpload(files, version.id);
+                                      }
+                                    };
+                                    input.click();
+                                  }}
+                                  disabled={uploadingDocuments}
+                                >
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Bestanden Selecteren
+                                </Button>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <Button size="sm" variant="outline">
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  Bekijken
-                                </Button>
-                                <Button size="sm" variant="outline" className="text-red-600">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                              {uploadingDocuments && (
+                                <div className="mt-4 text-center">
+                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                                  <p className="text-sm text-gray-500 mt-2">Uploaden...</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Right Column */}
+                          <div>
+                            <h4 className="font-medium mb-3">Geüploade Documenten</h4>
+                            <div className="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                              <div className="space-y-3">
+                                {version.documents.length === 0 ? (
+                                  <div className="text-center py-8 text-gray-500">
+                                    <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                    <p>Nog geen documenten geüpload</p>
+                                  </div>
+                                ) : (
+                                  version.documents.map((doc) => (
+                                    <div key={doc.id} className="border rounded-lg p-3 bg-white">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center space-x-2">
+                                          <FileText className="h-4 w-4 text-gray-400" />
+                                          <span className="font-medium text-sm">{doc.name}</span>
+                                          {doc.isPreview && (
+                                            <Badge variant="secondary" className="text-xs">
+                                              Preview
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setPreviewDocument(version.id, doc.id)}
+                                            className={`${
+                                              doc.isPreview 
+                                                ? 'text-green-600 hover:text-green-700' 
+                                                : 'text-gray-400 hover:text-gray-600'
+                                            }`}
+                                            title={doc.isPreview ? 'Preview uitgeschakeld' : 'Preview inschakeld'}
+                                          >
+                                            {doc.isPreview ? (
+                                              <Eye className="h-3 w-3" />
+                                            ) : (
+                                              <div className="relative">
+                                                <Eye className="h-3 w-3" />
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                  <div className="w-4 h-px bg-gray-400 transform rotate-45"></div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => removeDocument(version.id, doc.id)}
+                                            className="text-red-600 hover:text-red-700"
+                                            title="Document verwijderen"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-gray-500">
+                                        Geüpload op {new Date(doc.uploadedAt).toLocaleDateString('nl-NL')}
+                                      </p>
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
-                          ))}
-                          <Button variant="outline" className="w-full">
-                            <Upload className="h-4 w-4 mr-2" />
-                            Document Toevoegen
-                          </Button>
+                          </div>
                         </div>
                       </div>
 
                       {/* Password */}
                       <div>
-                        <h4 className="font-medium mb-3">Excel Wachtwoord</h4>
+                        <h4 className="font-medium mb-3">Spreadsheet Wachtwoord</h4>
                         <div className="flex items-center space-x-2">
                           <Input
-                            type="password"
-                            value={version.password}
+                            type={copiedPasswordId === version.id ? "text" : "password"}
+                            value={copiedPasswordId === version.id ? "Gekopieerd!" : version.password}
                             readOnly
-                            className="flex-1"
+                            className={`flex-1 cursor-pointer transition-all duration-200 ${
+                              copiedPasswordId === version.id 
+                                ? 'bg-green-100 border-green-500 text-green-700' 
+                                : 'hover:bg-gray-50'
+                            }`}
+                            onClick={() => copyPassword(version.password, version.id)}
+                            title="Klik om wachtwoord te kopiëren"
                           />
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => copyPassword(version.password)}
+                            onClick={() => regeneratePassword(version.id)}
+                            className="p-2"
+                            title="Nieuw wachtwoord genereren"
                           >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Kopiëren
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              // Regenerate password logic would go here
-                            }}
-                          >
-                            Nieuw
+                            <RotateCcw className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
