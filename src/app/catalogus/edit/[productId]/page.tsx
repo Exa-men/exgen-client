@@ -950,7 +950,7 @@ export default function EditExamPage() {
                           {version.assessmentOnderdelen.map((onderdeel) => (
                             <div key={onderdeel.id} className="border rounded-lg p-4 bg-gray-50">
                               {/* Onderdeel Header */}
-                              <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-end justify-between mb-4">
                                 <div className="flex-1 mr-4">
                                   <label className="text-sm font-medium text-gray-700">Onderdeel</label>
                                   <Input
@@ -968,7 +968,7 @@ export default function EditExamPage() {
                                     className="text-green-600 hover:text-green-700"
                                   >
                                     <Plus className="h-4 w-4 mr-1" />
-                                    Criteria Toevoegen
+                                    Criterium Toevoegen
                                   </Button>
                                   <Button
                                     size="sm"
@@ -993,7 +993,7 @@ export default function EditExamPage() {
                                       className="mt-2 text-blue-600 hover:text-blue-700"
                                     >
                                       <Plus className="h-4 w-4 mr-1" />
-                                      Eerste Criteria Toevoegen
+                                      Eerste Criterium Toevoegen
                                     </Button>
                                   </div>
                                 ) : (
@@ -1001,7 +1001,7 @@ export default function EditExamPage() {
                                     <div key={criteria.id} className="border rounded-lg p-4 bg-white">
                                       {/* Criteria Row Header */}
                                       <div className="flex items-center justify-between mb-3">
-                                        <h6 className="font-medium text-gray-700">Criteria {index + 1}</h6>
+                                        <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -1015,7 +1015,7 @@ export default function EditExamPage() {
                                       {/* Four Column Layout for Desktop */}
                                       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                                         <div>
-                                          <label className="text-sm font-medium text-gray-700">Criteria</label>
+                                          <label className="text-sm font-medium text-gray-700">Criterium</label>
                                           <Textarea
                                             value={criteria.criteria}
                                             onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', e.target.value)}
