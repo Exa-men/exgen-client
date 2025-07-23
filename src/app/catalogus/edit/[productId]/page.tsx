@@ -26,17 +26,22 @@ import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../components/ui/collapsible';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../../components/ui/accordion';
 import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../../hooks/use-toast';
 import UnifiedHeader from '../../../components/UnifiedHeader';
 import { useRole } from '../../../../hooks/use-role';
 
+interface AssessmentLevel {
+  id: string;
+  label: string;
+  value: string;
+}
+
 interface AssessmentCriteria {
   id: string;
   criteria: string;
-  insufficient: string;
-  sufficient: string;
-  good: string;
+  levels: AssessmentLevel[];
 }
 
 interface AssessmentOnderdeel {
@@ -50,6 +55,7 @@ interface Version {
   version: string;
   releaseDate: string;
   assessmentOnderdelen: AssessmentOnderdeel[];
+  rubricLevels: number; // 2, 3, 4, 5, or 6
   documents: Document[];
   password: string;
   isLatest: boolean;
@@ -103,6 +109,7 @@ export default function EditExamPage() {
   
   // Version management
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+  const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showVersionDeleteConfirm, setShowVersionDeleteConfirm] = useState<string | null>(null);
@@ -113,12 +120,65 @@ export default function EditExamPage() {
   // Helper functions for assessment criteria management
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
+  // Rubric level labels
+  const getRubricLabels = (levels: number) => {
+    switch (levels) {
+      case 2:
+        return ['Onvoldoende', 'Voldoende'];
+      case 3:
+        return ['Onvoldoende', 'Voldoende', 'Goed'];
+      case 4:
+        return ['Onvoldoende', 'Voldoende', 'Goed', 'Uitstekend'];
+      case 5:
+        return ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'];
+      case 6:
+        return ['Verkennend', 'Onervaren', 'Beginner', 'Bekaam', 'Vakkundig', 'Professional'];
+      default:
+        return ['Onvoldoende', 'Voldoende', 'Goed'];
+    }
+  };
+
+  const createEmptyLevels = (count: number): AssessmentLevel[] => {
+    const labels = getRubricLabels(count);
+    return labels.map((label, index) => ({
+      id: generateId(),
+      label,
+      value: ''
+    }));
+  };
+
+  const updateRubricLevels = (versionId: string, newLevelCount: number) => {
+    if (!product) return;
+    
+    setProduct(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                rubricLevels: newLevelCount,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(onderdeel => ({
+                  ...onderdeel,
+                  criteria: onderdeel.criteria.map(criteria => ({
+                    ...criteria,
+                    levels: createEmptyLevels(newLevelCount)
+                  }))
+                }))
+              }
+            : v
+        )
+      };
+    });
+  };
+
   const addOnderdeel = (versionId: string) => {
     if (!product) return;
     
     const newOnderdeel: AssessmentOnderdeel = {
       id: generateId(),
-      onderdeel: 'Nieuw Onderdeel',
+      onderdeel: '',
       criteria: []
     };
 
@@ -154,12 +214,13 @@ export default function EditExamPage() {
   const addCriteria = (versionId: string, onderdeelId: string) => {
     if (!product) return;
     
+    const version = product.versions.find(v => v.id === versionId);
+    if (!version) return;
+    
     const newCriteria: AssessmentCriteria = {
       id: generateId(),
       criteria: '',
-      insufficient: '',
-      sufficient: '',
-      good: ''
+      levels: createEmptyLevels(version.rubricLevels)
     };
 
     setProduct(prev => {
@@ -228,7 +289,7 @@ export default function EditExamPage() {
     });
   };
 
-  const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: keyof AssessmentCriteria, value: string) => {
+  const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: 'criteria' | 'level', levelId?: string, value?: string) => {
     if (!product) return;
     
     setProduct(prev => {
@@ -245,7 +306,18 @@ export default function EditExamPage() {
                         ...o,
                         criteria: o.criteria.map(c =>
                           c.id === criteriaId
-                            ? { ...c, [field]: value }
+                            ? field === 'criteria' && value
+                              ? { ...c, criteria: value }
+                              : field === 'level' && levelId && value
+                              ? {
+                                  ...c,
+                                  levels: c.levels.map(level =>
+                                    level.id === levelId
+                                      ? { ...level, value }
+                                      : level
+                                  )
+                                }
+                              : c
                             : c
                         )
                       }
@@ -318,41 +390,8 @@ export default function EditExamPage() {
               isLatest: true,
               isEnabled: true,
               password: 'Examen2024!',
-              assessmentOnderdelen: [
-                {
-                  id: 'od1',
-                  onderdeel: 'Informatie Verzameling',
-                  criteria: [
-                    {
-                      id: 'ac1',
-                      criteria: 'Verzamelde informatie (D1-K1: Verzamelt informatie, gegevens en content)',
-                      insufficient: 'De verzamelde informatie is onvoldoende en/of sluit onvoldoende aan bij het gekozen onderwerp.',
-                      sufficient: 'De verzamelde informatie is voldoende en passend bij het gekozen onderwerp.',
-                      good: 'De prestatie van de kandidaat overtreft duidelijk de beschrijving van voldoende.'
-                    },
-                    {
-                      id: 'ac2',
-                      criteria: 'Bronnen en referenties (D1-K2: Gebruikt betrouwbare bronnen)',
-                      insufficient: 'Bronnen zijn niet of onvoldoende vermeld of niet betrouwbaar.',
-                      sufficient: 'Bronnen zijn adequaat vermeld en grotendeels betrouwbaar.',
-                      good: 'Uitstekende selectie en gebruik van betrouwbare bronnen.'
-                    }
-                  ]
-                },
-                {
-                  id: 'od2',
-                  onderdeel: 'Analyse en Verwerking',
-                  criteria: [
-                    {
-                      id: 'ac3',
-                      criteria: 'Kritische analyse (D2-K1: Voert kritische analyse uit)',
-                      insufficient: 'Analyse ontbreekt of is oppervlakkig zonder diepgang.',
-                      sufficient: 'Analyse is aanwezig en toont begrip van het onderwerp.',
-                      good: 'Diepgaande en doordachte analyse die nieuwe inzichten toont.'
-                    }
-                  ]
-                }
-              ],
+              rubricLevels: 3,
+              assessmentOnderdelen: [],
               documents: [
                 {
                   id: 'doc1',
@@ -451,6 +490,16 @@ export default function EditExamPage() {
     setExpandedVersions(newExpanded);
   };
 
+  const toggleCriteriaExpanded = (criteriaId: string) => {
+    const newExpanded = new Set(expandedCriteria);
+    if (newExpanded.has(criteriaId)) {
+      newExpanded.delete(criteriaId);
+    } else {
+      newExpanded.add(criteriaId);
+    }
+    setExpandedCriteria(newExpanded);
+  };
+
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [newVersionNumber, setNewVersionNumber] = useState('');
   const [versionStates, setVersionStates] = useState<Record<string, boolean>>({});
@@ -479,12 +528,17 @@ export default function EditExamPage() {
       isLatest: true,
       isEnabled: true,
       password: generatePassword(),
+      rubricLevels: latestVersion.rubricLevels,
       assessmentOnderdelen: latestVersion.assessmentOnderdelen.map(onderdeel => ({
         ...onderdeel,
         id: generateId(),
         criteria: onderdeel.criteria.map(criteria => ({
           ...criteria,
-          id: generateId()
+          id: generateId(),
+          levels: criteria.levels.map(level => ({
+            ...level,
+            id: generateId()
+          }))
         }))
       })),
       documents: [...latestVersion.documents]
@@ -934,7 +988,27 @@ export default function EditExamPage() {
                       {/* Assessment Criteria */}
                       <div>
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium">Beoordelingscriteria</h4>
+                          <div className="flex items-center space-x-6">
+                            <h4 className="font-medium">Beoordelingscriteria</h4>
+                            <div className="flex items-center space-x-4">
+                              <span className="text-sm text-gray-600">Rubric niveaus:</span>
+                              <div className="flex items-center space-x-2">
+                                {[2, 3, 4, 5, 6].map((level) => (
+                                  <label key={level} className="flex items-center space-x-1">
+                                    <input
+                                      type="radio"
+                                      name={`rubric-${version.id}`}
+                                      value={level}
+                                      checked={version.rubricLevels === level}
+                                      onChange={() => updateRubricLevels(version.id, level)}
+                                      className="text-blue-600"
+                                    />
+                                    <span className="text-sm">{level}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                           <Button
                             size="sm"
                             variant="outline"
@@ -996,68 +1070,120 @@ export default function EditExamPage() {
                                       Eerste Criterium Toevoegen
                                     </Button>
                                   </div>
-                                ) : (
-                                  onderdeel.criteria.map((criteria, index) => (
-                                    <div key={criteria.id} className="border rounded-lg p-4 bg-white">
-                                      {/* Criteria Row Header */}
-                                      <div className="flex items-center justify-between mb-3">
-                                        <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => removeCriteria(version.id, onderdeel.id, criteria.id)}
-                                          className="text-red-600 hover:text-red-700"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
+                                                                 ) : (
+                                   onderdeel.criteria.map((criteria, index) => (
+                                     <div key={criteria.id} className="border rounded-lg bg-white">
+                                       {version.rubricLevels >= 4 ? (
+                                         // Accordion layout for 4+ rubric levels
+                                         <Accordion type="single" collapsible>
+                                           <AccordionItem value={criteria.id} className="border-none">
+                                             <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                                               <div className="flex items-center justify-between w-full pr-4">
+                                                 <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
+                                                 <Button
+                                                   size="sm"
+                                                   variant="outline"
+                                                   onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     removeCriteria(version.id, onderdeel.id, criteria.id);
+                                                   }}
+                                                   className="text-red-600 hover:text-red-700"
+                                                 >
+                                                   <Trash2 className="h-4 w-4" />
+                                                 </Button>
+                                               </div>
+                                             </AccordionTrigger>
+                                             <AccordionContent className="px-4 pb-4">
+                                               {/* Dynamic Grid Layout for Desktop */}
+                                               <div className={`grid grid-cols-1 lg:grid-cols-${version.rubricLevels + 1} gap-4`}>
+                                                 <div>
+                                                   <label className="text-sm font-medium text-gray-700">Criterium</label>
+                                                   <Textarea
+                                                     value={criteria.criteria}
+                                                     onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
+                                                     className="mt-1"
+                                                     rows={3}
+                                                     placeholder="Beschrijf de criteria..."
+                                                   />
+                                                 </div>
+                                                 {criteria.levels.map((level, levelIndex) => (
+                                                   <div key={level.id}>
+                                                     <label className={`text-sm font-medium ${
+                                                       level.label === 'Onvoldoende' ? 'text-red-600' :
+                                                       level.label === 'Voldoende' ? 'text-yellow-600' :
+                                                       level.label === 'Goed' ? 'text-green-600' :
+                                                       level.label === 'Uitstekend' ? 'text-blue-600' :
+                                                       'text-gray-700'
+                                                     }`}>
+                                                       {level.label}
+                                                     </label>
+                                                     <Textarea
+                                                       value={level.value}
+                                                       onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
+                                                       className="mt-1"
+                                                       rows={3}
+                                                       placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
+                                                     />
+                                                   </div>
+                                                 ))}
+                                               </div>
+                                             </AccordionContent>
+                                           </AccordionItem>
+                                         </Accordion>
+                                       ) : (
+                                         // Regular layout for 2-3 rubric levels
+                                         <div className="p-4">
+                                           {/* Criteria Row Header */}
+                                           <div className="flex items-center justify-between mb-3">
+                                             <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
+                                             <Button
+                                               size="sm"
+                                               variant="outline"
+                                               onClick={() => removeCriteria(version.id, onderdeel.id, criteria.id)}
+                                               className="text-red-600 hover:text-red-700"
+                                             >
+                                               <Trash2 className="h-4 w-4" />
+                                             </Button>
+                                           </div>
 
-                                      {/* Four Column Layout for Desktop */}
-                                      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                                        <div>
-                                          <label className="text-sm font-medium text-gray-700">Criterium</label>
-                                          <Textarea
-                                            value={criteria.criteria}
-                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', e.target.value)}
-                                            className="mt-1"
-                                            rows={3}
-                                            placeholder="Beschrijf de criteria..."
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-sm font-medium text-red-600">Onvoldoende</label>
-                                          <Textarea
-                                            value={criteria.insufficient}
-                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'insufficient', e.target.value)}
-                                            className="mt-1"
-                                            rows={3}
-                                            placeholder="Beschrijf onvoldoende prestatie..."
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-sm font-medium text-yellow-600">Voldoende</label>
-                                          <Textarea
-                                            value={criteria.sufficient}
-                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'sufficient', e.target.value)}
-                                            className="mt-1"
-                                            rows={3}
-                                            placeholder="Beschrijf voldoende prestatie..."
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-sm font-medium text-green-600">Goed</label>
-                                          <Textarea
-                                            value={criteria.good}
-                                            onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'good', e.target.value)}
-                                            className="mt-1"
-                                            rows={3}
-                                            placeholder="Beschrijf goede prestatie..."
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
+                                           {/* Dynamic Grid Layout for Desktop */}
+                                           <div className={`grid grid-cols-1 lg:grid-cols-${version.rubricLevels + 1} gap-4`}>
+                                             <div>
+                                               <label className="text-sm font-medium text-gray-700">Criterium</label>
+                                               <Textarea
+                                                 value={criteria.criteria}
+                                                 onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
+                                                 className="mt-1"
+                                                 rows={3}
+                                                 placeholder="Beschrijf de criteria..."
+                                               />
+                                             </div>
+                                             {criteria.levels.map((level, levelIndex) => (
+                                               <div key={level.id}>
+                                                 <label className={`text-sm font-medium ${
+                                                   level.label === 'Onvoldoende' ? 'text-red-600' :
+                                                   level.label === 'Voldoende' ? 'text-yellow-600' :
+                                                   level.label === 'Goed' ? 'text-green-600' :
+                                                   level.label === 'Uitstekend' ? 'text-blue-600' :
+                                                   'text-gray-700'
+                                                 }`}>
+                                                   {level.label}
+                                                 </label>
+                                                 <Textarea
+                                                   value={level.value}
+                                                   onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
+                                                   className="mt-1"
+                                                   rows={3}
+                                                   placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
+                                                 />
+                                               </div>
+                                             ))}
+                                           </div>
+                                         </div>
+                                       )}
+                                     </div>
+                                   ))
+                                 )}
                               </div>
                             </div>
                           ))}
