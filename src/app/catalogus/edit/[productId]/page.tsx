@@ -33,6 +33,68 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useToast } from '../../../../hooks/use-toast';
 import UnifiedHeader from '../../../components/UnifiedHeader';
 import { useRole } from '../../../../hooks/use-role';
+import { useApi } from '../../../../hooks/use-api';
+
+// Backend API response types
+interface BackendAssessmentLevel {
+  id: string;
+  label: string;
+  value: string;
+  order: number;
+}
+
+interface BackendAssessmentCriteria {
+  id: string;
+  criteria: string;
+  order: number;
+  assessment_levels: BackendAssessmentLevel[];
+}
+
+interface BackendAssessmentComponent {
+  id: string;
+  component: string;  // Fixed: backend returns "component" not "name"
+  order: number;
+  assessment_criteria: BackendAssessmentCriteria[];
+}
+
+interface BackendVersionDocument {
+  id: string;
+  name: string;
+  file_path: string;
+  download_url: string;
+  uploaded_at: string;
+  is_preview: boolean;
+  order: number;
+}
+
+interface BackendProductVersion {
+  id: string;
+  version_number: string;
+  release_date: string;
+  is_latest: boolean;
+  is_enabled: boolean;
+  password: string;
+  rubric_levels: number;
+  documents: BackendVersionDocument[];
+  assessment_components: BackendAssessmentComponent[];
+}
+
+interface BackendProduct {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  credits: number;
+  cohort: string;
+  version: string;
+  cost: number;
+  valid_from: string;
+  versions: BackendProductVersion[];
+}
+
+interface PasswordResponse {
+  password: string;
+}
 
 interface AssessmentLevel {
   id: string;
@@ -93,6 +155,7 @@ export default function EditExamPage() {
   const productId = params.productId as string;
   const { toast } = useToast();
   const { isAdmin, isLoading: roleLoading } = useRole();
+  const api = useApi();
   
   const [product, setProduct] = useState<ExamProduct | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +221,13 @@ export default function EditExamPage() {
 
   // Helper functions for assessment criteria management
   const generateId = () => Math.random().toString(36).substr(2, 9);
+  
+  // Helper function to check if an ID is a temporary frontend ID
+  const isTemporaryId = (id: string): boolean => {
+    // Frontend IDs are 9-character alphanumeric strings
+    // Database UUIDs are 36-character strings with hyphens
+    return id.length === 9 && /^[a-z0-9]{9}$/.test(id);
+  };
 
   // Rubric level labels
   const getRubricLabels = (levels: number) => {
@@ -215,6 +285,8 @@ export default function EditExamPage() {
   const addOnderdeel = (versionId: string) => {
     if (!product) return;
     
+    console.log('Adding onderdeel to version:', versionId);
+    
     const newOnderdeel: AssessmentOnderdeel = {
       id: generateId(),
       onderdeel: '',
@@ -223,7 +295,7 @@ export default function EditExamPage() {
 
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updated = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -231,10 +303,16 @@ export default function EditExamPage() {
             : v
         )
       };
+      console.log('Updated product with new onderdeel:', updated);
+      return updated;
     });
 
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
+    
+    // Trigger auto-save
+    setSaveStatus('dirty');
+    debouncedSave.save();
   };
 
   const removeOnderdeel = (versionId: string, onderdeelId: string) => {
@@ -309,6 +387,10 @@ export default function EditExamPage() {
 
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
+    
+    // Trigger auto-save
+    setSaveStatus('dirty');
+    debouncedSave.save();
   };
 
   const removeCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
@@ -335,6 +417,10 @@ export default function EditExamPage() {
 
     // Check for changes and revert to draft if published
     checkForChangesAndRevert();
+    
+    // Trigger auto-save
+    setSaveStatus('dirty');
+    debouncedSave.save();
   };
 
   const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
@@ -419,24 +505,67 @@ export default function EditExamPage() {
   const performSave = async (): Promise<boolean> => {
     if (!product) return false;
     
+    // Only validate for manual saves, not auto-saves
+    // Auto-save should always succeed to preserve user's work
     const isValid = validateAllFields();
     if (!isValid) {
-      setSaveStatus('error');
-      toast({
-        title: "Validatie fout",
-        description: "Niet alle velden zijn ingevuld. Controleer de rode velden.",
-        variant: "destructive",
-      });
-      return false;
+      console.log('Validation failed, but continuing with auto-save to preserve user work');
+      // Continue with save even if validation fails for auto-save
     }
     
     try {
       setSaveStatus('saving');
       
-      // TODO: Implement actual save to database
-      // For now, simulate save
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('Starting auto-save for product:', productId);
       
+      // Transform product data to match backend schema
+      const saveData = {
+        product_data: {
+          code: product.code,
+          title: product.title,
+          description: product.description,
+          credits: product.credits,
+          cohort: product.cohort,
+          cost: product.cost,
+          valid_from: product.validFrom,
+        },
+        versions_data: product.versions.map(version => ({
+          id: version.id,  // Add version ID for backend lookup
+          version_number: version.version,
+          release_date: version.releaseDate,
+          rubric_levels: version.rubricLevels,
+          password: version.password,
+          is_enabled: version.isEnabled,
+          is_latest: version.isLatest,
+          assessment_components: version.assessmentOnderdelen.map(component => ({
+            id: isTemporaryId(component.id) ? undefined : component.id,  // Only include real database IDs
+            component: component.onderdeel,  // Changed from "name" to "component"
+            order: 1, // Will be calculated by backend
+            assessment_criteria: component.criteria.map(criteria => ({
+              id: isTemporaryId(criteria.id) ? undefined : criteria.id,  // Only include real database IDs
+              criteria: criteria.criteria,
+              order: 1, // Will be calculated by backend
+              assessment_levels: criteria.levels.map(level => ({
+                id: isTemporaryId(level.id) ? undefined : level.id,  // Only include real database IDs
+                label: level.label,
+                value: level.value,
+                order: 1, // Will be calculated by backend
+              }))
+            }))
+          }))
+        }))
+      };
+      
+      console.log('Sending save data:', saveData);
+      
+      const result = await api.saveProduct(productId, saveData);
+      
+      if (result.error) {
+        console.error('Save failed:', result.error);
+        throw new Error(result.error.detail);
+      }
+      
+      console.log('Save successful:', result);
       setSaveStatus('saved');
       setLastSavedData(JSON.stringify(product));
       
@@ -450,7 +579,7 @@ export default function EditExamPage() {
       setSaveStatus('error');
       toast({
         title: "Opslaan mislukt",
-        description: "Er is een fout opgetreden bij het opslaan.",
+        description: error instanceof Error ? error.message : "Er is een fout opgetreden bij het opslaan.",
         variant: "destructive",
       });
       return false;
@@ -479,6 +608,8 @@ export default function EditExamPage() {
   const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: 'criteria' | 'level', levelId?: string, value?: string) => {
     if (!product) return;
     
+    console.log('Updating criteria:', { versionId, onderdeelId, criteriaId, field, levelId, value });
+    
     // Validate field immediately
     if (field === 'criteria' && value !== undefined) {
       validateField(value, `criteria-${criteriaId}`);
@@ -488,7 +619,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updated = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -521,6 +652,8 @@ export default function EditExamPage() {
             : v
         )
       };
+      console.log('Updated product state after criteria change:', updated);
+      return updated;
     });
     
     // Check for changes and revert to draft if published
@@ -533,13 +666,33 @@ export default function EditExamPage() {
 
   // Redirect if not signed in or not admin
   useEffect(() => {
-    if (isLoaded && (!isSignedIn || (!roleLoading && !isAdmin))) {
-      router.push('/catalogus');
-    }
+    console.log('Auth state:', { isLoaded, isSignedIn, isAdmin, roleLoading, loading });
+    
+    // Add a small delay to ensure auth state is stable
+    const timeoutId = setTimeout(() => {
+      // Only redirect if we're fully loaded and the user is definitely not authorized
+      if (isLoaded && !roleLoading) {
+        if (!isSignedIn) {
+          console.log('Redirecting: User not signed in');
+          router.push('/catalogus');
+        } else if (isSignedIn && !isAdmin) {
+          console.log('Redirecting: User not admin');
+          router.push('/catalogus');
+        } else {
+          console.log('User authorized, staying on page');
+        }
+      } else {
+        console.log('Still loading auth state...');
+      }
+    }, 100); // 100ms delay
+    
+    return () => clearTimeout(timeoutId);
   }, [isLoaded, isSignedIn, isAdmin, roleLoading, router]);
 
   // Fetch product details
   useEffect(() => {
+    console.log('fetchProduct useEffect triggered:', { isSignedIn, productId });
+    
     const fetchProduct = async () => {
       if (!isSignedIn || !productId) return;
       
@@ -547,33 +700,80 @@ export default function EditExamPage() {
         setLoading(true);
         setError(null);
         
-        const token = await getToken();
-        const response = await fetch(`/api/catalog/products/${productId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch product: ${response.status}`);
+        const result = await api.getProduct(productId);
+        
+        if (result.error) {
+          throw new Error(result.error.detail);
         }
 
-        const data = await response.json();
-        setProduct(data.product);
-        setLastSavedData(JSON.stringify(data.product)); // Initialize as saved
+        if (!result.data) {
+          throw new Error('No product data received');
+        }
+
+        // Transform backend data to frontend format
+        const backendProduct = result.data as BackendProduct;
+        console.log('Received backend product data:', backendProduct);
+        console.log('Assessment components from backend:', backendProduct.versions?.[0]?.assessment_components);
+        
+        const transformedProduct: ExamProduct = {
+          id: backendProduct.id,
+          code: backendProduct.code,
+          title: backendProduct.title,
+          description: backendProduct.description,
+          credits: backendProduct.credits,
+          cohort: backendProduct.cohort,
+          version: backendProduct.version,
+          cost: backendProduct.cost,
+          validFrom: backendProduct.valid_from,
+          versions: backendProduct.versions?.map(version => ({
+            id: version.id,
+            version: version.version_number,
+            releaseDate: version.release_date,
+            isLatest: version.is_latest,
+            isEnabled: version.is_enabled,
+            password: version.password,
+            rubricLevels: version.rubric_levels,
+            documents: version.documents?.map(doc => ({
+              id: doc.id,
+              name: doc.name,
+              url: doc.download_url,
+              uploadedAt: doc.uploaded_at,
+              isPreview: doc.is_preview
+            })) || [],
+            assessmentOnderdelen: version.assessment_components?.map(component => ({
+              id: component.id,
+              onderdeel: component.component,  // Fixed: use component.component instead of component.name
+              criteria: component.assessment_criteria?.map(criteria => ({
+                id: criteria.id,
+                criteria: criteria.criteria,
+                levels: criteria.assessment_levels?.map(level => ({
+                  id: level.id,
+                  label: level.label,
+                  value: level.value
+                })) || []
+              })) || []
+            })) || []
+          })) || []
+        };
+
+        console.log('Transformed product data:', transformedProduct);
+        console.log('Transformed assessment onderdelen:', transformedProduct.versions?.[0]?.assessmentOnderdelen);
+        setProduct(transformedProduct);
+        setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
         
         // Initialize edit values
         setEditValues({
-          code: data.product.code,
-          title: data.product.title,
-          description: data.product.description,
-          credits: data.product.credits?.toString() || '',
-          cohort: data.product.cohort || ''
+          code: transformedProduct.code,
+          title: transformedProduct.title,
+          description: transformedProduct.description,
+          credits: transformedProduct.credits?.toString() || '',
+          cohort: transformedProduct.cohort || ''
         });
       } catch (err) {
         console.error('Error fetching product:', err);
         setError('Failed to load product details');
-        // For development, use mock data
+        
+        // For development, use mock data if API fails
         const mockProduct: ExamProduct = {
           id: productId,
           code: 'EX001',
@@ -689,7 +889,7 @@ export default function EditExamPage() {
       setSaving(true);
       const token = await getToken();
       const response = await fetch(`/api/catalog/products/${productId}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -815,23 +1015,92 @@ export default function EditExamPage() {
     setUploadingDocuments(true);
     
     try {
-      // Simulate file upload - replace with actual upload logic
-      const newDocuments: Document[] = files.map((file, index) => ({
-        id: generateId(),
-        name: file.name,
-        url: `/uploads/${file.name}`,
-        uploadedAt: new Date().toISOString(),
-        isPreview: false
-      }));
+      const uploadPromises = files.map(file => api.uploadDocument(versionId, file));
+      const results = await Promise.all(uploadPromises);
+      
+      const successfulUploads = results.filter(result => !result.error);
+      const failedUploads = results.filter(result => result.error);
+      
+      if (successfulUploads.length > 0) {
+        // Transform uploaded documents to match frontend format
+        const newDocuments: Document[] = successfulUploads.map(result => {
+          const docData = result.data as BackendVersionDocument;
+          return {
+            id: docData?.id || generateId(),
+            name: docData?.name || 'Unknown file',
+            url: docData?.download_url || '',
+            uploadedAt: docData?.uploaded_at || new Date().toISOString(),
+            isPreview: docData?.is_preview || false
+          };
+        });
 
-      // Add documents to the version
+        // Add documents to the version
+        setProduct(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            versions: prev.versions.map(v => 
+              v.id === versionId 
+                ? { ...v, documents: [...v.documents, ...newDocuments] }
+                : v
+            )
+          };
+        });
+
+        // Check for changes and revert to draft if published
+        checkForChangesAndRevert();
+
+        setSaveStatus('dirty');
+        debouncedSave.save();
+      }
+      
+      if (successfulUploads.length > 0) {
+        toast({
+          title: "Documenten geüpload",
+          description: `${successfulUploads.length} document(en) succesvol geüpload.`,
+        });
+      }
+      
+      if (failedUploads.length > 0) {
+        toast({
+          title: "Upload fouten",
+          description: `${failedUploads.length} document(en) konden niet worden geüpload.`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Upload mislukt",
+        description: "Er is een fout opgetreden bij het uploaden van de documenten.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingDocuments(false);
+    }
+  };
+
+  const removeDocument = async (versionId: string, documentId: string) => {
+    if (!product) return;
+
+    try {
+      const result = await api.deleteDocument(documentId);
+      
+      if (result.error) {
+        toast({
+          title: "Verwijderen mislukt",
+          description: result.error.detail,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setProduct(prev => {
         if (!prev) return prev;
         return {
           ...prev,
           versions: prev.versions.map(v => 
             v.id === versionId 
-              ? { ...v, documents: [...v.documents, ...newDocuments] }
+              ? { ...v, documents: v.documents.filter(d => d.id !== documentId) }
               : v
           )
         };
@@ -844,88 +1113,78 @@ export default function EditExamPage() {
       debouncedSave.save();
 
       toast({
-        title: "Documenten geüpload",
-        description: `${files.length} document(en) succesvol geüpload.`,
+        title: "Document verwijderd",
+        description: "Document is succesvol verwijderd.",
       });
     } catch (error) {
       toast({
-        title: "Upload mislukt",
-        description: "Er is een fout opgetreden bij het uploaden van de documenten.",
+        title: "Verwijderen mislukt",
+        description: "Er is een fout opgetreden bij het verwijderen van het document.",
         variant: "destructive",
       });
-    } finally {
-      setUploadingDocuments(false);
     }
   };
 
-  const removeDocument = (versionId: string, documentId: string) => {
+  const setPreviewDocument = async (versionId: string, documentId: string) => {
     if (!product) return;
 
-    setProduct(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        versions: prev.versions.map(v => 
-          v.id === versionId 
-            ? { ...v, documents: v.documents.filter(d => d.id !== documentId) }
-            : v
-        )
-      };
-    });
+    try {
+      // Find the current document to determine new preview state
+      const currentVersion = product.versions.find(v => v.id === versionId);
+      const currentDocument = currentVersion?.documents.find(d => d.id === documentId);
+      const newPreviewState = !currentDocument?.isPreview;
 
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
+      const result = await api.setPreviewDocument(documentId, newPreviewState);
+      
+      if (result.error) {
+        toast({
+          title: "Preview bijwerken mislukt",
+          description: result.error.detail,
+          variant: "destructive",
+        });
+        return;
+      }
 
-    setSaveStatus('dirty');
-    debouncedSave.save();
+      setProduct(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          versions: prev.versions.map(v => 
+            v.id === versionId 
+              ? {
+                  ...v,
+                  documents: v.documents.map(doc => {
+                    const isCurrentlyPreview = doc.id === documentId;
+                    return {
+                      ...doc,
+                      isPreview: isCurrentlyPreview ? newPreviewState : false
+                    };
+                  })
+                }
+              : v
+          )
+        };
+      });
 
-    toast({
-      title: "Document verwijderd",
-      description: "Document is succesvol verwijderd.",
-    });
-  };
+      // Check for changes and revert to draft if published
+      checkForChangesAndRevert();
 
-  const setPreviewDocument = (versionId: string, documentId: string) => {
-    if (!product) return;
+      setSaveStatus('dirty');
+      debouncedSave.save();
 
-    setProduct(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        versions: prev.versions.map(v => 
-          v.id === versionId 
-            ? {
-                ...v,
-                documents: v.documents.map(doc => {
-                  const isCurrentlyPreview = doc.id === documentId;
-                  return {
-                    ...doc,
-                    isPreview: isCurrentlyPreview ? !doc.isPreview : false
-                  };
-                })
-              }
-            : v
-        )
-      };
-    });
-
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
-
-    setSaveStatus('dirty');
-    debouncedSave.save();
-
-    // Find the document to get its current state for the toast message
-    const version = product.versions.find(v => v.id === versionId);
-    const document = version?.documents.find(d => d.id === documentId);
-    const isNowPreview = document ? !document.isPreview : false;
-
-    toast({
-      title: isNowPreview ? "Preview ingeschakeld" : "Preview uitgeschakeld",
-      description: isNowPreview 
-        ? "Document is nu beschikbaar voor gratis preview." 
-        : "Document is niet meer beschikbaar voor gratis preview.",
-    });
+      toast({
+        title: newPreviewState ? "Preview ingeschakeld" : "Preview uitgeschakeld",
+        description: newPreviewState 
+          ? "Document is nu beschikbaar voor gratis preview." 
+          : "Document is niet meer beschikbaar voor gratis preview.",
+      });
+    } catch (error) {
+      toast({
+        title: "Preview bijwerken mislukt",
+        description: "Er is een fout opgetreden bij het bijwerken van de preview.",
+        variant: "destructive",
+      });
+    }
   };
 
   const [showVersionDialog, setShowVersionDialog] = useState(false);
@@ -1014,39 +1273,88 @@ export default function EditExamPage() {
     }, 2000);
   };
 
-  const regeneratePassword = (versionId: string) => {
+  const regeneratePassword = async (versionId: string) => {
     if (!product) return;
     
-    const newPassword = generatePassword();
-    
-    setProduct(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        versions: prev.versions.map(v => 
-          v.id === versionId 
-            ? { ...v, password: newPassword }
-            : v
-        )
-      };
-    });
+    try {
+      const result = await api.regeneratePassword(versionId);
+      
+      if (result.error) {
+        throw new Error(result.error.detail);
+      }
 
-    setSaveStatus('dirty');
-    debouncedSave.save();
+      // Update the product state with the new password from the backend
+      const passwordData = result.data as PasswordResponse;
+      setProduct(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          versions: prev.versions.map(v => 
+            v.id === versionId 
+              ? { ...v, password: passwordData?.password || generatePassword() }
+              : v
+          )
+        };
+      });
 
-    toast({
-      title: "Nieuwe protector gegenereerd",
-      description: "De spreadsheet protector is succesvol vernieuwd.",
-    });
+      setSaveStatus('dirty');
+      debouncedSave.save();
+
+      toast({
+        title: "Nieuwe protector gegenereerd",
+        description: "De spreadsheet protector is succesvol vernieuwd.",
+      });
+    } catch (error) {
+      console.error('Error regenerating password:', error);
+      toast({
+        title: "Fout",
+        description: error instanceof Error ? error.message : "Er is een fout opgetreden bij het genereren van de protector.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Check if version meets publication requirements
   const isVersionReadyForPublication = (version: Version): boolean => {
+    // Check for assessment components
     const hasOnderdelen = version.assessmentOnderdelen.length > 0;
-    const hasCriteria = version.assessmentOnderdelen.some(onderdeel => onderdeel.criteria.length > 0);
-    const hasDocuments = version.documents.length >= 3;
+    if (!hasOnderdelen) return false;
     
-    return hasOnderdelen && hasCriteria && hasDocuments;
+    // Check for criteria in each component
+    const hasCriteria = version.assessmentOnderdelen.every(onderdeel => onderdeel.criteria.length > 0);
+    if (!hasCriteria) return false;
+    
+    // Check for assessment levels in each criteria
+    const hasLevels = version.assessmentOnderdelen.every(onderdeel => 
+      onderdeel.criteria.every(criteria => criteria.levels.length > 0)
+    );
+    if (!hasLevels) return false;
+    
+    // Check that all levels have values
+    const allLevelsHaveValues = version.assessmentOnderdelen.every(onderdeel => 
+      onderdeel.criteria.every(criteria => 
+        criteria.levels.every(level => level.value && level.value.trim() !== '')
+      )
+    );
+    if (!allLevelsHaveValues) return false;
+    
+    // Check for documents (at least 3)
+    const hasDocuments = version.documents.length >= 3;
+    if (!hasDocuments) return false;
+    
+    // Check version number
+    const hasVersionNumber = version.version && version.version.trim() !== '';
+    if (!hasVersionNumber) return false;
+    
+    // Check release date
+    const hasReleaseDate = version.releaseDate && version.releaseDate.trim() !== '';
+    if (!hasReleaseDate) return false;
+    
+    // Check rubric levels (between 2-6)
+    const hasValidRubricLevels = version.rubricLevels >= 2 && version.rubricLevels <= 6;
+    if (!hasValidRubricLevels) return false;
+    
+    return true;
   };
 
   // Check if product is ready for publication
@@ -1229,7 +1537,7 @@ export default function EditExamPage() {
 
     // If trying to enable, check if version is ready for publication
     if (isEnabled && !isVersionReadyForPublication(version)) {
-      console.log('Validation failed for version:', versionId);
+      console.log('Validation failed for version:', versionId, 'Version data:', version);
       
       // Show incomplete feedback
       setIncompleteVersions(prev => new Set([...prev, versionId]));
@@ -1243,9 +1551,50 @@ export default function EditExamPage() {
         });
       }, 3000);
       
+      // Get specific validation errors
+      const errors = [];
+      if (version.assessmentOnderdelen.length === 0) {
+        errors.push("minimaal 1 onderdeel");
+      } else {
+        const onderdeelWithoutCriteria = version.assessmentOnderdelen.find(o => o.criteria.length === 0);
+        if (onderdeelWithoutCriteria) {
+          errors.push("elk onderdeel moet minimaal 1 criterium hebben");
+        } else {
+          const criteriaWithoutLevels = version.assessmentOnderdelen.some(o => 
+            o.criteria.some(c => c.levels.length === 0)
+          );
+          if (criteriaWithoutLevels) {
+            errors.push("elk criterium moet beoordelingsniveaus hebben");
+          } else {
+            const levelsWithoutValues = version.assessmentOnderdelen.some(o => 
+              o.criteria.some(c => c.levels.some(l => !l.value || l.value.trim() === ''))
+            );
+            if (levelsWithoutValues) {
+              errors.push("alle beoordelingsniveaus moeten ingevuld zijn");
+            }
+          }
+        }
+      }
+      
+      if (version.documents.length < 3) {
+        errors.push("minimaal 3 documenten");
+      }
+      
+      if (!version.version || version.version.trim() === '') {
+        errors.push("versienummer is verplicht");
+      }
+      
+      if (!version.releaseDate || version.releaseDate.trim() === '') {
+        errors.push("release datum is verplicht");
+      }
+      
+      if (version.rubricLevels < 2 || version.rubricLevels > 6) {
+        errors.push("beoordelingsniveaus moeten tussen 2-6 liggen");
+      }
+      
       toast({
         title: "Versie niet klaar voor publicatie",
-        description: "Zorg ervoor dat de versie minimaal 1 onderdeel, 1 criterium en 3 documenten heeft.",
+        description: `Zorg ervoor dat: ${errors.join(', ')}.`,
         variant: "destructive",
       });
       
@@ -1255,14 +1604,14 @@ export default function EditExamPage() {
     }
     
     try {
-      // For now, simulate backend call with mock data
-      // TODO: Replace with actual API call when backend is ready
-      console.log('Simulating backend call for version toggle:', { versionId, isEnabled });
+      // Call the real API
+      const result = await api.toggleVersionStatus(versionId, isEnabled);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      if (result.error) {
+        throw new Error(result.error.detail);
+      }
 
-      // Update the main product state (simulating successful backend response)
+      // Update the main product state
       setProduct(prev => prev ? {
         ...prev,
         versions: prev.versions.map(v => 
@@ -1289,7 +1638,7 @@ export default function EditExamPage() {
       
       toast({
         title: "Fout",
-        description: "Er is een fout opgetreden bij het bijwerken van de versie status.",
+        description: err instanceof Error ? err.message : "Er is een fout opgetreden bij het bijwerken van de versie status.",
         variant: "destructive",
       });
     }
@@ -1741,17 +2090,15 @@ export default function EditExamPage() {
                                              <AccordionTrigger className="px-4 py-3 hover:no-underline">
                                                <div className="flex items-center justify-between w-full pr-4">
                                                  <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
-                                                 <Button
-                                                   size="sm"
-                                                   variant="outline"
+                                                 <div
                                                    onClick={(e) => {
                                                      e.stopPropagation();
                                                      removeCriteria(version.id, onderdeel.id, criteria.id);
                                                    }}
-                                                   className="text-red-600 hover:text-red-700"
+                                                   className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 text-red-600 hover:text-red-700 cursor-pointer"
                                                  >
                                                    <Trash2 className="h-4 w-4" />
-                                                 </Button>
+                                                 </div>
                                                </div>
                                              </AccordionTrigger>
                                              <AccordionContent className="px-4 pb-4">
@@ -1797,14 +2144,12 @@ export default function EditExamPage() {
                                            {/* Criteria Row Header */}
                                            <div className="flex items-center justify-between mb-3">
                                              <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
-                                             <Button
-                                               size="sm"
-                                               variant="outline"
+                                             <div
                                                onClick={() => handleDeleteCriteria(version.id, onderdeel.id, criteria.id)}
-                                               className="text-red-600 hover:text-red-700"
+                                               className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 text-red-600 hover:text-red-700 cursor-pointer"
                                              >
                                                <Trash2 className="h-4 w-4" />
-                                             </Button>
+                                             </div>
                                            </div>
 
                                            {/* Dynamic Grid Layout for Desktop */}
