@@ -26,6 +26,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
     if (href === '/workflows') return pathname.startsWith('/workflows');
     if (href === '/users') return pathname.startsWith('/users');
     if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
+    if (href === '/admin/vouchers') return pathname.startsWith('/admin/vouchers');
     if (href === '/system') return pathname.startsWith('/system');
     if (href === '/analytics') return pathname.startsWith('/analytics');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
@@ -123,6 +124,18 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                           }
                         >
                           Orders
+                        </Button>
+                      </Link>
+                      <Link href="/admin/vouchers">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/admin/vouchers')
+                              ? "text-examen-cyan font-bold underline underline-offset-4"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors"
+                          }
+                        >
+                          Vouchers
                         </Button>
                       </Link>
                       <Link href="/system">
@@ -270,6 +283,18 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                           }
                         >
                           Orders
+                        </Button>
+                      </Link>
+                      <Link href="/admin/vouchers">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/admin/vouchers')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          Vouchers
                         </Button>
                       </Link>
                       <Link href="/system">

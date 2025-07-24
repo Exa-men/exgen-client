@@ -88,8 +88,8 @@ export default function CatalogusPage() {
     title: '',
     description: '',
     cost: '',
-    validFrom: '2025-16',
-    version: '1.0',
+    validFrom: '2025-26',
+    version: '4.0',
   });
   const [savingNewProduct, setSavingNewProduct] = useState(false);
 
@@ -105,8 +105,8 @@ export default function CatalogusPage() {
       title: '',
       description: '',
       cost: '',
-      validFrom: '2025-16',
-      version: '1.0',
+      validFrom: '2025-26',
+      version: '4.0',
     });
   };
 
@@ -271,6 +271,8 @@ export default function CatalogusPage() {
       ));
       setPurchaseConfirmId(null);
       console.log('✅ Purchase successful, remaining credits:', result.remainingCredits);
+      // Refresh credit balance to update header
+      await refreshCredits();
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');
