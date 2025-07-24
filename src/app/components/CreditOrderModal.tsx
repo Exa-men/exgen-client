@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, Loader2, CreditCard, Building, User, MapPin, FileText } from 'lucide-react';
+import { X, Check, Loader2, CreditCard, Building, User, MapPin, FileText, Gift } from 'lucide-react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,6 +11,7 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '../../lib/utils';
+import { useCredits } from '../contexts/CreditContext';
 
 interface CreditPackage {
   id: string;
@@ -50,7 +51,7 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
-  const [step, setStep] = useState<'packages' | 'form' | 'success'>('packages');
+  const [step, setStep] = useState<'packages' | 'voucher' | 'form' | 'success'>('packages');
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [orderForm, setOrderForm] = useState<CreditOrderForm>({
     package_id: '',
@@ -64,6 +65,17 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
     country: 'Netherlands',
     terms_accepted: false
   });
+
+  // Voucher redemption state
+  const { refreshCredits } = useCredits();
+  const [voucherCode, setVoucherCode] = useState('');
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [isVoucherFocused, setIsVoucherFocused] = useState(false);
+  const [redeemResult, setRedeemResult] = useState<{
+    success: boolean;
+    message: string;
+    creditsAdded?: number;
+  } | null>(null);
 
   // Fetch credit packages
   useEffect(() => {
@@ -155,7 +167,73 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
       country: 'Netherlands',
       terms_accepted: false
     });
+    // Reset voucher state
+    setVoucherCode('');
+    setRedeemResult(null);
+    setIsVoucherFocused(false);
     onClose();
+  };
+
+  const handleVoucherRedeem = async () => {
+    if (!voucherCode.trim()) {
+      setRedeemResult({
+        success: false,
+        message: 'Voer een voucher code in'
+      });
+      return;
+    }
+
+    setIsRedeeming(true);
+    setRedeemResult(null);
+
+    try {
+      const response = await fetch('/api/v1/vouchers/redeem', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: voucherCode.trim().toUpperCase()
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setRedeemResult({
+          success: true,
+          message: data.message,
+          creditsAdded: data.credits_added
+        });
+        setVoucherCode('');
+        // Refresh user credits
+        await refreshCredits();
+        // Close modal after successful redemption
+        setTimeout(() => {
+          handleClose();
+        }, 2000);
+      } else {
+        setRedeemResult({
+          success: false,
+          message: data.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
+        });
+      }
+    } catch (error) {
+      console.error('Error redeeming voucher:', error);
+      setRedeemResult({
+        success: false,
+        message: 'Er is een fout opgetreden bij het inwisselen van de voucher'
+      });
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isRedeeming) {
+      handleVoucherRedeem();
+    }
   };
 
   if (!isOpen) return null;
@@ -167,6 +245,7 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
             {step === 'packages' && 'Kies een credit pakket'}
+            {step === 'voucher' && 'Voucher inwisselen'}
             {step === 'form' && 'Vul bestellingsgegevens in'}
             {step === 'success' && 'Bestelling geplaatst!'}
           </h2>
@@ -218,6 +297,119 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
                   ))}
                 </div>
               )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-2 text-gray-500">Of wissel een voucher in</span>
+                </div>
+              </div>
+
+              {/* Voucher Option */}
+              <Card
+                className="cursor-pointer transition-all hover:shadow-md border-green-200 hover:border-green-300"
+                onClick={() => setStep('voucher')}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-green-600" />
+                      <CardTitle className="text-lg text-green-700">Voucher inwisselen</CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="text-sm bg-green-100 text-green-700">
+                      Gratis
+                    </Badge>
+                  </div>
+                  <p className="text-gray-600 text-sm">Heb je een voucher code? Wissel deze hier in voor credits.</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm text-green-600 font-medium">
+                    Direct credits toevoegen
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {step === 'voucher' && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="voucher-code" className="text-sm font-medium text-gray-700">
+                    Voucher Code
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="voucher-code"
+                      type="text"
+                      placeholder={isVoucherFocused ? "" : "Voer je voucher code in"}
+                      value={voucherCode}
+                      onChange={(e) => {
+                        setVoucherCode(e.target.value.toUpperCase());
+                        if (redeemResult) setRedeemResult(null);
+                      }}
+                      onFocus={() => setIsVoucherFocused(true)}
+                      onBlur={() => setIsVoucherFocused(false)}
+                      onKeyPress={handleKeyPress}
+                      className="flex-1 font-mono text-center tracking-wider"
+                      disabled={isRedeeming}
+                    />
+                    <Button
+                      onClick={handleVoucherRedeem}
+                      disabled={isRedeeming || !voucherCode.trim()}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {isRedeeming ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Inwisselen'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {redeemResult && (
+                  <div className={`p-3 rounded-lg border ${
+                    redeemResult.success 
+                      ? 'bg-green-50 border-green-200 text-green-800' 
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {redeemResult.success ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-600" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {redeemResult.message}
+                      </span>
+                    </div>
+                    {redeemResult.success && redeemResult.creditsAdded && (
+                      <div className="mt-1 text-sm">
+                        <span className="font-medium">{redeemResult.creditsAdded} credits</span> zijn toegevoegd aan je account.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p>• Vouchers kunnen maar één keer worden gebruikt</p>
+                  <p>• Vouchers hebben een vervaldatum</p>
+                  <p>• Credits worden direct toegevoegd aan je account</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setStep('packages')}
+                >
+                  Terug naar opties
+                </Button>
+              </div>
             </div>
           )}
 
