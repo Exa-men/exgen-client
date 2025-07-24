@@ -15,6 +15,7 @@ import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import CreditBanner from '../components/CreditBanner';
 import CreditOrderModal from '../components/CreditOrderModal';
+import VoucherRedemption from '../components/VoucherRedemption';
 import { useCredits } from '../contexts/CreditContext';
 import { cn } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
@@ -517,6 +518,7 @@ export default function CatalogusPage() {
 
         {/* Credit Banner */}
         <CreditBanner onOrderCredits={() => setCreditOrderModalOpen(true)} />
+        <VoucherRedemption className="mb-6" />
         
         {/* Error Message */}
         {showCreditsError ? (
