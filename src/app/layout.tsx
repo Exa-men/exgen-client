@@ -32,6 +32,23 @@ export default function RootLayout({
         >
           <CreditProvider>
             {children}
+            {/* Railway deployment indicator */}
+            {process.env.NODE_ENV === 'production' && (
+              <div style={{
+                position: 'fixed',
+                bottom: '10px',
+                right: '10px',
+                background: '#6366f1',
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                zIndex: 9999,
+                opacity: 0.7
+              }}>
+                🚂 Railway
+              </div>
+            )}
           </CreditProvider>
         </body>
       </html>
