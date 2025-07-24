@@ -8,8 +8,13 @@ import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useRole } from '../../hooks/use-role';
+import CreditDisplay from './CreditDisplay';
 
-const UnifiedHeader = () => {
+interface UnifiedHeaderProps {
+  onOrderCredits?: () => void;
+}
+
+const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
   const { isSignedIn, isLoaded } = useUser();
   const { isAdmin } = useRole();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -20,6 +25,7 @@ const UnifiedHeader = () => {
     if (href === '/catalogus') return pathname.startsWith('/catalogus');
     if (href === '/workflows') return pathname.startsWith('/workflows');
     if (href === '/users') return pathname.startsWith('/users');
+    if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
     if (href === '/system') return pathname.startsWith('/system');
     if (href === '/analytics') return pathname.startsWith('/analytics');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
@@ -107,6 +113,18 @@ const UnifiedHeader = () => {
                           Users
                         </Button>
                       </Link>
+                      <Link href="/admin/credit-orders">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/admin/credit-orders')
+                              ? "text-examen-cyan font-bold underline underline-offset-4"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors"
+                          }
+                        >
+                          Orders
+                        </Button>
+                      </Link>
                       <Link href="/system">
                         <Button
                           variant="ghost"
@@ -140,7 +158,12 @@ const UnifiedHeader = () => {
 
           {/* User profile or auth buttons on the right (desktop only) */}
           <div className="hidden md:flex items-center flex-shrink-0 gap-4">
-            {isLoaded && isSignedIn && <UserButton afterSignOutUrl="/" />}
+            {isLoaded && isSignedIn && (
+              <>
+                <CreditDisplay onOrderCredits={onOrderCredits} />
+                <UserButton afterSignOutUrl="/" />
+              </>
+            )}
             {isLoaded && !isSignedIn && (
               <>
                 <SignUpButton mode="modal">
@@ -237,6 +260,18 @@ const UnifiedHeader = () => {
                           Users
                         </Button>
                       </Link>
+                      <Link href="/admin/credit-orders">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/admin/credit-orders')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          Orders
+                        </Button>
+                      </Link>
                       <Link href="/system">
                         <Button
                           variant="ghost"
@@ -308,7 +343,8 @@ const UnifiedHeader = () => {
                           Catalogus
                         </Button>
                       </Link>
-                      <div className="flex justify-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <CreditDisplay showLabel onOrderCredits={onOrderCredits} />
                         <UserButton afterSignOutUrl="/" />
                       </div>
                     </>

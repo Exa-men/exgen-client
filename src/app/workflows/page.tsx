@@ -364,7 +364,7 @@ export default function WorkflowsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <UnifiedHeader />
+      <UnifiedHeader onOrderCredits={() => {}} />
 
       {/* Modal overlay for sign-in */}
       {!isSignedIn && (

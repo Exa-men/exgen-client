@@ -13,6 +13,9 @@ import PDFViewer from '../components/PDFViewer';
 import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
+import CreditBanner from '../components/CreditBanner';
+import CreditOrderModal from '../components/CreditOrderModal';
+import { useCredits } from '../contexts/CreditContext';
 import { cn } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { useRole } from '../../hooks/use-role';
@@ -45,6 +48,7 @@ export default function CatalogusPage() {
   const { getToken } = useAuth();
   const router = useRouter();
   const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  const { refreshCredits } = useCredits();
   
   const [products, setProducts] = useState<ExamProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +78,9 @@ export default function CatalogusPage() {
   const [deleting, setDeleting] = useState(false);
   // State for purchase terms checkbox
   const [purchaseTermsChecked, setPurchaseTermsChecked] = useState(false);
+  
+  // State for credit order modal
+  const [creditOrderModalOpen, setCreditOrderModalOpen] = useState(false);
 
   // State for new product input row
   const [newProduct, setNewProduct] = useState({
@@ -450,7 +457,7 @@ export default function CatalogusPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader />
+      <UnifiedHeader onOrderCredits={() => setCreditOrderModalOpen(true)} />
       
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
@@ -508,18 +515,21 @@ export default function CatalogusPage() {
           </button>
         </div>
 
+        {/* Credit Banner */}
+        <CreditBanner onOrderCredits={() => setCreditOrderModalOpen(true)} />
+        
         {/* Error Message */}
         {showCreditsError ? (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex flex-row items-center justify-between">
             <span className="text-red-600">
               Je hebt onvoldoende credits. {user && typeof user.publicMetadata?.credits === 'number' ? `Je hebt nog ${user.publicMetadata.credits} credits.` : ''}
             </span>
-            <a
-              href="/credits-bestellen"
+            <button
+              onClick={() => setCreditOrderModalOpen(true)}
               className="px-4 py-2 bg-examen-cyan text-white rounded hover:bg-examen-cyan/90 transition-colors ml-4"
             >
               Bestel Credits
-            </a>
+            </button>
           </div>
         ) : error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -1000,6 +1010,18 @@ export default function CatalogusPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Credit Order Modal */}
+      <CreditOrderModal
+        isOpen={creditOrderModalOpen}
+        onClose={() => setCreditOrderModalOpen(false)}
+        onSuccess={async () => {
+          // Don't close modal immediately - let user see success screen first
+          // The modal will be closed when user clicks "Sluiten" button
+          // Refresh credits for the user
+          await refreshCredits();
+        }}
+      />
     </div>
   );
 } 
