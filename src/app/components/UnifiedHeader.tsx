@@ -122,7 +122,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                               : "text-gray-700 hover:text-examen-cyan transition-colors"
                           }
                         >
-                          Credit Orders
+                          Orders
                         </Button>
                       </Link>
                       <Link href="/system">
@@ -269,7 +269,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                               : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
                           }
                         >
-                          Credit Orders
+                          Orders
                         </Button>
                       </Link>
                       <Link href="/system">
