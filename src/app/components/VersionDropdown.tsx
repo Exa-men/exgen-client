@@ -23,7 +23,7 @@ interface VersionDropdownProps {
   currentVersion: string;
   isPurchased: boolean;
   onVersionSelect?: (version: string) => void;
-  onDownload?: (version: string, downloadUrl: string) => void;
+  onDownload?: (version: string, versionId?: string) => void;
 }
 
 export default function VersionDropdown({ 
@@ -40,8 +40,8 @@ export default function VersionDropdown({
     onVersionSelect?.(version);
   };
 
-  const handleDownload = (version: string, downloadUrl: string) => {
-    onDownload?.(version, downloadUrl);
+  const handleDownload = (version: string, versionId?: string) => {
+    onDownload?.(version, versionId);
   };
 
   const formatDate = (dateString: string) => {
@@ -102,14 +102,14 @@ export default function VersionDropdown({
               </span>
             </div>
             
-            {version.downloadUrl && (
+            {isPurchased && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 ml-2"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDownload(version.version, version.downloadUrl!);
+                  handleDownload(version.version);
                 }}
               >
                 <Download className="h-3 w-3" />

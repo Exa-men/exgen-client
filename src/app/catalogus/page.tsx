@@ -62,6 +62,8 @@ export default function CatalogusPage() {
   // State for purchase confirmation modal
   const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  // State for download loading
+  const [downloadingProduct, setDownloadingProduct] = useState<string | null>(null);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ExamProduct | null>(null);
   const [filter, setFilter] = useState<'alles' | 'ingekocht' | 'beschikbaar'>('alles');
@@ -280,14 +282,64 @@ export default function CatalogusPage() {
     router.push(`/catalogus/edit/${product.id}`);
   };
 
-  const handleDownload = (downloadUrl: string) => {
-    // Trigger download
-    window.open(downloadUrl, '_blank');
+  const handleDownload = async (productId: string, versionId?: string) => {
+    try {
+      setDownloadingProduct(productId);
+      setError(null);
+      const token = await getToken();
+      
+      // Construct download URL
+      let downloadUrl = `/api/catalog/download/${productId}`;
+      if (versionId) {
+        downloadUrl += `?version_id=${versionId}`;
+      }
+      
+      // Add headers using fetch instead of direct link
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      
+      // Get the blob from the response
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      
+      // Get filename from response headers or generate one
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'product-package.zip';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename=(.+)/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/"/g, '');
+        }
+      }
+      
+      downloadLink.download = filename;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Download error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download product package');
+    } finally {
+      setDownloadingProduct(null);
+    }
   };
 
-  const handleVersionDownload = (version: string, downloadUrl: string) => {
-    console.log(`📥 Downloading version ${version} from: ${downloadUrl}`);
-    window.open(downloadUrl, '_blank');
+  const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
+    console.log(`📥 Downloading version ${version} for product ${productId}`);
+    await handleDownload(productId, versionId);
   };
 
   const handleOpenFeedback = (product: ExamProduct) => {
@@ -653,7 +705,7 @@ export default function CatalogusPage() {
                               versions={product.versions}
                               currentVersion={product.version}
                               isPurchased={product.isPurchased}
-                              onDownload={handleVersionDownload}
+                              onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
                             />
                           </TableCell>
                           <TableCell className="align-top">
@@ -673,11 +725,16 @@ export default function CatalogusPage() {
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => handleDownload(product.downloadUrl!)}
+                                  onClick={() => handleDownload(product.id)}
+                                  disabled={downloadingProduct === product.id}
                                   className="flex items-center justify-center w-full bg-green-600 hover:bg-green-700"
                                 >
-                                  <Download className="h-4 w-4 mr-1" />
-                                  Downloaden
+                                  {downloadingProduct === product.id ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4 mr-1" />
+                                  )}
+                                  {downloadingProduct === product.id ? 'Downloaden...' : 'Downloaden'}
                                 </Button>
                               ) : (
                                 <Button
@@ -770,7 +827,7 @@ export default function CatalogusPage() {
                     </div>
                     <div className="flex items-center gap-4 text-sm mb-1">
                       <span className="font-semibold">{formatCredits(product.cost)}</span>
-                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={handleVersionDownload} /></span>
+                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)} /></span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
                       {!product.isPurchased && (
@@ -788,11 +845,16 @@ export default function CatalogusPage() {
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleDownload(product.downloadUrl!)}
+                          onClick={() => handleDownload(product.id)}
+                          disabled={downloadingProduct === product.id}
                           className="flex items-center justify-center w-full bg-green-600 hover:bg-green-700"
                         >
-                          <Download className="h-4 w-4 mr-1" />
-                          Downloaden
+                          {downloadingProduct === product.id ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-1" />
+                          )}
+                          {downloadingProduct === product.id ? 'Downloaden...' : 'Downloaden'}
                         </Button>
                       ) : (
                         <Button
