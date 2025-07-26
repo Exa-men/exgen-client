@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit } from 'lucide-react';
+import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
-import UnifiedHeader from '../components/UnifiedHeader';
+
 import PDFViewer from '../components/PDFViewer';
 import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
@@ -56,6 +56,7 @@ export default function CatalogusPage() {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const observerRef = useRef<HTMLDivElement | null>(null);
+  const mobileObserverRef = useRef<HTMLDivElement | null>(null);
   const PAGE_SIZE = 10;
   const [error, setError] = useState<string | null>(null);
   const [showCreditsError, setShowCreditsError] = useState(false);
@@ -96,6 +97,10 @@ export default function CatalogusPage() {
   // Handler for input changes
   const handleNewProductChange = (field: string, value: string) => {
     setNewProduct((prev) => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (error) {
+      setError(null);
+    }
   };
 
   // Handler for clearing input fields
@@ -133,10 +138,22 @@ export default function CatalogusPage() {
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to add product');
+        if (response.status === 409 && errorData.detail === "Product code already exists") {
+          throw new Error(`Product code "${newProduct.code}" bestaat al. Gebruik een unieke code.`);
+        }
+        throw new Error(errorData.detail || errorData.error || 'Failed to add product');
       }
       const created = await response.json();
-      setProducts((prev) => [created, ...prev]);
+      
+      // Check if product already exists to prevent duplicates
+      setProducts((prev) => {
+        const exists = prev.some(product => product.id === created.id);
+        if (exists) {
+          return prev; // Don't add if already exists
+        }
+        return [created, ...prev];
+      });
+      
       handleClearNewProduct();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add product');
@@ -154,23 +171,38 @@ export default function CatalogusPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  // Fetch products from backend with pagination
-  const fetchProducts = async (pageNum = 1, append = false) => {
+  const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
     if (!isSignedIn) return;
+    
     try {
       if (pageNum === 1) setLoading(true);
       setError(null);
       const token = await getToken();
-      const response = await fetch(`/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`, {
+      const url = `/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
+      
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
+      
       if (!response.ok) {
         throw new Error(`Failed to fetch products: ${response.status}`);
       }
+      
       const data = await response.json();
-      setProducts(prev => append ? [...prev, ...(data.products || [])] : (data.products || []));
+      
+      setProducts(prev => {
+        if (append) {
+          // When appending, filter out any duplicates
+          const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
+          const newProducts = (data.products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
+          return [...prev, ...newProducts];
+        } else {
+          // When replacing, use the new data directly
+          return (data.products || []);
+        }
+      });
       setHasMore(data.hasMore);
       setPage(data.page);
     } catch (err) {
@@ -183,29 +215,39 @@ export default function CatalogusPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [isSignedIn, getToken, searchTerm, filter, PAGE_SIZE]);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
     fetchProducts(1, false);
-  }, [isSignedIn, getToken, backendUrl, searchTerm, filter]);
+  }, [fetchProducts]);
 
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
-    if (!hasMore || loadingMore || loading) return;
+    if (!hasMore || loadingMore || loading) {
+      return;
+    }
+    
     const observer = new window.IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         setLoadingMore(true);
         fetchProducts(page + 1, true);
       }
     }, { threshold: 1 });
+    
+    // Observe both desktop and mobile observer refs
     if (observerRef.current) {
       observer.observe(observerRef.current);
     }
+    if (mobileObserverRef.current) {
+      observer.observe(mobileObserverRef.current);
+    }
+    
     return () => {
       if (observerRef.current) observer.unobserve(observerRef.current);
+      if (mobileObserverRef.current) observer.unobserve(mobileObserverRef.current);
     };
-  }, [hasMore, loadingMore, loading, page, isSignedIn, getToken, backendUrl, searchTerm, filter]);
+  }, [hasMore, loadingMore, loading, page, fetchProducts]);
 
   // Filtered and sorted products (sorting only, filtering is now backend-driven)
   const filteredAndSortedProducts = useMemo(() => {
@@ -459,8 +501,6 @@ export default function CatalogusPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader onOrderCredits={() => setCreditOrderModalOpen(true)} />
-      
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Exameninstrumenten</h1>
@@ -520,22 +560,39 @@ export default function CatalogusPage() {
         {/* Credit Banner */}
         <CreditBanner onOrderCredits={() => setCreditOrderModalOpen(true)} />
         
-        {/* Error Message */}
-        {showCreditsError ? (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex flex-row items-center justify-between">
-            <span className="text-red-600">
-              Je hebt onvoldoende credits. {user && typeof user.publicMetadata?.credits === 'number' ? `Je hebt nog ${user.publicMetadata.credits} credits.` : ''}
-            </span>
-            <button
-              onClick={() => setCreditOrderModalOpen(true)}
-              className="px-4 py-2 bg-examen-cyan text-white rounded hover:bg-examen-cyan/90 transition-colors ml-4"
-            >
-              Bestel Credits
-            </button>
+        {/* Error Messages */}
+        {showCreditsError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <div>
+                  <h3 className="text-sm font-medium text-red-800">
+                    Onvoldoende credits beschikbaar
+                  </h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    Je hebt momenteel onvoldoende credits om dit examen te kopen. Bestel credits om door te gaan.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => setCreditOrderModalOpen(true)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                size="sm"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Credits Bestellen
+              </Button>
+            </div>
           </div>
-        ) : error && (
+        )}
+        
+        {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600">{error}</p>
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <p className="text-red-600">{error}</p>
+            </div>
           </div>
         )}
 
@@ -914,7 +971,7 @@ export default function CatalogusPage() {
                 ))}
               </div>
               {/* Infinite scroll loader */}
-              <div ref={observerRef} />
+              <div ref={mobileObserverRef} />
               {loadingMore && (
                 <div className="p-4 text-center">
                   <Loader2 className="animate-spin h-6 w-6 mx-auto mb-2 text-examen-cyan" />
@@ -1016,12 +1073,18 @@ export default function CatalogusPage() {
       {/* Credit Order Modal */}
       <CreditOrderModal
         isOpen={creditOrderModalOpen}
-        onClose={() => setCreditOrderModalOpen(false)}
+        onClose={() => {
+          setCreditOrderModalOpen(false);
+          // Clear credits error when modal is closed (user might have ordered credits)
+          setShowCreditsError(false);
+        }}
         onSuccess={async () => {
           // Don't close modal immediately - let user see success screen first
           // The modal will be closed when user clicks "Sluiten" button
           // Refresh credits for the user
           await refreshCredits();
+          // Clear credits error since user now has credits
+          setShowCreditsError(false);
         }}
       />
     </div>

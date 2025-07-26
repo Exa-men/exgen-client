@@ -16,7 +16,7 @@ interface UnifiedHeaderProps {
 
 const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin } = useRole();
+  const { isAdmin, isLoading: roleLoading } = useRole();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
 
@@ -48,125 +48,130 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
 
           {/* Centered navigation (desktop only) */}
           <div className="hidden md:flex flex-1 justify-center items-center">
-            <div className="flex items-center space-x-8">
-              {!isSignedIn && (
-                <>
-                  <Link href="/">
-                    <Button
-                      variant="ghost"
-                      className={
-                        isActive('/')
-                          ? "text-examen-cyan font-bold underline underline-offset-4"
-                          : "text-gray-700 hover:text-examen-cyan transition-colors"
-                      }
-                    >
-                      Home
-                    </Button>
-                  </Link>
-                  <a href="#oplossingen" className="text-gray-700 hover:text-examen-cyan transition-colors">
-                    Oplossingen
-                  </a>
-                  <a href="#voordelen" className="text-gray-700 hover:text-examen-cyan transition-colors">
-                    Voordelen
-                  </a>
-                  <a href="#contact" className="text-gray-700 hover:text-examen-cyan transition-colors">
-                    Contact
-                  </a>
-                </>
-              )}
-              {isSignedIn && (
-                <>
-                  <Link href="/catalogus">
-                    <Button
-                      variant="ghost"
-                      className={
-                        isActive('/catalogus')
-                          ? "text-examen-cyan font-bold underline underline-offset-4"
-                          : "text-gray-700 hover:text-examen-cyan transition-colors"
-                      }
-                    >
-                      Catalogus
-                    </Button>
-                  </Link>
-                  <Link href="/workflows">
-                    <Button
-                      variant="ghost"
-                      className={
-                        isActive('/workflows')
-                          ? "text-examen-cyan font-bold underline underline-offset-4"
-                          : "text-gray-700 hover:text-examen-cyan transition-colors"
-                      }
-                    >
-                      Ontwikkelen
-                    </Button>
-                  </Link>
-                  {isAdmin && (
-                    <>
-                      <Link href="/users">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/users')
-                              ? "text-examen-cyan font-bold underline underline-offset-4"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors"
-                          }
-                        >
-                          Users
-                        </Button>
-                      </Link>
-                      <Link href="/admin/credit-orders">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/admin/credit-orders')
-                              ? "text-examen-cyan font-bold underline underline-offset-4"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors"
-                          }
-                        >
-                          Orders
-                        </Button>
-                      </Link>
-                      <Link href="/admin/vouchers">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/admin/vouchers')
-                              ? "text-examen-cyan font-bold underline underline-offset-4"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors"
-                          }
-                        >
-                          Vouchers
-                        </Button>
-                      </Link>
-                      <Link href="/system">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/system')
-                              ? "text-examen-cyan font-bold underline underline-offset-4"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors"
-                          }
-                        >
-                          System
-                        </Button>
-                      </Link>
-                      <Link href="/analytics">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/analytics')
-                              ? "text-examen-cyan font-bold underline underline-offset-4"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors"
-                          }
-                        >
-                          Analytics
-                        </Button>
-                      </Link>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
+            {/* Only render navigation when role is loaded */}
+            {roleLoading ? (
+              <div className="flex items-center space-x-8" style={{ minHeight: 48 }} />
+            ) : (
+              <div className="flex items-center space-x-8">
+                {!isSignedIn && (
+                  <>
+                    <Link href="/">
+                      <Button
+                        variant="ghost"
+                        className={
+                          isActive('/')
+                            ? "text-examen-cyan font-bold underline underline-offset-4"
+                            : "text-gray-700 hover:text-examen-cyan transition-colors"
+                        }
+                      >
+                        Home
+                      </Button>
+                    </Link>
+                    <a href="#oplossingen" className="text-gray-700 hover:text-examen-cyan transition-colors">
+                      Oplossingen
+                    </a>
+                    <a href="#voordelen" className="text-gray-700 hover:text-examen-cyan transition-colors">
+                      Voordelen
+                    </a>
+                    <a href="#contact" className="text-gray-700 hover:text-examen-cyan transition-colors">
+                      Contact
+                    </a>
+                  </>
+                )}
+                {isSignedIn && (
+                  <>
+                    <Link href="/catalogus" prefetch={true}>
+                      <Button
+                        variant="ghost"
+                        className={
+                          isActive('/catalogus')
+                            ? "text-examen-cyan font-bold underline underline-offset-4"
+                            : "text-gray-700 hover:text-examen-cyan transition-colors"
+                        }
+                      >
+                        Catalogus
+                      </Button>
+                    </Link>
+                    <Link href="/workflows" prefetch={true}>
+                      <Button
+                        variant="ghost"
+                        className={
+                          isActive('/workflows')
+                            ? "text-examen-cyan font-bold underline underline-offset-4"
+                            : "text-gray-700 hover:text-examen-cyan transition-colors"
+                        }
+                      >
+                        Ontwikkelen
+                      </Button>
+                    </Link>
+                    {isAdmin && (
+                      <>
+                        <Link href="/users">
+                          <Button
+                            variant="ghost"
+                            className={
+                              isActive('/users')
+                                ? "text-examen-cyan font-bold underline underline-offset-4"
+                                : "text-gray-700 hover:text-examen-cyan transition-colors"
+                            }
+                          >
+                            Users
+                          </Button>
+                        </Link>
+                        <Link href="/admin/credit-orders">
+                          <Button
+                            variant="ghost"
+                            className={
+                              isActive('/admin/credit-orders')
+                                ? "text-examen-cyan font-bold underline underline-offset-4"
+                                : "text-gray-700 hover:text-examen-cyan transition-colors"
+                            }
+                          >
+                            Orders
+                          </Button>
+                        </Link>
+                        <Link href="/admin/vouchers">
+                          <Button
+                            variant="ghost"
+                            className={
+                              isActive('/admin/vouchers')
+                                ? "text-examen-cyan font-bold underline underline-offset-4"
+                                : "text-gray-700 hover:text-examen-cyan transition-colors"
+                            }
+                          >
+                            Vouchers
+                          </Button>
+                        </Link>
+                        <Link href="/system">
+                          <Button
+                            variant="ghost"
+                            className={
+                              isActive('/system')
+                                ? "text-examen-cyan font-bold underline underline-offset-4"
+                                : "text-gray-700 hover:text-examen-cyan transition-colors"
+                            }
+                          >
+                            System
+                          </Button>
+                        </Link>
+                        <Link href="/analytics">
+                          <Button
+                            variant="ghost"
+                            className={
+                              isActive('/analytics')
+                                ? "text-examen-cyan font-bold underline underline-offset-4"
+                                : "text-gray-700 hover:text-examen-cyan transition-colors"
+                            }
+                          >
+                            Analytics
+                          </Button>
+                        </Link>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* User profile or auth buttons on the right (desktop only) */}

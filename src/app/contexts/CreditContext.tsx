@@ -24,13 +24,20 @@ interface CreditProviderProps {
 }
 
 export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
-  const { user } = useUser();
+  const { user, isLoaded: userLoaded } = useUser();
   const { getToken } = useAuth();
   const [credits, setCredits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const fetchCredits = async () => {
+    // Don't fetch if user is not loaded yet
+    if (!userLoaded) {
+      return;
+    }
+
+    // If no user, set loading to false and credits to 0
     if (!user) {
+      setCredits(0);
       setLoading(false);
       return;
     }
@@ -64,7 +71,7 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
 
   useEffect(() => {
     fetchCredits();
-  }, [user, getToken]);
+  }, [user, userLoaded, getToken]);
 
   const value = {
     credits,

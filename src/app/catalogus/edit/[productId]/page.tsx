@@ -31,7 +31,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { Separator } from '../../../components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { useToast } from '../../../../hooks/use-toast';
-import UnifiedHeader from '../../../components/UnifiedHeader';
+
 import { useRole } from '../../../../hooks/use-role';
 import { useApi } from '../../../../hooks/use-api';
 
@@ -1706,7 +1706,6 @@ export default function EditExamPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <UnifiedHeader />
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -1722,7 +1721,6 @@ export default function EditExamPage() {
   if (!product) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <UnifiedHeader />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
             <p className="text-gray-600">Examen niet gevonden.</p>
@@ -1737,7 +1735,6 @@ export default function EditExamPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

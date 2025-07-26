@@ -1,8 +1,9 @@
 "use client"
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, ShoppingCart } from 'lucide-react';
 import { useCredits } from '../contexts/CreditContext';
+import { useUser } from '@clerk/nextjs';
 import { Button } from './ui/button';
 import { cn } from '../../lib/utils';
 
@@ -16,9 +17,24 @@ const CreditBanner: React.FC<CreditBannerProps> = ({
   className 
 }) => {
   const { credits, loading } = useCredits();
+  const { isLoaded: userLoaded } = useUser();
+  const [showBanner, setShowBanner] = useState(false);
 
-  // Don't show banner if user has credits or while loading
-  if (loading || credits > 0) {
+  useEffect(() => {
+    // Only show banner when we're certain the user has no credits
+    // Add a small delay to prevent micro-flashes
+    const timer = setTimeout(() => {
+      if (userLoaded && !loading && credits === 0) {
+        setShowBanner(true);
+      } else {
+        setShowBanner(false);
+      }
+    }, 100); // Small delay to ensure stable state
+
+    return () => clearTimeout(timer);
+  }, [userLoaded, loading, credits]);
+
+  if (!showBanner) {
     return null;
   }
 

@@ -5,7 +5,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from '../components/WorkflowConfig';
 import WorkflowGroups from '../components/WorkflowGroups';
-import UnifiedHeader from '../components/UnifiedHeader';
+
 
 interface JobStatus {
   job_id: string;
@@ -364,8 +364,6 @@ export default function WorkflowsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <UnifiedHeader onOrderCredits={() => {}} />
-
       {/* Modal overlay for sign-in */}
       {!isSignedIn && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">

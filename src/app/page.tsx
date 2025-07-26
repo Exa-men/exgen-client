@@ -3,7 +3,7 @@
 import { useUser } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, Suspense } from 'react';
-import UnifiedHeader from './components/UnifiedHeader';
+
 import Hero from './components/Hero';
 import Features from './components/Features';
 import Benefits from './components/Benefits';
@@ -47,7 +47,6 @@ function HomeContent() {
   // Only show homepage content for non-authenticated users
   return (
     <main>
-      <UnifiedHeader onOrderCredits={() => {}} />
       <Hero />
       <Features />
       <Benefits />

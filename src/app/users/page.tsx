@@ -9,7 +9,7 @@ import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import UnifiedHeader from '../components/UnifiedHeader';
+
 import { AdminOnly } from '../../components/RoleGuard';
 import { cn } from '../../lib/utils';
 
@@ -243,8 +243,6 @@ export default function UsersPage() {
       }
     >
       <div className="min-h-screen bg-gray-50">
-        <UnifiedHeader onOrderCredits={() => {}} />
-        
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>

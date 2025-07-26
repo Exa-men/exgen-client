@@ -5,14 +5,15 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   
-  // Webpack configuration
-  webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-    };
-    return config;
+  // Performance optimizations
+  experimental: {
+    // Enable optimizations for better performance
+    optimizePackageImports: ['@clerk/nextjs', 'lucide-react'],
   },
+  
+  // Enhanced caching and performance
+  compress: true,
+  generateEtags: true,
   
   // Environment variables
   env: {
@@ -52,6 +53,11 @@ const nextConfig: NextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin',
+          },
+          // Add caching headers for better performance
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },

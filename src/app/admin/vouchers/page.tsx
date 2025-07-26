@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import UnifiedHeader from '../../components/UnifiedHeader';
+
 import { useRole } from '../../../hooks/use-role';
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
@@ -266,8 +266,6 @@ export default function VouchersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader />
-      
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Voucher Beheer</h1>
