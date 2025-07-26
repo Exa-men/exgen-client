@@ -24,7 +24,7 @@ import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import UnifiedHeader from '../../components/UnifiedHeader';
+
 import { useRole } from '../../../hooks/use-role';
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
@@ -248,10 +248,8 @@ export default function CreditOrdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader onOrderCredits={() => {}} />
-      
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Credit Bestellingen</h1>
           <p className="text-gray-600">Beheer credit bestellingen van gebruikers</p>

@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Download, ShoppingCart, Loader2, FileText, Calendar, Tag, Euro } from 'lucide-react';
+import { ArrowLeft, Download, ShoppingCart, Loader2, FileText, Calendar, Tag, Euro, AlertCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
-import UnifiedHeader from '../../../components/UnifiedHeader';
+import CreditOrderModal from '../../../components/CreditOrderModal';
+
 
 interface ExamProduct {
   id: string;
@@ -36,7 +37,9 @@ export default function ReviewPage() {
   const [product, setProduct] = useState<ExamProduct | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCreditsError, setShowCreditsError] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [creditOrderModalOpen, setCreditOrderModalOpen] = useState(false);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -118,6 +121,11 @@ export default function ReviewPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
+          setShowCreditsError(true);
+          setError(null);
+          return;
+        }
         throw new Error(errorData.error || 'Purchase failed');
       }
 
@@ -167,8 +175,6 @@ export default function ReviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <UnifiedHeader />
-      
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
         <div className="mb-6">
@@ -186,6 +192,30 @@ export default function ReviewPage() {
           <div className="text-center py-12">
             <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
             <p className="text-gray-600">Laden van product details...</p>
+          </div>
+        ) : showCreditsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <div>
+                  <h3 className="text-sm font-medium text-red-800">
+                    Onvoldoende credits beschikbaar
+                  </h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    Je hebt momenteel onvoldoende credits om dit examen te kopen. Bestel credits om door te gaan.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => setCreditOrderModalOpen(true)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                size="sm"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Credits Bestellen
+              </Button>
+            </div>
           </div>
         ) : error ? (
           <div className="text-center py-12">
@@ -350,6 +380,12 @@ export default function ReviewPage() {
           </div>
         )}
       </div>
+      
+      {/* Credit Order Modal */}
+      <CreditOrderModal
+        isOpen={creditOrderModalOpen}
+        onClose={() => setCreditOrderModalOpen(false)}
+      />
     </div>
   );
 } 

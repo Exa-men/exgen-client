@@ -2,6 +2,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
 import { CreditProvider } from './contexts/CreditContext';
+import SmartPrefetcher from './components/SmartPrefetcher';
+import PageTransitionLoader from './components/PageTransitionLoader';
+import UnifiedHeader from './components/UnifiedHeader';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -31,6 +34,9 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <CreditProvider>
+            <SmartPrefetcher />
+            <PageTransitionLoader />
+            <UnifiedHeader />
             {children}
           </CreditProvider>
         </body>
