@@ -39,9 +39,7 @@ All admin endpoints are prefixed with `/api/v1/admin/`:
 ### Protected Endpoints
 
 The following endpoints now require admin access:
-- `POST /api/v1/config/migrate-defaults`
-- `POST /api/v1/config/reset-to-defaults`
-- `GET /api/v1/config/status`
+- All admin endpoints are protected with role-based access control
 
 ## Frontend Implementation
 
@@ -64,10 +62,9 @@ const { userRole, isLoading, isAdmin, isUser, hasRole } = useRole();
 
 ### Admin Pages
 
-- `/admin` - Main admin dashboard
 - `/admin/users` - User management interface
-- `/admin/settings` - System configuration
-- `/admin/analytics` - Usage statistics
+- `/admin/credit-orders` - Credit order management
+- `/admin/vouchers` - Voucher management
 
 ### Navigation Updates
 

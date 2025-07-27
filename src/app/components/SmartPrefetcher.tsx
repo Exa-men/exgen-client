@@ -34,8 +34,6 @@ const SmartPrefetcher: React.FC = () => {
           '/users',
           '/admin/credit-orders',
           '/admin/vouchers',
-          '/system',
-          '/analytics',
         ] : [];
 
         // Combine all pages to prefetch

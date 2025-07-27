@@ -52,7 +52,6 @@ export default function WorkflowsPage() {
     setIsLoadingSteps(true);
     try {
       const token = await getToken();
-      console.log("[DEBUG] Fetching workflow config, Clerk JWT:", token);
       const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -172,7 +171,6 @@ export default function WorkflowsPage() {
     pollIntervalRef.current = setInterval(async () => {
       try {
         const token = await getToken();
-        console.log("[DEBUG] Poll job status, Clerk JWT:", token);
         const response = await fetch(`${backendUrl}/api/v1/jobs/${jobId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -187,18 +185,11 @@ export default function WorkflowsPage() {
         setJobStatus(statusData);
         setLogs(statusData.logs || []);
         
-        console.log("Job status:", statusData);
-        console.log("Job result:", statusData.result);
-        
         if (statusData.status === 'completed' || statusData.status === 'failed') {
           cleanupPolling();
           if (statusData.status === 'completed') {
-            console.log("Job completed successfully!");
-            console.log("Full result object:", statusData.result);
             if (statusData.result?.generated_document) {
-              console.log("Generated document:", statusData.result.generated_document);
             } else {
-              console.log("No generated_document in result");
             }
           } else {
             console.error("Job failed:", statusData.result);
@@ -229,7 +220,6 @@ export default function WorkflowsPage() {
       await fetchStepNamesAndDescriptions();
       
       const token = await getToken();
-      console.log("[DEBUG] Upload file, Clerk JWT:", token);
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('template_name_or_id', templateName);
@@ -249,7 +239,6 @@ export default function WorkflowsPage() {
 
       const jobData = await response.json();
       setJobStatus(jobData);
-      console.log("Job created:", jobData);
       
       // Start polling for job status
       pollJobStatus(jobData.job_id);
@@ -271,16 +260,12 @@ export default function WorkflowsPage() {
   const callApi = async () => {
     try {
       const token = await getToken();
-      console.log("[DEBUG] callApi, Clerk JWT:", token);
       const res = await fetch(`${backendUrl}/api/v1/health`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
-      console.log("Response status:", res.status);
-      console.log("Response headers:", Object.fromEntries(res.headers.entries()));
       
       if (!res.ok) {
         const errorText = await res.text();
@@ -289,7 +274,6 @@ export default function WorkflowsPage() {
       }
       
       const data = await res.json();
-      console.log("Response data:", data);
       alert(`API Response: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
       console.error("API call failed:", error);
@@ -300,15 +284,12 @@ export default function WorkflowsPage() {
   const testCors = async () => {
     try {
       const token = await getToken();
-      console.log("[DEBUG] testCors, Clerk JWT:", token);
       const res = await fetch(`${backendUrl}/api/v1/test`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
-      console.log("CORS test response status:", res.status);
       
       if (!res.ok) {
         const errorText = await res.text();

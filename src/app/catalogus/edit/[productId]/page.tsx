@@ -1247,7 +1247,7 @@ export default function EditExamPage() {
         release_date: new Date().toISOString().split('T')[0],
         is_latest: true,
         is_enabled: false,
-        rubric_levels: latestVersion ? latestVersion.rubricLevels : 4
+        rubric_levels: latestVersion ? latestVersion.rubricLevels : 3
       };
 
       // Call API to create version

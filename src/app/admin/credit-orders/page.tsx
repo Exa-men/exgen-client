@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
-import { useRole } from '../../../hooks/use-role';
+// Removed useRole import - letting backend handle admin checks
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
 
@@ -64,7 +64,7 @@ export default function CreditOrdersPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  // Removed useRole hook - letting backend handle admin checks
   const { refreshCredits } = useCredits();
   
   const [orders, setOrders] = useState<CreditOrder[]>([]);
@@ -77,26 +77,21 @@ export default function CreditOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'fulfilled' | 'cancelled'>('all');
   const [packageFilter, setPackageFilter] = useState<string>('all');
 
-  // Check authentication and admin role
+  // Check authentication only (let backend handle admin check)
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       router.push('/');
       return;
     }
-    
-    if (isLoaded && !roleLoading && !isAdmin) {
-      router.push('/');
-      return;
-    }
-  }, [isLoaded, isSignedIn, roleLoading, isAdmin, router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  // Fetch orders and packages
+  // Fetch orders and packages when signed in
   useEffect(() => {
-    if (isAdmin) {
+    if (isSignedIn) {
       fetchOrders();
       fetchPackages();
     }
-  }, [isAdmin]);
+  }, [isSignedIn]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -110,8 +105,12 @@ export default function CreditOrdersPage() {
       if (response.ok) {
         const data = await response.json();
         setOrders(data.orders);
+      } else if (response.status === 403) {
+        console.error('Access denied: Admin privileges required');
+        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+        router.push('/');
       } else {
-        console.error('Failed to fetch orders');
+        console.error('Failed to fetch orders:', response.status);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -235,16 +234,12 @@ export default function CreditOrdersPage() {
     return matchesSearch && matchesStatus && matchesPackage;
   });
 
-  if (!isLoaded || roleLoading) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-examen-cyan" />
       </div>
     );
-  }
-
-  if (!isAdmin) {
-    return null;
   }
 
   return (
