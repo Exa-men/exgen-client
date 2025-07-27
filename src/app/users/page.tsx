@@ -11,6 +11,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 import { AdminOnly } from '../../components/RoleGuard';
+import { useRole } from '../../hooks/use-role';
 import { cn } from '../../lib/utils';
 
 interface UserData {
@@ -18,7 +19,7 @@ interface UserData {
   first_name: string;
   last_name: string;
   email: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'owner';
   credits: number;
   created_at: string;
 }
@@ -34,6 +35,7 @@ type SortDirection = 'asc' | 'desc';
 export default function UsersPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const router = useRouter();
+  const { hasAdminAccess, hasOwnerAccess } = useRole();
   
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('first_name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin' | 'owner'>('all');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
 
   // Redirect if not signed in
@@ -79,7 +81,7 @@ export default function UsersPage() {
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: 'user' | 'admin') => {
+  const updateUserRole = async (userId: string, newRole: 'user' | 'admin' | 'owner') => {
     try {
       setUpdatingUser(userId);
       const token = await (window as any).Clerk?.session?.getToken();
@@ -298,6 +300,17 @@ export default function UsersPage() {
             >
               Administrators
             </button>
+            <button
+              className={cn(
+                'rounded-full px-8 py-3 text-lg font-semibold border transition-all',
+                roleFilter === 'owner'
+                  ? 'bg-examen-cyan text-white border-examen-cyan shadow'
+                  : 'bg-white text-gray-700 border-examen-cyan hover:bg-examen-cyan/10'
+              )}
+              onClick={() => setRoleFilter('owner')}
+            >
+              Owners
+            </button>
           </div>
 
           {/* Error Message */}
@@ -402,29 +415,37 @@ export default function UsersPage() {
                             <TableCell>
                               <div className="flex items-center space-x-2">
                                 <span>{userData.email}</span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newEmail = prompt(`Enter new email for ${userData.first_name} ${userData.last_name}:`, userData.email);
-                                    if (newEmail && newEmail.includes('@')) {
-                                      updateUserEmail(userData.id, newEmail);
-                                    }
-                                  }}
-                                  disabled={updatingUser === userData.id}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
+                                {hasOwnerAccess && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newEmail = prompt(`Enter new email for ${userData.first_name} ${userData.last_name}:`, userData.email);
+                                      if (newEmail && newEmail.includes('@')) {
+                                        updateUserEmail(userData.id, newEmail);
+                                      }
+                                    }}
+                                    disabled={updatingUser === userData.id}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-2">
-                                {userData.role === 'admin' ? (
+                                {userData.role === 'owner' ? (
+                                  <Crown className="h-4 w-4 text-purple-500" />
+                                ) : userData.role === 'admin' ? (
                                   <Crown className="h-4 w-4 text-yellow-500" />
                                 ) : (
                                   <User className="h-4 w-4 text-gray-500" />
                                 )}
-                                <Badge variant={userData.role === 'admin' ? 'default' : 'secondary'}>
+                                <Badge variant={
+                                  userData.role === 'owner' ? 'default' : 
+                                  userData.role === 'admin' ? 'secondary' : 
+                                  'outline'
+                                }>
                                   {userData.role}
                                 </Badge>
                               </div>
@@ -432,19 +453,21 @@ export default function UsersPage() {
                             <TableCell>
                               <div className="flex items-center space-x-2">
                                 <span className="font-medium">{userData.credits}</span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newCredits = prompt(`Enter new credits for ${userData.first_name} ${userData.last_name}:`, userData.credits.toString());
-                                    if (newCredits && !isNaN(Number(newCredits))) {
-                                      updateUserCredits(userData.id, Number(newCredits));
-                                    }
-                                  }}
-                                  disabled={updatingUser === userData.id}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
+                                {hasOwnerAccess && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newCredits = prompt(`Enter new credits for ${userData.first_name} ${userData.last_name}:`, userData.credits.toString());
+                                      if (newCredits && !isNaN(Number(newCredits))) {
+                                        updateUserCredits(userData.id, Number(newCredits));
+                                      }
+                                    }}
+                                    disabled={updatingUser === userData.id}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -453,7 +476,7 @@ export default function UsersPage() {
                             <TableCell className="text-center">
                               <Select
                                 value={userData.role}
-                                onValueChange={(value: 'user' | 'admin') => updateUserRole(userData.id, value)}
+                                onValueChange={(value: 'user' | 'admin' | 'owner') => updateUserRole(userData.id, value)}
                                 disabled={updatingUser === userData.id}
                               >
                                 <SelectTrigger className="w-32">
@@ -462,6 +485,7 @@ export default function UsersPage() {
                                 <SelectContent>
                                   <SelectItem value="user">User</SelectItem>
                                   <SelectItem value="admin">Admin</SelectItem>
+                                  {hasOwnerAccess && <SelectItem value="owner">Owner</SelectItem>}
                                 </SelectContent>
                               </Select>
                             </TableCell>

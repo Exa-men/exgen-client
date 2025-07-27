@@ -3,18 +3,18 @@ import { useRole } from '../hooks/use-role';
 
 interface RoleGuardProps {
   children: React.ReactNode;
-  allowedRoles?: ('user' | 'admin')[];
+  allowedRoles?: ('user' | 'admin' | 'owner')[];
   fallback?: React.ReactNode;
   requireAuth?: boolean;
 }
 
 export const RoleGuard: React.FC<RoleGuardProps> = ({
   children,
-  allowedRoles = ['user', 'admin'],
+  allowedRoles = ['user', 'admin', 'owner'],
   fallback = null,
   requireAuth = true
 }) => {
-  const { isAdmin, isUser, hasRole, isLoading } = useRole();
+  const { isAdmin, isOwner, isUser, hasRole, isLoading } = useRole();
 
   // Show loading state while checking role
   if (isLoading) {
@@ -33,6 +33,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
   // Check if user has an allowed role
   const hasAllowedRole = 
     (isAdmin && allowedRoles.includes('admin')) ||
+    (isOwner && allowedRoles.includes('owner')) ||
     (isUser && allowedRoles.includes('user'));
 
   if (!hasAllowedRole) {
@@ -47,7 +48,16 @@ export const AdminOnly: React.FC<{ children: React.ReactNode; fallback?: React.R
   children,
   fallback
 }) => (
-  <RoleGuard allowedRoles={['admin']} fallback={fallback}>
+  <RoleGuard allowedRoles={['admin', 'owner']} fallback={fallback}>
+    {children}
+  </RoleGuard>
+);
+
+export const OwnerOnly: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({
+  children,
+  fallback
+}) => (
+  <RoleGuard allowedRoles={['owner']} fallback={fallback}>
     {children}
   </RoleGuard>
 );

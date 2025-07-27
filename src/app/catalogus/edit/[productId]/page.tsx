@@ -154,7 +154,7 @@ export default function EditExamPage() {
   const params = useParams();
   const productId = params.productId as string;
   const { toast } = useToast();
-  const { isAdmin, isLoading: roleLoading } = useRole();
+  const { isAdmin, hasAdminAccess, hasOwnerAccess, isLoading: roleLoading } = useRole();
   const api = useApi();
   
   const [product, setProduct] = useState<ExamProduct | null>(null);
@@ -694,8 +694,8 @@ export default function EditExamPage() {
         if (!isSignedIn) {
           console.log('Redirecting: User not signed in');
           router.push('/catalogus');
-        } else if (isSignedIn && !isAdmin) {
-          console.log('Redirecting: User not admin');
+        } else if (isSignedIn && !hasAdminAccess) {
+          console.log('Redirecting: User not admin/owner');
           router.push('/catalogus');
         } else {
           console.log('User authorized, staying on page');
@@ -706,7 +706,7 @@ export default function EditExamPage() {
     }, 100); // 100ms delay
     
     return () => clearTimeout(timeoutId);
-  }, [isLoaded, isSignedIn, isAdmin, roleLoading, router]);
+  }, [isLoaded, isSignedIn, hasAdminAccess, roleLoading, router]);
 
   // Fetch product details
   useEffect(() => {
@@ -2434,29 +2434,31 @@ export default function EditExamPage() {
         </Card>
 
         {/* Danger Zone */}
-        <Card className="border-red-200 bg-red-50">
-          <CardHeader>
-            <CardTitle className="text-red-800">Danger Zone</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between p-4 border border-red-300 rounded-lg bg-white">
-              <div>
-                <h3 className="font-semibold text-red-800">Examen Verwijderen</h3>
-                <p className="text-sm text-red-700">
-                  Dit verwijdert het hele examenproduct en alle versies permanent.
-                </p>
+        {hasOwnerAccess && (
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader>
+              <CardTitle className="text-red-800">Danger Zone</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 border border-red-300 rounded-lg bg-white">
+                <div>
+                  <h3 className="font-semibold text-red-800">Examen Verwijderen</h3>
+                  <p className="text-sm text-red-700">
+                    Dit verwijdert het hele examenproduct en alle versies permanent.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="border-red-300 text-red-700 hover:bg-red-100 hover:text-red-800"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Examen Verwijderen
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="border-red-300 text-red-700 hover:bg-red-100 hover:text-red-800"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Examen Verwijderen
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Delete Confirmation Modal */}

@@ -47,7 +47,7 @@ export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  const { userRole, isLoading: roleLoading, isAdmin, hasAdminAccess, hasOwnerAccess } = useRole();
   const { refreshCredits } = useCredits();
   
   const [products, setProducts] = useState<ExamProduct[]>([]);
@@ -666,8 +666,8 @@ export default function CatalogusPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* New Product Input Row - Admin Only */}
-                    {isAdmin && (
+                    {/* New Product Input Row - Admin/Owner Only */}
+                    {hasAdminAccess && (
                       <TableRow>
                         <TableCell>
                           <Input
@@ -835,7 +835,7 @@ export default function CatalogusPage() {
                                   Feedback
                                 </Button>
                               )}
-                              {isAdmin && (
+                              {hasAdminAccess && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -955,7 +955,7 @@ export default function CatalogusPage() {
                           Feedback
                         </Button>
                       )}
-                      {isAdmin && (
+                      {hasAdminAccess && (
                         <Button
                           variant="outline"
                           size="sm"

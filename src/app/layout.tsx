@@ -5,6 +5,7 @@ import { CreditProvider } from './contexts/CreditContext';
 import SmartPrefetcher from './components/SmartPrefetcher';
 import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
+import GlobalCreditOrderModal from './components/GlobalCreditOrderModal';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -37,6 +38,7 @@ export default function RootLayout({
             <SmartPrefetcher />
             <PageTransitionLoader />
             <UnifiedHeader />
+            <GlobalCreditOrderModal />
             {children}
           </CreditProvider>
         </body>

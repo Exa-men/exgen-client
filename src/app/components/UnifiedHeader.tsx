@@ -8,17 +8,27 @@ import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useRole } from '../../hooks/use-role';
+import { useCredits } from '../contexts/CreditContext';
 import CreditDisplay from './CreditDisplay';
 
-interface UnifiedHeaderProps {
-  onOrderCredits?: () => void;
-}
-
-const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
+const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin, isLoading: roleLoading } = useRole();
+  const { isAdmin, isOwner, hasAdminAccess, hasOwnerAccess, isLoading: roleLoading, userRole } = useRole();
+  const { openCreditOrderModal } = useCredits();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('UnifiedHeader role state:', { 
+      isAdmin, 
+      isOwner, 
+      hasAdminAccess, 
+      hasOwnerAccess, 
+      roleLoading, 
+      userRole 
+    });
+  }, [isAdmin, isOwner, hasAdminAccess, hasOwnerAccess, roleLoading, userRole]);
 
   // Helper to determine if a path is active
   const isActive = (href: string) => {
@@ -27,6 +37,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
     if (href === '/users') return pathname.startsWith('/users');
     if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
     if (href === '/admin/vouchers') return pathname.startsWith('/admin/vouchers');
+    if (href === '/admin/credit-packages') return pathname.startsWith('/admin/credit-packages');
     if (href === '/system') return pathname.startsWith('/system');
     if (href === '/analytics') return pathname.startsWith('/analytics');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
@@ -104,7 +115,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                         Ontwikkelen
                       </Button>
                     </Link>
-                    {isAdmin && (
+                    {hasAdminAccess && (
                       <>
                         <Link href="/users">
                           <Button
@@ -118,54 +129,70 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                             Users
                           </Button>
                         </Link>
-                        <Link href="/admin/credit-orders">
-                          <Button
-                            variant="ghost"
-                            className={
-                              isActive('/admin/credit-orders')
-                                ? "text-examen-cyan font-bold underline underline-offset-4"
-                                : "text-gray-700 hover:text-examen-cyan transition-colors"
-                            }
-                          >
-                            Orders
-                          </Button>
-                        </Link>
-                        <Link href="/admin/vouchers">
-                          <Button
-                            variant="ghost"
-                            className={
-                              isActive('/admin/vouchers')
-                                ? "text-examen-cyan font-bold underline underline-offset-4"
-                                : "text-gray-700 hover:text-examen-cyan transition-colors"
-                            }
-                          >
-                            Vouchers
-                          </Button>
-                        </Link>
-                        <Link href="/system">
-                          <Button
-                            variant="ghost"
-                            className={
-                              isActive('/system')
-                                ? "text-examen-cyan font-bold underline underline-offset-4"
-                                : "text-gray-700 hover:text-examen-cyan transition-colors"
-                            }
-                          >
-                            System
-                          </Button>
-                        </Link>
-                        <Link href="/analytics">
-                          <Button
-                            variant="ghost"
-                            className={
-                              isActive('/analytics')
-                                ? "text-examen-cyan font-bold underline underline-offset-4"
-                                : "text-gray-700 hover:text-examen-cyan transition-colors"
-                            }
-                          >
-                            Analytics
-                          </Button>
-                        </Link>
+                        {hasOwnerAccess && (
+                          <>
+                            <Link href="/admin/credit-orders" onClick={() => console.log('Orders link clicked')}>
+                              <Button
+                                variant="ghost"
+                                className={
+                                  isActive('/admin/credit-orders')
+                                    ? "text-examen-cyan font-bold underline underline-offset-4"
+                                    : "text-gray-700 hover:text-examen-cyan transition-colors"
+                                }
+                              >
+                                Orders
+                              </Button>
+                            </Link>
+                            <Link href="/admin/vouchers" onClick={() => console.log('Vouchers link clicked')}>
+                              <Button
+                                variant="ghost"
+                                className={
+                                  isActive('/admin/vouchers')
+                                    ? "text-examen-cyan font-bold underline underline-offset-4"
+                                    : "text-gray-700 hover:text-examen-cyan transition-colors"
+                                }
+                              >
+                                Vouchers
+                              </Button>
+                            </Link>
+                            <Link href="/admin/credit-packages">
+                              <Button
+                                variant="ghost"
+                                className={
+                                  isActive('/admin/credit-packages')
+                                    ? "text-examen-cyan font-bold underline underline-offset-4"
+                                    : "text-gray-700 hover:text-examen-cyan transition-colors"
+                                }
+                              >
+                                Credit Packages
+                              </Button>
+                            </Link>
+                            <Link href="/system">
+                              <Button
+                                variant="ghost"
+                                className={
+                                  isActive('/system')
+                                    ? "text-examen-cyan font-bold underline underline-offset-4"
+                                    : "text-gray-700 hover:text-examen-cyan transition-colors"
+                                }
+                              >
+                                System
+                              </Button>
+                            </Link>
+                            <Link href="/analytics">
+                              <Button
+                                variant="ghost"
+                                className={
+                                  isActive('/analytics')
+                                    ? "text-examen-cyan font-bold underline underline-offset-4"
+                                    : "text-gray-700 hover:text-examen-cyan transition-colors"
+                                }
+                              >
+                                Analytics
+                              </Button>
+                            </Link>
+                          </>
+                        )}
                       </>
                     )}
                   </>
@@ -178,7 +205,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
           <div className="hidden md:flex items-center flex-shrink-0 gap-4">
             {isLoaded && isSignedIn && (
               <>
-                <CreditDisplay onOrderCredits={onOrderCredits} />
+                <CreditDisplay onOrderCredits={openCreditOrderModal} />
                 <UserButton afterSignOutUrl="/" />
               </>
             )}
@@ -264,7 +291,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                       Ontwikkelen
                     </Button>
                   </Link>
-                  {isAdmin && (
+                  {hasAdminAccess && (
                     <>
                       <Link href="/users">
                         <Button
@@ -278,54 +305,58 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                           Users
                         </Button>
                       </Link>
-                      <Link href="/admin/credit-orders">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/admin/credit-orders')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          Orders
-                        </Button>
-                      </Link>
-                      <Link href="/admin/vouchers">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/admin/vouchers')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          Vouchers
-                        </Button>
-                      </Link>
-                      <Link href="/system">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/system')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          System
-                        </Button>
-                      </Link>
-                      <Link href="/analytics">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/analytics')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          Analytics
-                        </Button>
-                      </Link>
+                      {hasOwnerAccess && (
+                        <>
+                          <Link href="/admin/credit-orders">
+                            <Button
+                              variant="ghost"
+                              className={
+                                isActive('/admin/credit-orders')
+                                  ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                                  : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                              }
+                            >
+                              Orders
+                            </Button>
+                          </Link>
+                          <Link href="/admin/vouchers">
+                            <Button
+                              variant="ghost"
+                              className={
+                                isActive('/admin/vouchers')
+                                  ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                                  : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                              }
+                            >
+                              Vouchers
+                            </Button>
+                          </Link>
+                          <Link href="/system">
+                            <Button
+                              variant="ghost"
+                              className={
+                                isActive('/system')
+                                  ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                                  : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                              }
+                            >
+                              System
+                            </Button>
+                          </Link>
+                          <Link href="/analytics">
+                            <Button
+                              variant="ghost"
+                              className={
+                                isActive('/analytics')
+                                  ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                                  : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                              }
+                            >
+                              Analytics
+                            </Button>
+                          </Link>
+                        </>
+                      )}
                     </>
                   )}
                 </>
@@ -374,7 +405,7 @@ const UnifiedHeader: React.FC<UnifiedHeaderProps> = ({ onOrderCredits }) => {
                         </Button>
                       </Link>
                       <div className="flex flex-col items-center gap-4">
-                        <CreditDisplay showLabel onOrderCredits={onOrderCredits} />
+                        <CreditDisplay onOrderCredits={openCreditOrderModal} />
                         <UserButton afterSignOutUrl="/" />
                       </div>
                     </>

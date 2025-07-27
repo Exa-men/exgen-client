@@ -3,6 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { Badge } from '../../components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { 
   Search, 
   Filter, 
@@ -17,17 +24,8 @@ import {
   CreditCard,
   Package
 } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Badge } from '../../components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-
 import { useRole } from '../../../hooks/use-role';
 import { useCredits } from '../../contexts/CreditContext';
-import { cn } from '../../../lib/utils';
 
 interface CreditOrder {
   id: string;
@@ -61,10 +59,12 @@ interface CreditPackage {
 }
 
 export default function CreditOrdersPage() {
+  console.log('Orders page component loaded');
+  
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  const { userRole, isLoading: roleLoading, hasAdminAccess } = useRole();
   const { refreshCredits } = useCredits();
   
   const [orders, setOrders] = useState<CreditOrder[]>([]);
@@ -76,27 +76,32 @@ export default function CreditOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'fulfilled' | 'cancelled'>('all');
   const [packageFilter, setPackageFilter] = useState<string>('all');
-
+  
   // Check authentication and admin role
   useEffect(() => {
+    console.log('Orders page auth check:', { isLoaded, isSignedIn, roleLoading, hasAdminAccess, userRole });
+    
     if (isLoaded && !isSignedIn) {
+      console.log('Redirecting: User not signed in');
       router.push('/');
       return;
     }
     
-    if (isLoaded && !roleLoading && !isAdmin) {
+    // Only redirect if we're fully loaded and the user is definitely not authorized
+    if (isLoaded && !roleLoading && userRole.role !== null && !hasAdminAccess) {
+      console.log('Redirecting: User not admin/owner');
       router.push('/');
       return;
     }
-  }, [isLoaded, isSignedIn, roleLoading, isAdmin, router]);
+  }, [isLoaded, isSignedIn, roleLoading, hasAdminAccess, userRole, router]);
 
   // Fetch orders and packages
   useEffect(() => {
-    if (isAdmin) {
+    if (hasAdminAccess) {
       fetchOrders();
       fetchPackages();
     }
-  }, [isAdmin]);
+  }, [hasAdminAccess]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -136,64 +141,28 @@ export default function CreditOrdersPage() {
       console.error('Error fetching packages:', error);
     }
   };
+  
+  if (!isLoaded || roleLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">Loading...</h1>
+        </div>
+      </div>
+    );
+  }
 
-  const handleFulfillOrder = async (orderId: string) => {
-    setFulfillingOrder(orderId);
-    try {
-      const response = await fetch(`/api/v1/admin/credits/orders/${orderId}/fulfill`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          fulfilled_by: user?.id || '' 
-        })
-      });
-
-      if (response.ok) {
-        // Refresh orders and credits
-        fetchOrders();
-        await refreshCredits();
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het vervullen van de bestelling: ${error.detail}`);
-      }
-    } catch (error) {
-      console.error('Error fulfilling order:', error);
-      alert('Er is een fout opgetreden bij het vervullen van de bestelling.');
-    } finally {
-      setFulfillingOrder(null);
-    }
-  };
-
-  const handleCancelOrder = async (orderId: string) => {
-    if (!confirm('Weet je zeker dat je deze bestelling wilt annuleren?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/v1/admin/credits/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: 'cancelled' })
-      });
-
-      if (response.ok) {
-        fetchOrders();
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het annuleren van de bestelling: ${error.detail}`);
-      }
-    } catch (error) {
-      console.error('Error cancelling order:', error);
-      alert('Er is een fout opgetreden bij het annuleren van de bestelling.');
-    }
-  };
-
+  if (!hasAdminAccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+  
   const formatPrice = (priceCents: number) => {
     return `€${(priceCents / 100).toFixed(2)}`;
   };
@@ -235,21 +204,9 @@ export default function CreditOrdersPage() {
     return matchesSearch && matchesStatus && matchesPackage;
   });
 
-  if (!isLoaded || roleLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-examen-cyan" />
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return null;
-  }
-
   return (
-          <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Credit Bestellingen</h1>
           <p className="text-gray-600">Beheer credit bestellingen van gebruikers</p>
@@ -339,230 +296,74 @@ export default function CreditOrdersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredOrders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{order.user_email}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Package className="h-4 w-4 text-gray-400" />
-                            <div>
-                              <div className="font-medium">{order.package_name}</div>
-                              <div className="text-sm text-gray-500">
-                                {order.package_credits} credits • {formatPrice(order.package_price)}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Building className="h-4 w-4 text-gray-400" />
-                            <span>{order.school_name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span>{order.purchaser_name}</span>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(order.status)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm">{formatDate(order.created_at)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedOrder(order);
-                                setOrderDetailOpen(true);
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            
-                            {order.status === 'pending' && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleFulfillOrder(order.id)}
-                                  disabled={fulfillingOrder === order.id}
-                                  className="text-green-600 hover:text-green-700"
-                                >
-                                  {fulfillingOrder === order.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <CheckCircle className="h-4 w-4" />
-                                  )}
-                                </Button>
-                                
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleCancelOrder(order.id)}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
+                    {filteredOrders.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          Geen bestellingen gevonden
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredOrders.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-gray-400" />
+                              <span className="font-medium">{order.user_email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-gray-400" />
+                              <div>
+                                <div className="font-medium">{order.package_name}</div>
+                                <div className="text-sm text-gray-500">
+                                  {order.package_credits} credits • {formatPrice(order.package_price)}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Building className="h-4 w-4 text-gray-400" />
+                              <span>{order.school_name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span>{order.purchaser_name}</span>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(order.status)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm">{formatDate(order.created_at)}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedOrder(order);
+                                  setOrderDetailOpen(true);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
-              
-              {filteredOrders.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
-                  Geen bestellingen gevonden
-                </div>
-              )}
             </>
           )}
         </div>
       </div>
-
-      {/* Order Detail Modal */}
-      <Dialog open={orderDetailOpen} onOpenChange={setOrderDetailOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Bestelling Details</DialogTitle>
-          </DialogHeader>
-          
-          {selectedOrder && (
-            <div className="space-y-6">
-              {/* Order Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    Bestelling Informatie
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Bestelling ID</label>
-                      <p className="text-sm">{selectedOrder.id}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Status</label>
-                      <div className="mt-1">{getStatusBadge(selectedOrder.status)}</div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Datum</label>
-                      <p className="text-sm">{formatDate(selectedOrder.created_at)}</p>
-                    </div>
-                    {selectedOrder.fulfilled_at && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Vervuld op</label>
-                        <p className="text-sm">{formatDate(selectedOrder.fulfilled_at)}</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Package Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="h-5 w-5" />
-                    Pakket Informatie
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Pakket</label>
-                      <p className="font-medium">{selectedOrder.package_name}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Credits</label>
-                      <p className="font-medium">{selectedOrder.package_credits}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Prijs</label>
-                      <p className="font-medium">{formatPrice(selectedOrder.package_price)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Customer Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    Klant Informatie
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Email</label>
-                      <p className="text-sm">{selectedOrder.user_email}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">School</label>
-                      <p className="text-sm">{selectedOrder.school_name}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Koper</label>
-                      <p className="text-sm">{selectedOrder.purchaser_name}</p>
-                    </div>
-                    {selectedOrder.purchase_reference && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Referentie</label>
-                        <p className="text-sm">{selectedOrder.purchase_reference}</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Address */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Adres
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <p className="text-sm">{selectedOrder.address_line1}</p>
-                    {selectedOrder.address_line2 && (
-                      <p className="text-sm">{selectedOrder.address_line2}</p>
-                    )}
-                    <p className="text-sm">
-                      {selectedOrder.postal_code} {selectedOrder.city}
-                    </p>
-                    <p className="text-sm">{selectedOrder.country}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOrderDetailOpen(false)}>
-              Sluiten
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 } 

@@ -7,6 +7,9 @@ interface CreditContextType {
   credits: number;
   loading: boolean;
   refreshCredits: () => Promise<void>;
+  creditOrderModalOpen: boolean;
+  openCreditOrderModal: () => void;
+  closeCreditOrderModal: () => void;
 }
 
 const CreditContext = createContext<CreditContextType | undefined>(undefined);
@@ -28,6 +31,7 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   const { getToken } = useAuth();
   const [credits, setCredits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [creditOrderModalOpen, setCreditOrderModalOpen] = useState(false);
 
   const fetchCredits = async () => {
     // Don't fetch if user is not loaded yet
@@ -69,6 +73,14 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     await fetchCredits();
   };
 
+  const openCreditOrderModal = () => {
+    setCreditOrderModalOpen(true);
+  };
+
+  const closeCreditOrderModal = () => {
+    setCreditOrderModalOpen(false);
+  };
+
   useEffect(() => {
     fetchCredits();
   }, [user, userLoaded, getToken]);
@@ -76,7 +88,10 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   const value = {
     credits,
     loading,
-    refreshCredits
+    refreshCredits,
+    creditOrderModalOpen,
+    openCreditOrderModal,
+    closeCreditOrderModal
   };
 
   return (
