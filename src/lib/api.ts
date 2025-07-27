@@ -127,11 +127,7 @@ class ApiClient {
     });
   }
 
-  async regeneratePassword(versionId: string) {
-    return this.makeRequest(`/api/catalog/versions/${versionId}/password`, {
-      method: 'PATCH',
-    });
-  }
+
 
   // Assessment Components
   async createComponent(versionId: string, data: any) {
@@ -272,7 +268,7 @@ export const api = {
   updateVersion: (id: string, data: any) => apiClient.updateVersion(id, data),
   deleteVersion: (id: string) => apiClient.deleteVersion(id),
   toggleVersionStatus: (id: string, enabled: boolean) => apiClient.toggleVersionStatus(id, enabled),
-  regeneratePassword: (id: string) => apiClient.regeneratePassword(id),
+  
   
   // Component operations
   createComponent: (versionId: string, data: any) => apiClient.createComponent(versionId, data),

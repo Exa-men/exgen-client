@@ -56,8 +56,8 @@ export default function VersionDropdown({
   // Handle case where versions array is undefined or empty
   if (!versions || versions.length === 0) {
     return (
-      <Badge variant="outline" className="font-mono">
-        {currentVersion}
+      <Badge variant="outline" className="font-mono text-gray-500">
+        N/A
       </Badge>
     );
   }

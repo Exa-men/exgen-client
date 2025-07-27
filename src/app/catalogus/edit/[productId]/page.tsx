@@ -74,7 +74,6 @@ interface BackendProductVersion {
   release_date: string;
   is_latest: boolean;
   is_enabled: boolean;
-  password: string;
   rubric_levels: number;
   documents: BackendVersionDocument[];
   assessment_components: BackendAssessmentComponent[];
@@ -94,9 +93,7 @@ interface BackendProduct {
   versions: BackendProductVersion[];
 }
 
-interface PasswordResponse {
-  password: string;
-}
+
 
 interface AssessmentLevel {
   id: string;
@@ -123,7 +120,6 @@ interface Version {
   assessmentOnderdelen: AssessmentOnderdeel[];
   rubricLevels: number; // 2, 3, 4, 5, or 6
   documents: Document[];
-  password: string;
   isLatest: boolean;
   isEnabled: boolean;
 }
@@ -197,16 +193,17 @@ export default function EditExamPage() {
   // Document management
   const [dragActive, setDragActive] = useState(false);
   const [uploadingDocuments, setUploadingDocuments] = useState<boolean>(false);
+  
+  // Ref to maintain stable reference to handleFileUpload
+  const handleFileUploadRef = useRef<((files: File[], versionId: string) => Promise<void>) | null>(null);
 
-  // Password copy feedback
-  const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
+
 
   // Version validation feedback
   const [incompleteVersions, setIncompleteVersions] = useState<Set<string>>(new Set());
   
   // Product publication status
-  const [productPublicationStatus, setProductPublicationStatus] = useState<'draft' | 'published'>('draft');
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   
   // Track if product was published to detect changes
   const [wasPublished, setWasPublished] = useState(false);
@@ -318,9 +315,6 @@ export default function EditExamPage() {
       return updated;
     });
 
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
-    
     // Trigger auto-save
     setSaveStatus('dirty');
     debouncedSave.save();
@@ -340,9 +334,6 @@ export default function EditExamPage() {
         )
       };
     });
-
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
 
     // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
@@ -399,9 +390,6 @@ export default function EditExamPage() {
       };
     });
 
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
-    
     // Trigger auto-save
     setSaveStatus('dirty');
     debouncedSave.save();
@@ -430,9 +418,6 @@ export default function EditExamPage() {
       };
     });
 
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
-    
     // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
     performSave();
@@ -465,9 +450,6 @@ export default function EditExamPage() {
         )
       };
     });
-    
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
     
     // Trigger auto-save only if there's meaningful content
     if (shouldAutoSave) {
@@ -554,7 +536,7 @@ export default function EditExamPage() {
           version_number: version.version,
           release_date: version.releaseDate,
           rubric_levels: version.rubricLevels,
-          password: version.password,
+
           is_enabled: version.isEnabled,
           is_latest: version.isLatest,
           assessment_components: version.assessmentOnderdelen.map(component => ({
@@ -654,9 +636,9 @@ export default function EditExamPage() {
                         ...o,
                         criteria: o.criteria.map(c =>
                           c.id === criteriaId
-                            ? field === 'criteria' && value
+                            ? field === 'criteria' && value !== undefined
                               ? { ...c, criteria: value }
-                              : field === 'level' && levelId && value
+                              : field === 'level' && levelId && value !== undefined
                               ? {
                                   ...c,
                                   levels: c.levels.map(level =>
@@ -678,9 +660,6 @@ export default function EditExamPage() {
       console.log('Updated product state after criteria change:', updated);
       return updated;
     });
-    
-    // Check for changes and revert to draft if published
-    checkForChangesAndRevert();
     
     // Trigger auto-save only if there's meaningful content
     if (shouldAutoSave) {
@@ -796,7 +775,7 @@ export default function EditExamPage() {
           releaseDate: version.release_date,
           isLatest: version.is_latest,
           isEnabled: version.is_enabled,
-          password: version.password,
+
           rubricLevels: version.rubric_levels,
           documents: version.documents?.map(doc => ({
             id: doc.id,
@@ -827,7 +806,7 @@ export default function EditExamPage() {
       setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
       
       // Set publication status based on product status
-      setProductPublicationStatus(transformedProduct.status === 'available' ? 'published' : 'draft');
+
       
       // Initialize edit values
       setEditValues({
@@ -861,7 +840,6 @@ export default function EditExamPage() {
               releaseDate: '2024-01-15',
               isLatest: true,
               isEnabled: true,
-              password: generatePassword(),
               rubricLevels: 3,
               assessmentOnderdelen: [
                 {
@@ -910,7 +888,6 @@ export default function EditExamPage() {
               releaseDate: '2024-01-20',
               isLatest: false,
               isEnabled: false,
-              password: generatePassword(),
               rubricLevels: 3,
               assessmentOnderdelen: [],
               documents: []
@@ -982,9 +959,6 @@ export default function EditExamPage() {
         ...editValues,
         credits: parseInt(editValues.credits) || 0
       } : null);
-
-      // Check for changes and revert to draft if published
-      checkForChangesAndRevert();
 
       setIsEditing(false);
       toast({
@@ -1083,13 +1057,18 @@ export default function EditExamPage() {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       console.log('Processing files:', Array.from(e.dataTransfer.files).map(f => f.name));
-      await handleFileUpload(Array.from(e.dataTransfer.files), versionId);
+      const currentHandleFileUpload = handleFileUploadRef.current;
+      if (currentHandleFileUpload) {
+        await currentHandleFileUpload(Array.from(e.dataTransfer.files), versionId);
+      } else {
+        console.error('handleFileUpload not available');
+      }
     } else {
       console.log('No files found in drop event');
     }
   }, []);
 
-  const handleFileUpload = async (files: File[], versionId: string) => {
+  const handleFileUpload = useCallback(async (files: File[], versionId: string) => {
     console.log('handleFileUpload called with files:', files.map(f => f.name), 'for version:', versionId);
     if (!product) {
       console.log('No product found, returning');
@@ -1131,9 +1110,6 @@ export default function EditExamPage() {
           };
         });
 
-        // Check for changes and revert to draft if published
-        checkForChangesAndRevert();
-
         setSaveStatus('dirty');
         debouncedSave.save();
       }
@@ -1161,7 +1137,12 @@ export default function EditExamPage() {
     } finally {
       setUploadingDocuments(false);
     }
-  };
+  }, [product, api, generateId, setSaveStatus, debouncedSave, toast]);
+
+  // Update ref when handleFileUpload changes
+  useEffect(() => {
+    handleFileUploadRef.current = handleFileUpload;
+  }, [handleFileUpload]);
 
   const removeDocument = async (versionId: string, documentId: string) => {
     if (!product) return;
@@ -1189,9 +1170,6 @@ export default function EditExamPage() {
           )
         };
       });
-
-      // Check for changes and revert to draft if published
-      checkForChangesAndRevert();
 
       setSaveStatus('dirty');
       debouncedSave.save();
@@ -1249,9 +1227,6 @@ export default function EditExamPage() {
           )
         };
       });
-
-      // Check for changes and revert to draft if published
-      checkForChangesAndRevert();
 
       setSaveStatus('dirty');
       debouncedSave.save();
@@ -1326,7 +1301,7 @@ export default function EditExamPage() {
         releaseDate: createdVersion.release_date,
         isLatest: createdVersion.is_latest,
         isEnabled: createdVersion.is_enabled,
-        password: createdVersion.password,
+
         rubricLevels: createdVersion.rubric_levels,
         assessmentOnderdelen: latestVersion ? latestVersion.assessmentOnderdelen.map(onderdeel => ({
           ...onderdeel,
@@ -1369,65 +1344,7 @@ export default function EditExamPage() {
     }
   };
 
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    let password = '';
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
 
-  const copyPassword = (password: string, versionId: string) => {
-    navigator.clipboard.writeText(password);
-    setCopiedPasswordId(versionId);
-    
-    // Reset the copied state after 2 seconds
-    setTimeout(() => {
-      setCopiedPasswordId(null);
-    }, 2000);
-  };
-
-  const regeneratePassword = async (versionId: string) => {
-    if (!product) return;
-    
-    try {
-      const result = await api.regeneratePassword(versionId);
-      
-      if (result.error) {
-        throw new Error(result.error.detail);
-      }
-
-      // Update the product state with the new password from the backend
-      const passwordData = result.data as PasswordResponse;
-      setProduct(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          versions: prev.versions.map(v => 
-            v.id === versionId 
-              ? { ...v, password: passwordData?.password || generatePassword() }
-              : v
-          )
-        };
-      });
-
-      setSaveStatus('dirty');
-      debouncedSave.save();
-
-      toast({
-        title: "Nieuwe protector gegenereerd",
-        description: "De spreadsheet protector is succesvol vernieuwd.",
-      });
-    } catch (error) {
-      console.error('Error regenerating password:', error);
-      toast({
-        title: "Fout",
-        description: error instanceof Error ? error.message : "Er is een fout opgetreden bij het genereren van de protector.",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Check if version meets publication requirements
   const isVersionReadyForPublication = (version: Version): boolean => {
@@ -1472,105 +1389,7 @@ export default function EditExamPage() {
     return true;
   };
 
-  // Check if product is ready for publication
-  const isProductReadyForPublication = (): boolean => {
-    if (!product) return false;
-    
-    // Check if basic product information is complete
-    const hasBasicInfo = Boolean(product.code && product.title && product.description && product.credits && product.cohort);
-    
-    // Check if there's at least one enabled version
-    const hasEnabledVersion = product.versions.some(version => version.isEnabled);
-    
-    return hasBasicInfo && hasEnabledVersion;
-  };
 
-  // Get product publication status
-  const getProductPublicationStatus = () => {
-    const isReady = isProductReadyForPublication();
-    return {
-      status: productPublicationStatus,
-      isReady,
-      canPublish: isReady,
-      canUnpublish: productPublicationStatus === 'published'
-    };
-  };
-
-  // Handle product publication status change
-  const handleProductPublicationChange = async (newStatus: 'draft' | 'published') => {
-    if (!product) return;
-    
-    const status = getProductPublicationStatus();
-    
-    // If trying to publish, check if product is ready
-    if (newStatus === 'published' && !status.canPublish) {
-      toast({
-        title: "Product niet klaar voor publicatie",
-        description: "Zorg ervoor dat alle basisinformatie is ingevuld en er minimaal één actieve versie is.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      setUpdatingStatus(true);
-      
-      // Convert to backend status values
-      const backendStatus = newStatus === 'published' ? 'available' : 'draft';
-      
-      const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: backendStatus }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to update status');
-      }
-      
-      // Update local state
-      setProductPublicationStatus(newStatus);
-      setProduct(prev => prev ? { ...prev, status: backendStatus } : prev);
-      
-      // Track if product is now published
-      if (newStatus === 'published') {
-        setWasPublished(true);
-      }
-      
-      toast({
-        title: newStatus === 'published' ? "Product gepubliceerd" : "Product teruggezet naar concept",
-        description: newStatus === 'published' 
-          ? "Het product is nu beschikbaar voor gebruikers." 
-          : "Het product is niet meer zichtbaar voor gebruikers.",
-      });
-    } catch (err) {
-      console.error('Error updating product publication status:', err);
-      toast({
-        title: "Fout",
-        description: "Er is een fout opgetreden bij het bijwerken van de publicatiestatus.",
-        variant: "destructive",
-      });
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  // Check for changes and revert to draft if product was published
-  const checkForChangesAndRevert = () => {
-    if (productPublicationStatus === 'published' && wasPublished) {
-      setProductPublicationStatus('draft');
-      toast({
-        title: "Product teruggezet naar concept",
-        description: "Het product is automatisch teruggezet naar concept omdat er wijzigingen zijn gemaakt.",
-        variant: "default",
-      });
-    }
-  };
 
   // Get version status for display
   const getVersionStatus = (version: Version) => {
@@ -1783,9 +1602,6 @@ export default function EditExamPage() {
         )
       } : null);
 
-      // Check for changes and revert to draft if published
-      checkForChangesAndRevert();
-
       console.log('Toggle successful:', { versionId, isEnabled });
 
       toast({
@@ -1875,45 +1691,7 @@ export default function EditExamPage() {
             Terug
           </Button>
           
-          {/* Product Publication Status */}
-          <div className="flex flex-col items-end space-y-1">
-            <div className="flex items-center space-x-3">
-              <span className="text-sm font-medium text-gray-700">Status:</span>
-              <div className="flex items-center space-x-2">
-                <div 
-                  className={`w-3 h-3 rounded-full ${
-                    productPublicationStatus === 'published' 
-                      ? 'bg-green-500' 
-                      : 'bg-blue-500'
-                  }`}
-                  title={productPublicationStatus === 'published' ? 'Published' : 'Draft'}
-                />
-                <select
-                  value={productPublicationStatus}
-                  onChange={(e) => handleProductPublicationChange(e.target.value as 'draft' | 'published')}
-                  disabled={updatingStatus || (!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft')}
-                  className={`text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
-                    productPublicationStatus === 'published' 
-                      ? 'text-green-600 font-medium' 
-                      : 'text-blue-600 font-medium'
-                  }`}
-                >
-                  <option value="draft" className="text-blue-600">Draft</option>
-                  <option value="published" className="text-green-600">Published</option>
-                </select>
-                {updatingStatus && (
-                  <div className="ml-1">
-                    <RefreshCw className="h-4 w-4 animate-spin text-examen-cyan" />
-                  </div>
-                )}
-              </div>
-            </div>
-            {!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft' && (
-              <span className="text-xs text-red-600">
-                Product niet klaar voor publicatie
-              </span>
-            )}
-          </div>
+
         </div>
 
         {/* Exam Information */}
@@ -2506,33 +2284,7 @@ export default function EditExamPage() {
                         </div>
                       </div>
 
-                      {/* Spreadsheet Protector */}
-                      <div>
-                        <h4 className="font-medium mb-3">Spreadsheet Protector</h4>
-                        <div className="flex items-center space-x-2">
-                          <Input
-                            type={copiedPasswordId === version.id ? "text" : "text"}
-                            value={copiedPasswordId === version.id ? "Gekopieerd!" : version.password}
-                            readOnly
-                            className={`flex-1 cursor-pointer transition-all duration-200 font-mono text-sm ${
-                              copiedPasswordId === version.id 
-                                ? 'bg-green-100 border-green-500 text-green-700' 
-                                : 'hover:bg-gray-50'
-                            }`}
-                            onClick={() => copyPassword(version.password, version.id)}
-                            title="Klik om protector te kopiëren"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => regeneratePassword(version.id)}
-                            className="p-2"
-                            title="Nieuwe protector genereren"
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+
                     </CollapsibleContent>
                   </Collapsible>
                 </div>
