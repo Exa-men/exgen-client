@@ -48,6 +48,11 @@ export default function VersionDropdown({
     return new Date(dateString).toLocaleDateString('nl-NL');
   };
 
+  // Sort versions by release date (newest first) as a fallback
+  const sortedVersions = versions ? [...versions].sort((a, b) => 
+    new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime()
+  ) : [];
+
   // Handle case where versions array is undefined or empty
   if (!versions || versions.length === 0) {
     return (
@@ -59,7 +64,7 @@ export default function VersionDropdown({
 
   // If not purchased, only show the latest version as a badge
   if (!isPurchased) {
-    const latestVersion = versions.find(v => v.isLatest) || versions[0];
+    const latestVersion = sortedVersions.find(v => v.isLatest) || sortedVersions[0];
     return (
       <Badge variant="outline" className="font-mono">
         {latestVersion.version}
@@ -84,7 +89,7 @@ export default function VersionDropdown({
         <div className="px-2 py-1.5 text-sm font-medium text-gray-500 border-b border-gray-200">
           Beschikbare versies
         </div>
-        {versions?.map((version) => (
+        {sortedVersions.map((version) => (
           <DropdownMenuItem 
             key={version.version}
             className="flex items-center justify-between p-3 cursor-pointer"

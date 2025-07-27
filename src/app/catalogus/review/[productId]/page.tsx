@@ -24,6 +24,7 @@ interface ExamProduct {
   duration?: string;
   questions?: number;
   level?: string;
+  credits?: number; // Added credits to interface
 }
 
 export default function ReviewPage() {
@@ -93,7 +94,8 @@ export default function ReviewPage() {
           ],
           duration: '120 minuten',
           questions: 45,
-          level: 'MBO Niveau 2'
+          level: 'MBO Niveau 2',
+          credits: 100 // Mock data for credits
         });
       } finally {
         setLoading(false);
@@ -235,7 +237,7 @@ export default function ReviewPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-examen-cyan mb-2">
-                    {formatCredits(product.cost)}
+                    {formatCredits(product.credits || 0)}
                   </div>
                   <div className="text-sm text-gray-500">
                     Versie {product.version}
