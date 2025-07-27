@@ -26,6 +26,7 @@ interface Version {
   releaseDate: string;
   downloadUrl?: string;
   isLatest: boolean;
+  isEnabled?: boolean; // Only present for admin users
 }
 
 interface ExamProduct {
@@ -76,7 +77,7 @@ export default function CatalogusPage() {
   const [downloadingProduct, setDownloadingProduct] = useState<string | null>(null);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ExamProduct | null>(null);
-  const [filter, setFilter] = useState<'alles' | 'ingekocht' | 'beschikbaar'>('alles');
+  const [filter, setFilter] = useState<'alles' | 'ingekocht'>('alles');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackProduct, setFeedbackProduct] = useState<ExamProduct | null>(null);
   // State for delete modal
@@ -96,7 +97,12 @@ export default function CatalogusPage() {
     // Check if there's at least one version
     const hasVersion = product.versions && product.versions.length > 0;
     
-    return hasBasicInfo && hasVersion;
+    // Check if there's at least one enabled version (only for admin users)
+    const hasEnabledVersion = isAdmin ? 
+      (product.versions && product.versions.some(version => version.isEnabled === true)) : 
+      true; // For non-admin users, assume versions are enabled if they exist
+    
+    return hasBasicInfo && hasVersion && hasEnabledVersion;
   };
 
 
@@ -593,17 +599,6 @@ export default function CatalogusPage() {
           >
             Ingekocht
           </button>
-          <button
-            className={cn(
-              'rounded-full px-8 py-3 text-lg font-semibold border transition-all',
-              filter === 'beschikbaar'
-                ? 'bg-examen-cyan text-white border-examen-cyan shadow'
-                : 'bg-white text-gray-700 border-examen-cyan hover:bg-examen-cyan/10'
-            )}
-            onClick={() => setFilter('beschikbaar')}
-          >
-            Beschikbaar
-          </button>
         </div>
 
         {/* Credit Banner */}
@@ -701,6 +696,7 @@ export default function CatalogusPage() {
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
+                      <TableHead className="font-semibold text-center">Versie</TableHead>
 
                       {isAdmin && (
                         <TableHead className="font-semibold text-center">Status</TableHead>
@@ -750,6 +746,14 @@ export default function CatalogusPage() {
                             placeholder="Cohort"
                           />
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Input
+                            value="N/A"
+                            disabled
+                            className="text-center text-gray-500 bg-gray-100 cursor-not-allowed"
+                            title="Versies worden aangemaakt na het opslaan van het product"
+                          />
+                        </TableCell>
 
                         {isAdmin && (
                           <TableCell className="text-center">
@@ -769,8 +773,11 @@ export default function CatalogusPage() {
                                 className={`text-xs px-1 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
                                   newProduct.status === 'available' 
                                     ? 'text-green-600 font-medium' 
+                                    : !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.credits
+                                    ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
                                     : 'text-blue-600 font-medium'
                                 }`}
+                                title={!newProduct.code || !newProduct.title || !newProduct.description || !newProduct.credits ? 'Complete all required fields to enable status change' : ''}
                               >
                                 <option value="draft" className="text-blue-600">Draft</option>
                                 <option value="available" className="text-green-600">Published</option>
@@ -803,7 +810,7 @@ export default function CatalogusPage() {
                     )}
                     {filteredAndSortedProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
                           {searchTerm ? 'Geen examens gevonden voor je zoekopdracht.' : 'Geen examens beschikbaar.'}
                         </TableCell>
                       </TableRow>
@@ -836,7 +843,7 @@ export default function CatalogusPage() {
                           <TableCell>
                             <VersionDropdown
                               versions={product.versions}
-                              currentVersion={product.version || "N/A"}
+                              currentVersion={product.version || (product.versions.length > 0 ? product.versions[0].version : "N/A")}
                               isPurchased={product.isPurchased}
                               onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
                             />
@@ -852,20 +859,18 @@ export default function CatalogusPage() {
                                   }`}
                                   title={product.status === 'available' ? 'Published' : 'Draft'}
                                 />
-                                {!isProductReadyForPublication(product) && product.status === 'draft' && (
-                                  <div className="text-xs text-red-500" title="Product not ready for publication">
-                                    ⚠️
-                                  </div>
-                                )}
                                 <select
                                   value={product.status || 'draft'}
                                   onChange={(e) => handleStatusChange(product.id, e.target.value as 'draft' | 'available')}
-                                  disabled={updatingStatus === product.id}
+                                  disabled={updatingStatus === product.id || (!isProductReadyForPublication(product) && product.status === 'draft')}
                                   className={`text-xs px-1 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
                                     product.status === 'available' 
                                       ? 'text-green-600 font-medium' 
+                                      : !isProductReadyForPublication(product) && product.status === 'draft'
+                                      ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
                                       : 'text-blue-600 font-medium'
                                   }`}
+                                  title={!isProductReadyForPublication(product) && product.status === 'draft' ? 'Product not ready for publication' : ''}
                                 >
                                   <option value="draft" className="text-blue-600">Draft</option>
                                   <option value="available" className="text-green-600">Published</option>
@@ -911,18 +916,19 @@ export default function CatalogusPage() {
                                   variant="default"
                                   size="sm"
                                   onClick={() => handlePurchase(product.id)}
-                                  disabled={purchasingProduct === product.id}
+                                  disabled={purchasingProduct === product.id || product.status === 'draft'}
                                   className={cn(
                                     "flex items-center justify-center w-full bg-examen-cyan text-white border border-examen-cyan hover:bg-examen-cyan/90 transition-all",
-                                    purchasingProduct === product.id ? "opacity-80" : ""
+                                    (purchasingProduct === product.id || product.status === 'draft') ? "opacity-80" : ""
                                   )}
+                                  title={product.status === 'draft' ? 'Draft examens kunnen niet worden gekocht' : ''}
                                 >
                                   {purchasingProduct === product.id ? (
                                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                   ) : (
                                     <ShoppingCart className="h-4 w-4 mr-1" />
                                   )}
-                                  {purchasingProduct === product.id ? 'Inkopen...' : 'Inkopen'}
+                                  {purchasingProduct === product.id ? 'Inkopen...' : (product.status === 'draft' ? 'Draft' : 'Inkopen')}
                                 </Button>
                               )}
                               {product.isPurchased && (
@@ -1031,18 +1037,19 @@ export default function CatalogusPage() {
                           variant="default"
                           size="sm"
                           onClick={() => handlePurchase(product.id)}
-                          disabled={purchasingProduct === product.id}
+                          disabled={purchasingProduct === product.id || product.status === 'draft'}
                           className={cn(
                             "flex items-center justify-center w-full bg-examen-cyan text-white border border-examen-cyan hover:bg-examen-cyan/90 transition-all",
-                            purchasingProduct === product.id ? "opacity-80" : ""
+                            (purchasingProduct === product.id || product.status === 'draft') ? "opacity-80" : ""
                           )}
+                          title={product.status === 'draft' ? 'Draft examens kunnen niet worden gekocht' : ''}
                         >
                           {purchasingProduct === product.id ? (
                             <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                           ) : (
                             <ShoppingCart className="h-4 w-4 mr-1" />
                           )}
-                          {purchasingProduct === product.id ? 'Inkopen...' : 'Inkopen'}
+                          {purchasingProduct === product.id ? 'Inkopen...' : (product.status === 'draft' ? 'Draft' : 'Inkopen')}
                         </Button>
                       )}
                       {product.isPurchased && (
@@ -1131,7 +1138,7 @@ export default function CatalogusPage() {
           <div className="py-4">
             {purchaseProduct && (
               <>
-                Dit product kost <span className="font-semibold">{purchaseProduct.cost} credits</span>. Bevestig hieronder je aankoop.
+                Dit product kost <span className="font-semibold">{purchaseProduct.credits} credits</span>. Bevestig hieronder je aankoop.
               </>
             )}
           </div>
