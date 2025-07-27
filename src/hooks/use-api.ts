@@ -122,9 +122,7 @@ export function useApi() {
       method: 'PATCH',
       body: JSON.stringify({ is_enabled: enabled }),
     }),
-    regeneratePassword: (id: string) => makeAuthenticatedRequest(`/api/catalog/versions/${id}/password`, {
-      method: 'PATCH',
-    }),
+    
     
     // Component operations
     createComponent: (versionId: string, data: any) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/components`, {

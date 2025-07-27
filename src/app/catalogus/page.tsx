@@ -44,7 +44,7 @@ interface ExamProduct {
   status?: 'draft' | 'available'; // New status field
 }
 
-type SortField = 'code' | 'title' | 'credits' | 'validFrom' | 'version';
+type SortField = 'code' | 'title' | 'credits' | 'validFrom';
 type SortDirection = 'asc' | 'desc';
 
 export default function CatalogusPage() {
@@ -108,7 +108,6 @@ export default function CatalogusPage() {
     credits: '',
     cohort: '2025-26',
     validFrom: '2025-26',
-    version: '4.0',
     status: 'draft' as 'draft' | 'available',
   });
   const [savingNewProduct, setSavingNewProduct] = useState(false);
@@ -131,7 +130,6 @@ export default function CatalogusPage() {
       credits: '',
       cohort: '2025-26',
       validFrom: '2025-26',
-      version: '4.0',
       status: 'draft',
     });
   };
@@ -156,7 +154,6 @@ export default function CatalogusPage() {
           credits: Number(newProduct.credits),
           cohort: newProduct.cohort,
           validFrom: newProduct.validFrom,
-          version: newProduct.version,
           status: newProduct.status,
         }),
       });
@@ -704,16 +701,7 @@ export default function CatalogusPage() {
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('version')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Versie
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
+
                       {isAdmin && (
                         <TableHead className="font-semibold text-center">Status</TableHead>
                       )}
@@ -762,13 +750,7 @@ export default function CatalogusPage() {
                             placeholder="Cohort"
                           />
                         </TableCell>
-                        <TableCell>
-                          <Input
-                            value={newProduct.version}
-                            onChange={e => handleNewProductChange('version', e.target.value)}
-                            placeholder="Versie"
-                          />
-                        </TableCell>
+
                         {isAdmin && (
                           <TableCell className="text-center">
                                                           <div className="flex items-center justify-center space-x-2">
@@ -821,7 +803,7 @@ export default function CatalogusPage() {
                     )}
                     {filteredAndSortedProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
                           {searchTerm ? 'Geen examens gevonden voor je zoekopdracht.' : 'Geen examens beschikbaar.'}
                         </TableCell>
                       </TableRow>
@@ -854,7 +836,7 @@ export default function CatalogusPage() {
                           <TableCell>
                             <VersionDropdown
                               versions={product.versions}
-                              currentVersion={product.version}
+                              currentVersion={product.version || "N/A"}
                               isPurchased={product.isPurchased}
                               onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
                             />
