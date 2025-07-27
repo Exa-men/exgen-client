@@ -100,5 +100,5 @@
 
 /* Voor een soepelere scroll-animatie */
 html {
-  scroll-padding-top: 80px; /* Helpt met juist scrollen naar secties met een vaste navbar */
+  scroll-padding-top: 0; /* Removed the offset that was causing the page to start scrolled down */
 }

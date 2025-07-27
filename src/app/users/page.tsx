@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Search, ArrowUpDown, Crown, User, Edit, Loader2, Filter } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -33,6 +33,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
   const { isSignedIn, isLoaded, user } = useUser();
+  const { getToken } = useAuth();
   const router = useRouter();
   
   const [users, setUsers] = useState<UserData[]>([]);
@@ -56,7 +57,7 @@ export default function UsersPage() {
     try {
       setLoading(true);
       setError(null);
-      const token = await (window as any).Clerk?.session?.getToken();
+      const token = await getToken();
       const response = await fetch('/api/v1/admin/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -82,7 +83,7 @@ export default function UsersPage() {
   const updateUserRole = async (userId: string, newRole: 'user' | 'admin') => {
     try {
       setUpdatingUser(userId);
-      const token = await (window as any).Clerk?.session?.getToken();
+      const token = await getToken();
       const response = await fetch(`/api/v1/admin/users/${userId}/role`, {
         method: 'PATCH',
         headers: {
@@ -111,7 +112,7 @@ export default function UsersPage() {
   const updateUserCredits = async (userId: string, credits: number) => {
     try {
       setUpdatingUser(userId);
-      const token = await (window as any).Clerk?.session?.getToken();
+      const token = await getToken();
       const response = await fetch(`/api/v1/admin/users/${userId}/credits`, {
         method: 'PATCH',
         headers: {
@@ -140,7 +141,7 @@ export default function UsersPage() {
   const updateUserEmail = async (userId: string, email: string) => {
     try {
       setUpdatingUser(userId);
-      const token = await (window as any).Clerk?.session?.getToken();
+      const token = await getToken();
       const response = await fetch(`/api/v1/admin/users/${userId}/email`, {
         method: 'PATCH',
         headers: {

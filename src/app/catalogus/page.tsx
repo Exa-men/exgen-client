@@ -475,24 +475,11 @@ export default function CatalogusPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-          <div className="text-gray-600">Loading...        </div>
+          <div className="text-gray-600">Loading...</div>
+        </div>
       </div>
-
-      {/* PDF Viewer Overlay */}
-      {selectedProduct && (
-        <PDFViewer
-          isOpen={pdfViewerOpen}
-          onClose={() => {
-            setPdfViewerOpen(false);
-            setSelectedProduct(null);
-          }}
-          pdfUrl={`/api/catalog/preview/${selectedProduct.id}`}
-          title={selectedProduct.title}
-        />
-      )}
-    </div>
-  );
-}
+    );
+  }
 
   if (!isSignedIn) {
     return null; // Will redirect

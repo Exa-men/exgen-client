@@ -26,8 +26,6 @@ const UnifiedHeader: React.FC = () => {
     if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
 
     if (href === '/admin/vouchers') return pathname.startsWith('/admin/vouchers');
-    if (href === '/system') return pathname.startsWith('/system');
-    if (href === '/analytics') return pathname.startsWith('/analytics');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
     return pathname === href;
   };
@@ -115,30 +113,7 @@ const UnifiedHeader: React.FC = () => {
                         Vouchers
                       </Button>
                     </Link>
-                    <Link href="/system">
-                      <Button
-                        variant="ghost"
-                        className={
-                          isActive('/system')
-                            ? "text-examen-cyan font-bold underline underline-offset-4"
-                            : "text-gray-700 hover:text-examen-cyan transition-colors"
-                        }
-                      >
-                        System
-                      </Button>
-                    </Link>
-                    <Link href="/analytics">
-                      <Button
-                        variant="ghost"
-                        className={
-                          isActive('/analytics')
-                            ? "text-examen-cyan font-bold underline underline-offset-4"
-                            : "text-gray-700 hover:text-examen-cyan transition-colors"
-                        }
-                      >
-                        Analytics
-                      </Button>
-                    </Link>
+
                   </>
                 )}
               </>
@@ -252,30 +227,7 @@ const UnifiedHeader: React.FC = () => {
                           Vouchers
                         </Button>
                       </Link>
-                      <Link href="/system">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/system')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          System
-                        </Button>
-                      </Link>
-                      <Link href="/analytics">
-                        <Button
-                          variant="ghost"
-                          className={
-                            isActive('/analytics')
-                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                          }
-                        >
-                          Analytics
-                        </Button>
-                      </Link>
+
                     </>
                   )}
 
