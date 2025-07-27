@@ -202,28 +202,33 @@ export default function EditExamPage() {
   // Version validation feedback
   const [incompleteVersions, setIncompleteVersions] = useState<Set<string>>(new Set());
   
+  // Version toggle loading state
+  const [versionToggleLoading, setVersionToggleLoading] = useState<Set<string>>(new Set());
+  
   // Product publication status
 
   
   // Track if product was published to detect changes
   const [wasPublished, setWasPublished] = useState(false);
 
-  // Initialize versionStates when product loads
-  useEffect(() => {
-    if (product) {
-      const initialVersionStates: Record<string, boolean> = {};
-      product.versions.forEach(version => {
-        initialVersionStates[version.id] = version.isEnabled;
-      });
-      setVersionStates(initialVersionStates);
-      console.log('Initialized versionStates:', initialVersionStates);
-    }
-  }, [product]);
-
   // Debug dialog state
   useEffect(() => {
     console.log('showCriteriaDeleteConfirm changed:', showCriteriaDeleteConfirm);
   }, [showCriteriaDeleteConfirm]);
+
+  // Warn user before leaving if version toggle is in progress
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (versionToggleLoading.size > 0) {
+        e.preventDefault();
+        e.returnValue = 'Er zijn nog wijzigingen bezig. Weet je zeker dat je de pagina wilt verlaten?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [versionToggleLoading]);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -528,7 +533,7 @@ export default function EditExamPage() {
           description: product.description,
           credits: product.credits,
           cohort: product.cohort,
-          cost: product.cost,
+          cost: product.credits,  // Keep cost in sync with credits
           valid_from: product.validFrom,
         },
         versions_data: product.versions.map(version => ({
@@ -766,7 +771,7 @@ export default function EditExamPage() {
         credits: backendProduct.credits,
         cohort: backendProduct.cohort,
         version: backendProduct.version,
-        cost: backendProduct.cost,
+        cost: backendProduct.credits,  // Use credits as the cost
         validFrom: backendProduct.valid_from,
         status: backendProduct.status || 'draft',
         versions: backendProduct.versions?.map(version => ({
@@ -954,10 +959,12 @@ export default function EditExamPage() {
       }
 
       // Update local state
+      const newCredits = parseInt(editValues.credits) || 0;
       setProduct(prev => prev ? {
         ...prev,
         ...editValues,
-        credits: parseInt(editValues.credits) || 0
+        credits: newCredits,
+        cost: newCredits  // Keep cost in sync with credits
       } : null);
 
       setIsEditing(false);
@@ -1248,7 +1255,6 @@ export default function EditExamPage() {
 
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [newVersionNumber, setNewVersionNumber] = useState('');
-  const [versionStates, setVersionStates] = useState<Record<string, boolean>>({});
 
   const duplicateVersion = () => {
     if (!product) return;
@@ -1315,7 +1321,7 @@ export default function EditExamPage() {
             }))
           }))
         })) : [],
-        documents: latestVersion ? [...latestVersion.documents] : []
+        documents: [] // Don't copy documents - admin should upload new ones for the new version
       };
 
       // Update all versions to set isLatest to false (if any exist)
@@ -1327,12 +1333,62 @@ export default function EditExamPage() {
         version: newVersion.version
       } : null);
 
+      // Save the copied assessment data to the backend
+      if (latestVersion && latestVersion.assessmentOnderdelen.length > 0) {
+        try {
+          const saveData = {
+            versions_data: [{
+              id: newVersion.id,
+              version_number: newVersion.version,
+              release_date: newVersion.releaseDate,
+              rubric_levels: newVersion.rubricLevels,
+              is_enabled: newVersion.isEnabled,
+              is_latest: newVersion.isLatest,
+              assessment_components: newVersion.assessmentOnderdelen.map(component => ({
+                component: component.onderdeel,
+                order: 1,
+                assessment_criteria: component.criteria.map(criteria => ({
+                  criteria: criteria.criteria,
+                  order: 1,
+                  assessment_levels: criteria.levels.map(level => ({
+                    label: level.label,
+                    value: level.value,
+                    order: 1
+                  }))
+                }))
+              }))
+            }]
+          };
+
+          console.log('Saving copied assessment data for new version:', saveData);
+          const saveResult = await api.saveProduct(product.id, saveData);
+          
+          if (saveResult.error) {
+            console.error('Error saving copied assessment data:', saveResult.error);
+            toast({
+              title: "Waarschuwing",
+              description: "Versie aangemaakt, maar assessment data kon niet worden gekopieerd. Probeer handmatig op te slaan.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('Successfully saved copied assessment data');
+          }
+        } catch (error) {
+          console.error('Error saving copied assessment data:', error);
+          toast({
+            title: "Waarschuwing",
+            description: "Versie aangemaakt, maar assessment data kon niet worden gekopieerd. Probeer handmatig op te slaan.",
+            variant: "destructive",
+          });
+        }
+      }
+
       setShowVersionDialog(false);
       setNewVersionNumber('');
 
       toast({
         title: "Nieuwe versie aangemaakt",
-        description: `Versie ${newVersion.version} is succesvol aangemaakt.`,
+        description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}. Upload nieuwe documenten voor deze versie.`,
       });
     } catch (error) {
       console.error('Error creating version:', error);
@@ -1516,7 +1572,7 @@ export default function EditExamPage() {
     const version = product.versions.find(v => v.id === versionId);
     if (!version) return;
 
-    console.log('Toggle attempt:', { versionId, isEnabled, currentState: versionStates[versionId], backendState: version.isEnabled });
+    console.log('Toggle attempt:', { versionId, isEnabled, backendState: version.isEnabled });
 
     // If trying to enable, check if version is ready for publication
     if (isEnabled && !isVersionReadyForPublication(version)) {
@@ -1581,10 +1637,12 @@ export default function EditExamPage() {
         variant: "destructive",
       });
       
-      // Revert the checkbox state
-      setVersionStates(prev => ({ ...prev, [versionId]: false }));
+      // No need to revert checkbox state since we're using version.isEnabled directly
       return;
     }
+    
+    // Set loading state for this version
+    setVersionToggleLoading(prev => new Set([...prev, versionId]));
     
     try {
       // Call the real API
@@ -1602,6 +1660,8 @@ export default function EditExamPage() {
         )
       } : null);
 
+      // No need to update versionStates since we're using version.isEnabled directly
+
       console.log('Toggle successful:', { versionId, isEnabled });
 
       toast({
@@ -1613,13 +1673,19 @@ export default function EditExamPage() {
     } catch (err) {
       console.error('Error updating version status:', err);
       
-      // Revert the local checkbox state on error
-      setVersionStates(prev => ({ ...prev, [versionId]: !isEnabled }));
+      // No need to revert checkbox state since we're using version.isEnabled directly
       
       toast({
         title: "Fout",
         description: err instanceof Error ? err.message : "Er is een fout opgetreden bij het bijwerken van de versie status.",
         variant: "destructive",
+      });
+    } finally {
+      // Clear loading state
+      setVersionToggleLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(versionId);
+        return newSet;
       });
     }
   };
@@ -1868,14 +1934,21 @@ export default function EditExamPage() {
                       <div className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                          checked={versionStates[version.id] !== undefined ? versionStates[version.id] : version.isEnabled}
+                          checked={version.isEnabled}
                           onChange={(e) => {
                             const newState = e.target.checked;
-                            setVersionStates(prev => ({ ...prev, [version.id]: newState }));
                             handleToggleVersionStatus(version.id, newState);
                           }}
-                          className="w-4 h-4 text-examen-cyan bg-gray-100 border-gray-300 rounded focus:ring-examen-cyan focus:ring-2"
+                          disabled={versionToggleLoading.has(version.id)}
+                          className={`w-4 h-4 text-examen-cyan bg-gray-100 border-gray-300 rounded focus:ring-examen-cyan focus:ring-2 ${
+                            versionToggleLoading.has(version.id) ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
                         />
+                        {versionToggleLoading.has(version.id) && (
+                          <div className="ml-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-examen-cyan"></div>
+                          </div>
+                        )}
                         <div>
                           <h3 className="font-semibold">Versie {version.version}</h3>
                           <p className="text-sm text-gray-600">
@@ -2478,6 +2551,11 @@ export default function EditExamPage() {
               <p className="text-sm text-gray-500 mt-1">
                 Voer het gewenste versienummer in. Het wordt voorgesteld op basis van de laatste versie.
               </p>
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Let op:</strong> De nieuwe versie krijgt de assessment criteria van de vorige versie, maar documenten moeten opnieuw worden geüpload.
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>
