@@ -14,8 +14,9 @@ import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import CreditBanner from '../components/CreditBanner';
-import CreditOrderModal from '../components/CreditOrderModal';
+
 import { useCredits } from '../contexts/CreditContext';
+import { useCreditModal } from '../contexts/CreditModalContext';
 import { cn } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { useRole } from '../../hooks/use-role';
@@ -49,6 +50,7 @@ export default function CatalogusPage() {
   const router = useRouter();
   const { userRole, isLoading: roleLoading, isAdmin } = useRole();
   const { refreshCredits } = useCredits();
+  const { openModal } = useCreditModal();
   
   const [products, setProducts] = useState<ExamProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,8 +82,7 @@ export default function CatalogusPage() {
   // State for purchase terms checkbox
   const [purchaseTermsChecked, setPurchaseTermsChecked] = useState(false);
   
-  // State for credit order modal
-  const [creditOrderModalOpen, setCreditOrderModalOpen] = useState(false);
+
 
   // State for new product input row
   const [newProduct, setNewProduct] = useState({
@@ -558,7 +559,7 @@ export default function CatalogusPage() {
         </div>
 
         {/* Credit Banner */}
-        <CreditBanner onOrderCredits={() => setCreditOrderModalOpen(true)} />
+        <CreditBanner onOrderCredits={openModal} />
         
         {/* Error Messages */}
         {showCreditsError && (
@@ -576,7 +577,7 @@ export default function CatalogusPage() {
                 </div>
               </div>
               <Button
-                onClick={() => setCreditOrderModalOpen(true)}
+                onClick={openModal}
                 className="bg-red-600 hover:bg-red-700 text-white"
                 size="sm"
               >
@@ -1070,23 +1071,7 @@ export default function CatalogusPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Credit Order Modal */}
-      <CreditOrderModal
-        isOpen={creditOrderModalOpen}
-        onClose={() => {
-          setCreditOrderModalOpen(false);
-          // Clear credits error when modal is closed (user might have ordered credits)
-          setShowCreditsError(false);
-        }}
-        onSuccess={async () => {
-          // Don't close modal immediately - let user see success screen first
-          // The modal will be closed when user clicks "Sluiten" button
-          // Refresh credits for the user
-          await refreshCredits();
-          // Clear credits error since user now has credits
-          setShowCreditsError(false);
-        }}
-      />
+
     </div>
   );
 } 

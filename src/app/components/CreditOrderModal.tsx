@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, Loader2, CreditCard, Building, User, MapPin, FileText, Gift } from 'lucide-react';
+import { X, Check, Loader2, CreditCard, Building, User, MapPin, FileText, Gift, Pencil, Trash2, Plus, Check as CheckIcon, X as XIcon, AlertCircle } from 'lucide-react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -12,6 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '../../lib/utils';
 import { useCredits } from '../contexts/CreditContext';
+import { useCreditModal } from '../contexts/CreditModalContext';
+import { useRole } from '../../hooks/use-role';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface CreditPackage {
   id: string;
@@ -32,22 +35,23 @@ interface CreditOrderForm {
   city: string;
   postal_code: string;
   country: string;
+  comments?: string;
   terms_accepted: boolean;
 }
 
-interface CreditOrderModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: () => void;
+interface FieldValidation {
+  school_name: boolean;
+  purchaser_name: boolean;
+  purchase_reference: boolean;
+  address_line1: boolean;
+  city: boolean;
+  postal_code: boolean;
 }
 
-const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
-  isOpen,
-  onClose,
-  onSuccess
-}) => {
+const CreditOrderModal: React.FC = () => {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { isOpen, closeModal } = useCreditModal();
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -76,6 +80,27 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
     message: string;
     creditsAdded?: number;
   } | null>(null);
+
+  // Admin edit state
+  const { isAdmin } = useRole();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<CreditPackage>>({});
+  const [creating, setCreating] = useState(false);
+  const [createData, setCreateData] = useState<Partial<CreditPackage>>({ name: '', credits: 0, price: 0, description: '', is_active: true });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [crudError, setCrudError] = useState<string | null>(null);
+
+  // Form validation state
+  const [fieldValidation, setFieldValidation] = useState<FieldValidation>({
+    school_name: false,
+    purchaser_name: false,
+    purchase_reference: false,
+    address_line1: false,
+    city: false,
+    postal_code: false,
+  });
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
 
   // Fetch credit packages
   useEffect(() => {
@@ -114,6 +139,44 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
 
   const handleFormChange = (field: keyof CreditOrderForm, value: string | boolean) => {
     setOrderForm(prev => ({ ...prev, [field]: value }));
+    
+    // Validate field if it's a required field
+    if (field in fieldValidation) {
+      const isValid = typeof value === 'string' && value.trim().length > 0;
+      setFieldValidation(prev => ({ ...prev, [field]: isValid }));
+    }
+  };
+
+  const handleFieldBlur = (field: keyof CreditOrderForm) => {
+    setTouchedFields(prev => new Set(prev).add(field));
+  };
+
+  const isFieldValid = (field: keyof FieldValidation): boolean => {
+    return fieldValidation[field];
+  };
+
+  const isFieldTouched = (field: keyof FieldValidation): boolean => {
+    return touchedFields.has(field);
+  };
+
+  const getFieldError = (field: keyof FieldValidation): string => {
+    const fieldLabels = {
+      school_name: 'onderwijsorganisatie',
+      purchaser_name: 'contactpersoon',
+      purchase_reference: 'factuurreferentie',
+      address_line1: 'factuuradres',
+      city: 'plaats',
+      postal_code: 'postcode',
+    };
+    return `Vul de ${fieldLabels[field]} in`;
+  };
+
+  const isFormValid = (): boolean => {
+    return Object.values(fieldValidation).every(valid => valid) && orderForm.terms_accepted;
+  };
+
+  const getInvalidFieldCount = (): number => {
+    return Object.values(fieldValidation).filter(valid => !valid).length;
   };
 
   const handleSubmitOrder = async () => {
@@ -135,7 +198,7 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
 
       if (response.ok) {
         setStep('success');
-        onSuccess?.();
+        await refreshCredits();
       } else {
         const error = await response.json();
         alert(`Fout bij het plaatsen van de bestelling: ${error.detail}`);
@@ -171,7 +234,7 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
     setVoucherCode('');
     setRedeemResult(null);
     setIsVoucherFocused(false);
-    onClose();
+    closeModal();
   };
 
   const handleVoucherRedeem = async () => {
@@ -236,100 +299,347 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
     }
   };
 
+  // Admin: handle edit
+  const handleEdit = (pkg: CreditPackage) => {
+    setEditingId(pkg.id);
+    setEditData({ ...pkg });
+    setCrudError(null);
+  };
+  const handleEditChange = (field: keyof CreditPackage, value: string | number | boolean) => {
+    setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleEditSave = async () => {
+    if (!editData.name || !editData.credits || !editData.price) {
+      setCrudError('Vul alle verplichte velden in');
+      return;
+    }
+    try {
+      setCrudError(null);
+      const response = await fetch(`/api/v1/admin/credits/packages/${editingId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getToken()}`
+        },
+        body: JSON.stringify(editData)
+      });
+      if (response.ok) {
+        await fetchPackages();
+        setEditingId(null);
+      } else {
+        const error = await response.json();
+        setCrudError(error.detail || 'Fout bij opslaan');
+      }
+    } catch (e) {
+      setCrudError('Fout bij opslaan');
+    }
+  };
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setCrudError(null);
+  };
+  // Admin: handle delete
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
+    setCrudError(null);
+  };
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteLoading(true);
+    setCrudError(null);
+    try {
+      const response = await fetch(`/api/v1/admin/credits/packages/${deleteId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${await getToken()}`
+        }
+      });
+      if (response.ok) {
+        await fetchPackages();
+        setDeleteId(null);
+      } else {
+        const error = await response.json();
+        setCrudError(error.detail || 'Fout bij verwijderen');
+      }
+    } catch (e) {
+      setCrudError('Fout bij verwijderen');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+  // Admin: handle create
+  const handleCreate = () => {
+    setCreating(true);
+    setCreateData({ name: '', credits: 0, price: 0, description: '', is_active: true });
+    setCrudError(null);
+  };
+  const handleCreateChange = (field: keyof CreditPackage, value: string | number | boolean) => {
+    setCreateData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleCreateSave = async () => {
+    if (!createData.name || !createData.credits || !createData.price) {
+      setCrudError('Vul alle verplichte velden in');
+      return;
+    }
+    try {
+      setCrudError(null);
+      const response = await fetch('/api/v1/admin/credits/packages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getToken()}`
+        },
+        body: JSON.stringify(createData)
+      });
+      if (response.ok) {
+        await fetchPackages();
+        setCreating(false);
+      } else {
+        const error = await response.json();
+        setCrudError(error.detail || 'Fout bij aanmaken');
+      }
+    } catch (e) {
+      setCrudError('Fout bij aanmaken');
+    }
+  };
+  const handleCreateCancel = () => {
+    setCreating(false);
+    setCrudError(null);
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {step === 'packages' && 'Kies een credit pakket'}
-            {step === 'voucher' && 'Voucher inwisselen'}
-            {step === 'form' && 'Vul bestellingsgegevens in'}
-            {step === 'success' && 'Bestelling geplaatst!'}
+            {step === 'packages' && 'Credits Bestellen'}
+            {step === 'voucher' && 'Voucher Inwisselen'}
+            {step === 'form' && 'Bestelling Plaatsen'}
+            {step === 'success' && 'Bestelling Succesvol'}
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={handleClose}
-            className="h-8 w-8 p-0"
+            className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="h-4 w-4" />
-          </Button>
+            <X className="h-6 w-6" />
+          </button>
         </div>
 
-        {/* Content */}
         <div className="p-6">
           {step === 'packages' && (
             <div className="space-y-4">
+              {crudError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  {crudError}
+                </div>
+              )}
               {loading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-examen-cyan" />
                   <span className="ml-2">Pakketten laden...</span>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {packages.map((pkg) => (
+                <>
+                  <div className="grid gap-4">
+                    {packages.map((pkg) => (
+                      <Card
+                        key={pkg.id}
+                        className={cn(
+                          "relative transition-all hover:shadow-md",
+                          selectedPackage?.id === pkg.id && "ring-2 ring-examen-cyan"
+                        )}
+                        onClick={() => !editingId && handlePackageSelect(pkg)}
+                      >
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            {editingId === pkg.id ? (
+                              <>
+                                <Input
+                                  value={editData.name as string}
+                                  onChange={e => handleEditChange('name', e.target.value)}
+                                  className="text-lg font-semibold"
+                                  placeholder="Pakket naam"
+                                />
+                                <div className="flex gap-2">
+                                  <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEditSave(); }}>
+                                    <CheckIcon className="h-4 w-4 text-green-500" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEditCancel(); }}>
+                                    <XIcon className="h-4 w-4 text-gray-500" />
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  {pkg.name}
+                                  {isAdmin && (
+                                    <>
+                                      <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEdit(pkg); }}>
+                                        <Pencil className="h-4 w-4 text-gray-500" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleDelete(pkg.id); }}>
+                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </CardTitle>
+                                <Badge variant="secondary" className="text-sm">
+                                  {pkg.credits} credits
+                                </Badge>
+                              </>
+                            )}
+                          </div>
+                          {editingId === pkg.id ? (
+                            <Textarea
+                              value={editData.description as string}
+                              onChange={e => handleEditChange('description', e.target.value)}
+                              className="mt-2"
+                              placeholder="Beschrijving"
+                            />
+                          ) : (
+                            <p className="text-gray-600 text-sm">{pkg.description}</p>
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          {editingId === pkg.id ? (
+                            <div className="flex gap-2 items-center">
+                              <Input
+                                type="number"
+                                min={1}
+                                value={editData.credits as number}
+                                onChange={e => handleEditChange('credits', parseInt(e.target.value) || 0)}
+                                className="w-24"
+                                placeholder="Credits"
+                              />
+                              <Input
+                                type="number"
+                                min={1}
+                                value={editData.price as number}
+                                onChange={e => handleEditChange('price', parseInt(e.target.value) || 0)}
+                                className="w-32"
+                                placeholder="Prijs (centen)"
+                              />
+                              <span className="text-gray-500 text-sm">€{editData.price ? ((editData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                            </div>
+                          ) : (
+                            <div className="text-2xl font-bold text-examen-cyan">
+                              {formatPrice(pkg.price)}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {/* Admin: create new package */}
+                    {isAdmin && !creating && (
+                      <Button variant="outline" className="flex items-center gap-2 mt-2" onClick={handleCreate}>
+                        <Plus className="h-4 w-4" />
+                        Nieuw pakket
+                      </Button>
+                    )}
+                    {/* Admin: create form */}
+                    {isAdmin && creating && (
+                      <Card className="border-dashed border-2 border-gray-300">
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <Input
+                              value={createData.name as string}
+                              onChange={e => handleCreateChange('name', e.target.value)}
+                              className="text-lg font-semibold"
+                              placeholder="Pakket naam"
+                            />
+                            <div className="flex gap-2">
+                              <Button size="icon" variant="ghost" onClick={handleCreateSave}>
+                                <CheckIcon className="h-4 w-4 text-green-500" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={handleCreateCancel}>
+                                <XIcon className="h-4 w-4 text-gray-500" />
+                              </Button>
+                            </div>
+                          </div>
+                          <Textarea
+                            value={createData.description as string}
+                            onChange={e => handleCreateChange('description', e.target.value)}
+                            className="mt-2"
+                            placeholder="Beschrijving"
+                          />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              type="number"
+                              min={1}
+                              value={createData.credits as number}
+                              onChange={e => handleCreateChange('credits', parseInt(e.target.value) || 0)}
+                              className="w-24"
+                              placeholder="Credits"
+                            />
+                            <Input
+                              type="number"
+                              min={1}
+                              value={createData.price as number}
+                              onChange={e => handleCreateChange('price', parseInt(e.target.value) || 0)}
+                              className="w-32"
+                              placeholder="Prijs (centen)"
+                            />
+                            <span className="text-gray-500 text-sm">€{createData.price ? ((createData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Voucher option - only shown after packages are loaded */}
+                  <div className="border-t pt-4">
                     <Card
-                      key={pkg.id}
-                      className={cn(
-                        "cursor-pointer transition-all hover:shadow-md",
-                        selectedPackage?.id === pkg.id && "ring-2 ring-examen-cyan"
-                      )}
-                      onClick={() => handlePackageSelect(pkg)}
+                      className="cursor-pointer transition-all hover:shadow-md border-green-200 hover:border-green-300"
+                      onClick={() => setStep('voucher')}
                     >
                       <CardHeader>
                         <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg">{pkg.name}</CardTitle>
-                          <Badge variant="secondary" className="text-sm">
-                            {pkg.credits} credits
+                          <div className="flex items-center gap-2">
+                            <Gift className="h-5 w-5 text-green-600" />
+                            <CardTitle className="text-lg text-green-700">Voucher inwisselen</CardTitle>
+                          </div>
+                          <Badge variant="secondary" className="text-sm bg-green-100 text-green-700">
+                            Gratis
                           </Badge>
                         </div>
-                        <p className="text-gray-600 text-sm">{pkg.description}</p>
+                        <p className="text-gray-600 text-sm">Heb je een voucher code? Wissel deze hier in voor credits.</p>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-examen-cyan">
-                          {formatPrice(pkg.price)}
+                        <div className="text-sm text-green-600 font-medium">
+                          Direct credits toevoegen
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
-                </div>
+                  </div>
+                </>
               )}
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-2 text-gray-500">Of wissel een voucher in</span>
-                </div>
-              </div>
-
-              {/* Voucher Option */}
-              <Card
-                className="cursor-pointer transition-all hover:shadow-md border-green-200 hover:border-green-300"
-                onClick={() => setStep('voucher')}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-5 w-5 text-green-600" />
-                      <CardTitle className="text-lg text-green-700">Voucher inwisselen</CardTitle>
+              {/* Delete confirmation modal */}
+              {deleteId && (
+                <Dialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Pakket verwijderen</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                      Weet je zeker dat je dit pakket wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.
                     </div>
-                    <Badge variant="secondary" className="text-sm bg-green-100 text-green-700">
-                      Gratis
-                    </Badge>
-                  </div>
-                  <p className="text-gray-600 text-sm">Heb je een voucher code? Wissel deze hier in voor credits.</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-green-600 font-medium">
-                    Direct credits toevoegen
-                  </div>
-                </CardContent>
-              </Card>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setDeleteId(null)} disabled={deleteLoading}>
+                        Annuleren
+                      </Button>
+                      <Button variant="destructive" onClick={confirmDelete} disabled={deleteLoading}>
+                        {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verwijderen'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
           )}
 
@@ -437,110 +747,194 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="school_name" className="flex items-center gap-2">
-                      <Building className="h-4 w-4" />
-                      School naam *
+                    <Label htmlFor="school-name" className="text-sm font-medium text-gray-700">
+                      Onderwijsorganisatie *
                     </Label>
-                    <Input
-                      id="school_name"
-                      value={orderForm.school_name}
-                      onChange={(e) => handleFormChange('school_name', e.target.value)}
-                      placeholder="Naam van de school"
-                      required
-                    />
+                    <div className="relative">
+                      <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                        isFieldTouched('school_name') 
+                          ? isFieldValid('school_name') ? 'text-green-500' : 'text-red-500'
+                          : 'text-gray-400'
+                      }`} />
+                      <Input
+                        id="school-name"
+                        type="text"
+                        value={orderForm.school_name}
+                        onChange={(e) => handleFormChange('school_name', e.target.value)}
+                        onBlur={() => handleFieldBlur('school_name')}
+                        className={`pl-10 ${
+                          isFieldTouched('school_name')
+                            ? isFieldValid('school_name') 
+                              ? 'border-green-500 focus:border-green-500' 
+                              : 'border-red-500 focus:border-red-500'
+                            : ''
+                        }`}
+                        placeholder="Naam school of instelling"
+                        required
+                      />
+                    </div>
+                    {isFieldTouched('school_name') && !isFieldValid('school_name') && (
+                      <p className="text-sm text-red-600">{getFieldError('school_name')}</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="purchaser_name" className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Naam koper *
+                    <Label htmlFor="purchaser-name" className="text-sm font-medium text-gray-700">
+                      Contactpersoon *
                     </Label>
-                    <Input
-                      id="purchaser_name"
-                      value={orderForm.purchaser_name}
-                      onChange={(e) => handleFormChange('purchaser_name', e.target.value)}
-                      placeholder="Naam van de koper"
-                      required
-                    />
+                    <div className="relative">
+                      <User className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                        isFieldTouched('purchaser_name') 
+                          ? isFieldValid('purchaser_name') ? 'text-green-500' : 'text-red-500'
+                          : 'text-gray-400'
+                      }`} />
+                      <Input
+                        id="purchaser-name"
+                        type="text"
+                        value={orderForm.purchaser_name}
+                        onChange={(e) => handleFormChange('purchaser_name', e.target.value)}
+                        onBlur={() => handleFieldBlur('purchaser_name')}
+                        className={`pl-10 ${
+                          isFieldTouched('purchaser_name')
+                            ? isFieldValid('purchaser_name') 
+                              ? 'border-green-500 focus:border-green-500' 
+                              : 'border-red-500 focus:border-red-500'
+                            : ''
+                        }`}
+                        placeholder="Contactpersoon"
+                        required
+                      />
+                    </div>
+                    {isFieldTouched('purchaser_name') && !isFieldValid('purchaser_name') && (
+                      <p className="text-sm text-red-600">{getFieldError('purchaser_name')}</p>
+                    )}
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="purchase-reference" className="text-sm font-medium text-gray-700">
+                      Factuurreferentie/Kostenplaats *
+                    </Label>
+                    <div className="relative">
+                      <FileText className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                        isFieldTouched('purchase_reference') 
+                          ? isFieldValid('purchase_reference') ? 'text-green-500' : 'text-red-500'
+                          : 'text-gray-400'
+                      }`} />
+                      <Input
+                        id="purchase-reference"
+                        type="text"
+                        value={orderForm.purchase_reference}
+                        onChange={(e) => handleFormChange('purchase_reference', e.target.value)}
+                        onBlur={() => handleFieldBlur('purchase_reference')}
+                        className={`pl-10 ${
+                          isFieldTouched('purchase_reference')
+                            ? isFieldValid('purchase_reference') 
+                              ? 'border-green-500 focus:border-green-500' 
+                              : 'border-red-500 focus:border-red-500'
+                            : ''
+                        }`}
+                        placeholder="Factuurreferentie"
+                        required
+                      />
+                    </div>
+                    {isFieldTouched('purchase_reference') && !isFieldValid('purchase_reference') && (
+                      <p className="text-sm text-red-600">{getFieldError('purchase_reference')}</p>
+                    )}
+                  </div>
+
+
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="purchase_reference">
-                    Referentienummer (optioneel)
+                  <Label htmlFor="address-line1" className="text-sm font-medium text-gray-700">
+                    Factuuradres *
                   </Label>
                   <Input
-                    id="purchase_reference"
-                    value={orderForm.purchase_reference}
-                    onChange={(e) => handleFormChange('purchase_reference', e.target.value)}
-                    placeholder="Bijv. PO-2024-001"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address_line1" className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Adres regel 1 *
-                  </Label>
-                  <Input
-                    id="address_line1"
+                    id="address-line1"
+                    type="text"
                     value={orderForm.address_line1}
                     onChange={(e) => handleFormChange('address_line1', e.target.value)}
+                    onBlur={() => handleFieldBlur('address_line1')}
+                    className={`${
+                      isFieldTouched('address_line1')
+                        ? isFieldValid('address_line1') 
+                          ? 'border-green-500 focus:border-green-500' 
+                          : 'border-red-500 focus:border-red-500'
+                        : ''
+                    }`}
                     placeholder="Straatnaam en huisnummer"
                     required
                   />
+                  {isFieldTouched('address_line1') && !isFieldValid('address_line1') && (
+                    <p className="text-sm text-red-600">{getFieldError('address_line1')}</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="address_line2">
-                    Adres regel 2 (optioneel)
-                  </Label>
-                  <Input
-                    id="address_line2"
-                    value={orderForm.address_line2}
-                    onChange={(e) => handleFormChange('address_line2', e.target.value)}
-                    placeholder="Aanvullende informatie"
-                  />
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="postal_code">
+                    <Label htmlFor="postal-code" className="text-sm font-medium text-gray-700">
                       Postcode *
                     </Label>
                     <Input
-                      id="postal_code"
+                      id="postal-code"
+                      type="text"
                       value={orderForm.postal_code}
                       onChange={(e) => handleFormChange('postal_code', e.target.value)}
-                      placeholder="1234 AB"
+                      onBlur={() => handleFieldBlur('postal_code')}
+                      className={`${
+                        isFieldTouched('postal_code')
+                          ? isFieldValid('postal_code') 
+                            ? 'border-green-500 focus:border-green-500' 
+                            : 'border-red-500 focus:border-red-500'
+                          : ''
+                      }`}
+                      placeholder="Postcode"
                       required
                     />
+                    {isFieldTouched('postal_code') && !isFieldValid('postal_code') && (
+                      <p className="text-sm text-red-600">{getFieldError('postal_code')}</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="city">
-                      Plaats *
+                    <Label htmlFor="city" className="text-sm font-medium text-gray-700">
+                      Stad *
                     </Label>
                     <Input
                       id="city"
+                      type="text"
                       value={orderForm.city}
                       onChange={(e) => handleFormChange('city', e.target.value)}
-                      placeholder="Amsterdam"
+                      onBlur={() => handleFieldBlur('city')}
+                      className={`${
+                        isFieldTouched('city')
+                          ? isFieldValid('city') 
+                            ? 'border-green-500 focus:border-green-500' 
+                            : 'border-red-500 focus:border-red-500'
+                          : ''
+                      }`}
+                      placeholder="Stad"
                       required
                     />
+                    {isFieldTouched('city') && !isFieldValid('city') && (
+                      <p className="text-sm text-red-600">{getFieldError('city')}</p>
+                    )}
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="country">
-                      Land
-                    </Label>
-                    <Input
-                      id="country"
-                      value={orderForm.country}
-                      onChange={(e) => handleFormChange('country', e.target.value)}
-                      placeholder="Nederland"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="comments" className="text-sm font-medium text-gray-700">
+                    Opmerkingen
+                  </Label>
+                  <Textarea
+                    id="comments"
+                    value={orderForm.comments || ''}
+                    onChange={(e) => handleFormChange('comments', e.target.value)}
+                    placeholder="Optionele opmerkingen voor je bestelling"
+                    className="min-h-[80px]"
+                  />
                 </div>
 
                 <div className="flex items-center space-x-2 pt-4">
@@ -572,23 +966,34 @@ const CreditOrderModal: React.FC<CreditOrderModalProps> = ({
                 >
                   Terug naar pakketten
                 </Button>
-                <Button
-                  onClick={handleSubmitOrder}
-                  disabled={orderLoading || !orderForm.terms_accepted}
-                  className="bg-examen-cyan hover:bg-examen-cyan-600"
-                >
-                  {orderLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Bestelling plaatsen...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Bestelling plaatsen
-                    </>
-                  )}
-                </Button>
+                <div className="flex flex-col items-end space-y-2">
+                  <Button
+                    onClick={handleSubmitOrder}
+                    disabled={orderLoading || !isFormValid()}
+                    className={`${
+                      isFormValid() 
+                        ? 'bg-examen-cyan hover:bg-examen-cyan-600' 
+                        : 'bg-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    {orderLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Bestelling plaatsen...
+                      </>
+                    ) : isFormValid() ? (
+                      <>
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Bestelling plaatsen
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Vul alle verplichte velden in
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
