@@ -34,6 +34,8 @@ interface ExamProduct {
   title: string;
   description: string;
   cost: number;
+  credits: number;
+  cohort: string;
   validFrom: string;
   version: string;
   versions: Version[];
@@ -41,7 +43,7 @@ interface ExamProduct {
   downloadUrl?: string;
 }
 
-type SortField = 'code' | 'title' | 'cost' | 'validFrom' | 'version';
+type SortField = 'code' | 'title' | 'credits' | 'validFrom' | 'version';
 type SortDirection = 'asc' | 'desc';
 
 export default function CatalogusPage() {
@@ -89,7 +91,8 @@ export default function CatalogusPage() {
     code: '',
     title: '',
     description: '',
-    cost: '',
+    credits: '',
+    cohort: '2025-26',
     validFrom: '2025-26',
     version: '4.0',
   });
@@ -110,7 +113,8 @@ export default function CatalogusPage() {
       code: '',
       title: '',
       description: '',
-      cost: '',
+      credits: '',
+      cohort: '2025-26',
       validFrom: '2025-26',
       version: '4.0',
     });
@@ -132,7 +136,9 @@ export default function CatalogusPage() {
           code: newProduct.code,
           title: newProduct.title,
           description: newProduct.description,
-          cost: Number(newProduct.cost),
+          cost: Number(newProduct.credits),
+          credits: Number(newProduct.credits),
+          cohort: newProduct.cohort,
           validFrom: newProduct.validFrom,
           version: newProduct.version,
         }),
@@ -256,7 +262,7 @@ export default function CatalogusPage() {
     sorted.sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
-      if (sortField === 'cost') {
+      if (sortField === 'credits') {
         aValue = Number(aValue);
         bValue = Number(bValue);
       }
@@ -623,7 +629,7 @@ export default function CatalogusPage() {
                       <TableHead>
                         <Button
                           variant="ghost"
-                          onClick={() => handleSort('cost')}
+                          onClick={() => handleSort('credits')}
                           className="h-auto p-0 font-semibold"
                         >
                           Credits
@@ -682,16 +688,16 @@ export default function CatalogusPage() {
                         <TableCell>
                           <Input
                             type="number"
-                            value={newProduct.cost}
-                            onChange={e => handleNewProductChange('cost', e.target.value)}
+                            value={newProduct.credits}
+                            onChange={e => handleNewProductChange('credits', e.target.value)}
                             placeholder="Credits"
                             min={0}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
-                            value={newProduct.validFrom}
-                            onChange={e => handleNewProductChange('validFrom', e.target.value)}
+                            value={newProduct.cohort}
+                            onChange={e => handleNewProductChange('cohort', e.target.value)}
                             placeholder="Cohort"
                           />
                         </TableCell>
@@ -709,7 +715,7 @@ export default function CatalogusPage() {
                               variant="default"
                               className="bg-examen-cyan text-white"
                               onClick={handleSaveNewProduct}
-                              disabled={savingNewProduct || !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.cost}
+                              disabled={savingNewProduct || !newProduct.code || !newProduct.title || !newProduct.description || !newProduct.credits}
                             >
                               {savingNewProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Opslaan'}
                             </Button>
@@ -752,10 +758,10 @@ export default function CatalogusPage() {
                             />
                           </TableCell>
                           <TableCell className="font-medium">
-                            {formatCredits(product.cost)}
+                            {formatCredits(product.credits || 0)}
                           </TableCell>
                           <TableCell>
-                            {formatCohort(product.validFrom)}
+                            {formatCohort(product.cohort || product.validFrom)}
                           </TableCell>
                           <TableCell>
                             <VersionDropdown
@@ -874,7 +880,7 @@ export default function CatalogusPage() {
                   <div key={product.id} className="bg-white rounded-lg shadow p-4 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-semibold text-examen-cyan text-lg">{product.code}</span>
-                      <span className="text-xs text-gray-500">{formatCohort(product.validFrom)}</span>
+                      <span className="text-xs text-gray-500">{formatCohort(product.cohort || product.validFrom)}</span>
                     </div>
                     <div className="font-bold text-lg mb-1">
                       <TruncatedText text={product.title} maxWords={8} showExpandButton={false} />
@@ -883,7 +889,7 @@ export default function CatalogusPage() {
                       <TruncatedText text={product.description} maxWords={30} showExpandButton={false} />
                     </div>
                     <div className="flex items-center gap-4 text-sm mb-1">
-                      <span className="font-semibold">{formatCredits(product.cost)}</span>
+                      <span className="font-semibold">{formatCredits(product.credits || 0)} credits</span>
                       <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)} /></span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2">

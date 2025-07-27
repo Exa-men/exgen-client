@@ -18,7 +18,8 @@ import {
   EyeOff,
   Copy,
   Check,
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -164,7 +165,6 @@ export default function EditExamPage() {
   
   // Edit states
   const [isEditing, setIsEditing] = useState(false);
-  const [showExamDetails, setShowExamDetails] = useState(false);
   const [editValues, setEditValues] = useState({
     code: '',
     title: '',
@@ -188,6 +188,9 @@ export default function EditExamPage() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [lastSavedData, setLastSavedData] = useState<string>('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [authCheckRetries, setAuthCheckRetries] = useState(0);
 
   // Document management
   const [dragActive, setDragActive] = useState(false);
@@ -685,114 +688,155 @@ export default function EditExamPage() {
 
   // Redirect if not signed in or not admin
   useEffect(() => {
-    console.log('Auth state:', { isLoaded, isSignedIn, isAdmin, roleLoading, loading });
+    console.log('Auth state changed:', { 
+      isLoaded, 
+      isSignedIn, 
+      isAdmin, 
+      roleLoading,
+      productId,
+      authCheckRetries
+    });
     
-    // Add a small delay to ensure auth state is stable
+    // Add a longer delay to allow auth state to fully load during page refresh
     const timeoutId = setTimeout(() => {
+      console.log('Auth check triggered:', { 
+        isLoaded, 
+        isSignedIn, 
+        isAdmin, 
+        roleLoading,
+        productId,
+        authCheckRetries
+      });
+      
       // Only redirect if we're fully loaded and the user is definitely not authorized
       if (isLoaded && !roleLoading) {
         if (!isSignedIn) {
           console.log('Redirecting: User not signed in');
           router.push('/catalogus');
-        } else if (isSignedIn && !isAdmin) {
+        } else if (isSignedIn && isAdmin === false) {
+          // Only redirect if isAdmin is explicitly false (not undefined/null)
           console.log('Redirecting: User not admin');
           router.push('/catalogus');
-        } else {
+        } else if (isSignedIn && isAdmin === true) {
           console.log('User authorized, staying on page');
+        } else {
+          // isAdmin is undefined/null, still loading or error - don't redirect yet
+          console.log('Admin status unclear, waiting for more info...');
+          // Try to fetch the product anyway - the API will handle auth
+          if (productId) {
+            console.log('Attempting to fetch product despite unclear admin status...');
+            fetchProduct();
+          }
         }
       } else {
-        console.log('Still loading auth state...');
+        console.log('Still loading auth state...', { isLoaded, roleLoading });
+        // If we've been waiting too long, try again
+        if (authCheckRetries < 3) {
+          console.log('Retrying auth check...');
+          setAuthCheckRetries(prev => prev + 1);
+        } else {
+          console.log('Max auth check retries reached, attempting to proceed anyway...');
+          if (productId) {
+            fetchProduct();
+          }
+        }
       }
-    }, 100); // 100ms delay
+    }, 1000 + (authCheckRetries * 500)); // Increase delay with each retry
     
     return () => clearTimeout(timeoutId);
-  }, [isLoaded, isSignedIn, isAdmin, roleLoading, router]);
+  }, [isLoaded, isSignedIn, isAdmin, roleLoading, router, authCheckRetries]);
 
-  // Fetch product details
-  useEffect(() => {
-    console.log('fetchProduct useEffect triggered:', { isSignedIn, productId });
+  // Fetch product data
+  const fetchProduct = async () => {
+    console.log('fetchProduct called:', { isSignedIn, productId, retryCount });
     
-    const fetchProduct = async () => {
-      if (!isSignedIn || !productId) return;
+    if (!productId) {
+      console.log('fetchProduct early return: no productId');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
       
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const result = await api.getProduct(productId);
-        
-        if (result.error) {
-          throw new Error(result.error.detail);
-        }
+      console.log('Making API call to getProduct...');
+      const result = await api.getProduct(productId);
+      console.log('API result:', result);
+      
+      if (result.error) {
+        throw new Error(result.error.detail);
+      }
 
-        if (!result.data) {
-          throw new Error('No product data received');
-        }
+      if (!result.data) {
+        throw new Error('No product data received');
+      }
 
-        // Transform backend data to frontend format
-        const backendProduct = result.data as BackendProduct;
-        console.log('Received backend product data:', backendProduct);
-        console.log('Assessment components from backend:', backendProduct.versions?.[0]?.assessment_components);
-        
-        const transformedProduct: ExamProduct = {
-          id: backendProduct.id,
-          code: backendProduct.code,
-          title: backendProduct.title,
-          description: backendProduct.description,
-          credits: backendProduct.credits,
-          cohort: backendProduct.cohort,
-          version: backendProduct.version,
-          cost: backendProduct.cost,
-          validFrom: backendProduct.valid_from,
-          versions: backendProduct.versions?.map(version => ({
-            id: version.id,
-            version: version.version,
-            releaseDate: version.release_date,
-            isLatest: version.is_latest,
-            isEnabled: version.is_enabled,
-            password: version.password,
-            rubricLevels: version.rubric_levels,
-            documents: version.documents?.map(doc => ({
-              id: doc.id,
-              name: doc.name,
-              url: doc.download_url,
-              uploadedAt: doc.uploaded_at,
-              isPreview: doc.is_preview
-            })) || [],
-            assessmentOnderdelen: version.assessment_components?.map(component => ({
-              id: component.id,
-              onderdeel: component.component,  // Fixed: use component.component instead of component.name
-              criteria: component.criteria?.map(criteria => ({
-                id: criteria.id,
-                criteria: criteria.criteria,
-                levels: criteria.levels?.map(level => ({
-                  id: level.id,
-                  label: level.label,
-                  value: level.value
-                })) || []
+      // Transform backend data to frontend format
+      const backendProduct = result.data as BackendProduct;
+      console.log('Received backend product data:', backendProduct);
+      console.log('Assessment components from backend:', backendProduct.versions?.[0]?.assessment_components);
+      
+      const transformedProduct: ExamProduct = {
+        id: backendProduct.id,
+        code: backendProduct.code,
+        title: backendProduct.title,
+        description: backendProduct.description,
+        credits: backendProduct.credits,
+        cohort: backendProduct.cohort,
+        version: backendProduct.version,
+        cost: backendProduct.cost,
+        validFrom: backendProduct.valid_from,
+        versions: backendProduct.versions?.map(version => ({
+          id: version.id,
+          version: version.version,
+          releaseDate: version.release_date,
+          isLatest: version.is_latest,
+          isEnabled: version.is_enabled,
+          password: version.password,
+          rubricLevels: version.rubric_levels,
+          documents: version.documents?.map(doc => ({
+            id: doc.id,
+            name: doc.name,
+            url: doc.download_url,
+            uploadedAt: doc.uploaded_at,
+            isPreview: doc.is_preview
+          })) || [],
+          assessmentOnderdelen: version.assessment_components?.map(component => ({
+            id: component.id,
+            onderdeel: component.component,  // Fixed: use component.component instead of component.name
+            criteria: component.criteria?.map(criteria => ({
+              id: criteria.id,
+              criteria: criteria.criteria,
+              levels: criteria.levels?.map(level => ({
+                id: level.id,
+                label: level.label,
+                value: level.value
               })) || []
             })) || []
           })) || []
-        };
+        })) || []
+      };
 
-        console.log('Transformed product data:', transformedProduct);
-        console.log('Transformed assessment onderdelen:', transformedProduct.versions?.[0]?.assessmentOnderdelen);
-        setProduct(transformedProduct);
-        setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
-        
-        // Initialize edit values
-        setEditValues({
-          code: transformedProduct.code,
-          title: transformedProduct.title,
-          description: transformedProduct.description,
-          credits: transformedProduct.credits?.toString() || '',
-          cohort: transformedProduct.cohort || ''
-        });
-      } catch (err) {
-        console.error('Error fetching product:', err);
-        setError('Failed to load product details');
-        
-        // For development, use mock data if API fails
+      console.log('Transformed product data:', transformedProduct);
+      console.log('Transformed assessment onderdelen:', transformedProduct.versions?.[0]?.assessmentOnderdelen);
+      setProduct(transformedProduct);
+      setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
+      
+      // Initialize edit values
+      setEditValues({
+        code: transformedProduct.code,
+        title: transformedProduct.title,
+        description: transformedProduct.description,
+        credits: transformedProduct.credits?.toString() || '',
+        cohort: transformedProduct.cohort || ''
+      });
+    } catch (err) {
+      console.error('Error fetching product:', err);
+      setError('Failed to load product details');
+      
+      // Only use mock data in development environment
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Using mock data for development');
         const mockProduct: ExamProduct = {
           id: productId,
           code: 'EX001',
@@ -875,13 +919,18 @@ export default function EditExamPage() {
           credits: mockProduct.credits.toString(),
           cohort: mockProduct.cohort
         });
-      } finally {
-        setLoading(false);
+      } else {
+        // In production, don't set mock data, let the error state handle it
+        setProduct(null);
       }
-    };
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchProduct();
-  }, [isSignedIn, productId, getToken]);
+  }, [productId, getToken, retryCount]);
 
   // Warn user about unsaved changes
   useEffect(() => {
@@ -1555,16 +1604,49 @@ export default function EditExamPage() {
   const handleDeleteVersion = async () => {
     if (!showVersionDeleteConfirm || !product) return;
     
+    console.log('Starting version deletion for:', showVersionDeleteConfirm);
+    console.log('Version ID format check:', {
+      id: showVersionDeleteConfirm,
+      isTemporary: isTemporaryId(showVersionDeleteConfirm),
+      length: showVersionDeleteConfirm.length
+    });
+    
+    // Check if this is a temporary version that hasn't been saved to the database yet
+    if (isTemporaryId(showVersionDeleteConfirm)) {
+      console.log('Attempting to delete temporary version - removing from local state only');
+      // Just remove from local state since it's not in the database
+      const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
+      setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
+      
+      toast({
+        title: "Versie verwijderd",
+        description: "De versie is succesvol verwijderd.",
+      });
+      
+      setDeletingVersion(false);
+      setShowVersionDeleteConfirm(null);
+      return;
+    }
+    
     try {
       setDeletingVersion(true);
       
-      // For now, simulate backend call with mock data
-      // TODO: Replace with actual API call when backend is ready
-      console.log('Simulating backend call for version deletion:', { versionId: showVersionDeleteConfirm });
+      // Make actual API call to delete version
+      console.log('Calling api.deleteVersion with:', showVersionDeleteConfirm);
+      const result = await api.deleteVersion(showVersionDeleteConfirm);
+      console.log('API result:', result);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      if (result.error) {
+        console.error('API returned error:', result.error);
+        toast({
+          title: "Verwijderen mislukt",
+          description: result.error.detail,
+          variant: "destructive",
+        });
+        return;
+      }
 
+      console.log('Version deleted successfully, updating local state');
       // Update local state
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
       setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
@@ -1703,6 +1785,12 @@ export default function EditExamPage() {
     }
   };
 
+  const handleRetry = () => {
+    setError(null);
+    setRetryCount(prev => prev + 1);
+    fetchProduct();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1723,10 +1811,27 @@ export default function EditExamPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
-            <p className="text-gray-600">Examen niet gevonden.</p>
-            <Button onClick={() => router.push('/catalogus')} className="mt-4">
-              Terug naar catalogus
-            </Button>
+            {error ? (
+              <div className="space-y-4">
+                <p className="text-gray-600">Er is een fout opgetreden bij het laden van het examen.</p>
+                <p className="text-sm text-gray-500">{error}</p>
+                <div className="flex justify-center space-x-4">
+                  <Button onClick={handleRetry} variant="outline">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Opnieuw proberen
+                  </Button>
+                  <Button onClick={() => router.push('/catalogus')} variant="outline">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Terug naar catalogus
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="animate-spin h-8 w-8 mx-auto text-examen-cyan"></div>
+                <p className="text-gray-600">Laden van examen...</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1875,63 +1980,38 @@ export default function EditExamPage() {
             )}
           </CardHeader>
           <CardContent className="space-y-4">
-
-            {/* Details toggle - only show when not editing */}
-            {!isEditing && (
-              <div className="flex items-center justify-center pt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowExamDetails(!showExamDetails)}
-                  className="text-gray-600 hover:text-gray-800"
-                >
-                  {showExamDetails ? 'Verberg details' : 'Toon details'}
-                  {showExamDetails ? (
-                    <ChevronUp className="h-4 w-4 ml-2" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 ml-2" />
-                  )}
-                </Button>
+            {/* Description and Cohort in one row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Description */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Beschrijving</label>
+                {isEditing ? (
+                  <Textarea
+                    value={editValues.description}
+                    onChange={(e) => setEditValues(prev => ({ ...prev, description: e.target.value }))}
+                    className="mt-1"
+                    rows={2}
+                  />
+                ) : (
+                  <p className="text-lg font-semibold mt-1">{product.description}</p>
+                )}
               </div>
-            )}
 
-            {/* Additional details - hidden by default, always visible when editing */}
-            {(isEditing || showExamDetails) && (
-              <div className="space-y-4">
-                {/* Description and Cohort in one row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Description */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Beschrijving</label>
-                    {isEditing ? (
-                      <Textarea
-                        value={editValues.description}
-                        onChange={(e) => setEditValues(prev => ({ ...prev, description: e.target.value }))}
-                        className="mt-1"
-                        rows={2}
-                      />
-                    ) : (
-                      <p className="text-lg font-semibold mt-1">{product.description}</p>
-                    )}
-                  </div>
-
-                  {/* Cohort */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Cohort</label>
-                    {isEditing ? (
-                      <Input
-                        value={editValues.cohort}
-                        onChange={(e) => setEditValues(prev => ({ ...prev, cohort: e.target.value }))}
-                        className="mt-1"
-                        placeholder="2024-25"
-                      />
-                    ) : (
-                      <p className="text-lg font-semibold mt-1">{product.cohort}</p>
-                    )}
-                  </div>
-                </div>
+              {/* Cohort */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Cohort</label>
+                {isEditing ? (
+                  <Input
+                    value={editValues.cohort}
+                    onChange={(e) => setEditValues(prev => ({ ...prev, cohort: e.target.value }))}
+                    className="mt-1"
+                    placeholder="2024-25"
+                  />
+                ) : (
+                  <p className="text-lg font-semibold mt-1">{product.cohort}</p>
+                )}
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
