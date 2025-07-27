@@ -41,6 +41,7 @@ interface ExamProduct {
   versions: Version[];
   isPurchased: boolean;
   downloadUrl?: string;
+  status?: 'draft' | 'available'; // New status field
 }
 
 type SortField = 'code' | 'title' | 'credits' | 'validFrom' | 'version';
@@ -84,6 +85,19 @@ export default function CatalogusPage() {
   // State for purchase terms checkbox
   const [purchaseTermsChecked, setPurchaseTermsChecked] = useState(false);
   
+  // State for status updates
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+
+  // Validation functions for product publication
+  const isProductReadyForPublication = (product: ExamProduct): boolean => {
+    // Check if basic product information is complete
+    const hasBasicInfo = Boolean(product.code && product.title && product.description && product.credits && product.cohort);
+    
+    // Check if there's at least one version
+    const hasVersion = product.versions && product.versions.length > 0;
+    
+    return hasBasicInfo && hasVersion;
+  };
 
 
   // State for new product input row
@@ -95,6 +109,7 @@ export default function CatalogusPage() {
     cohort: '2025-26',
     validFrom: '2025-26',
     version: '4.0',
+    status: 'draft' as 'draft' | 'available',
   });
   const [savingNewProduct, setSavingNewProduct] = useState(false);
 
@@ -117,6 +132,7 @@ export default function CatalogusPage() {
       cohort: '2025-26',
       validFrom: '2025-26',
       version: '4.0',
+      status: 'draft',
     });
   };
 
@@ -141,6 +157,7 @@ export default function CatalogusPage() {
           cohort: newProduct.cohort,
           validFrom: newProduct.validFrom,
           version: newProduct.version,
+          status: newProduct.status,
         }),
       });
       if (!response.ok) {
@@ -434,26 +451,67 @@ export default function CatalogusPage() {
   // Handler for delete
   const handleDeleteProduct = async () => {
     if (!deleteProductId) return;
+    
     setDeleting(true);
-    setError(null);
     try {
       const token = await getToken();
       const response = await fetch(`/api/catalog/products/${deleteProductId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
-      if (!response.ok) {
+
+      if (response.ok) {
+        setProducts(products.filter(p => p.id !== deleteProductId));
+        setDeleteProductId(null);
+      } else {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to delete product');
+        setError(errorData.detail || 'Fout bij het verwijderen van het product');
       }
-      setProducts(prev => prev.filter(p => p.id !== deleteProductId));
-      setDeleteProductId(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete product');
+    } catch (error) {
+      setError('Fout bij het verwijderen van het product');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleStatusChange = async (productId: string, newStatus: 'draft' | 'available') => {
+    // Find the product to validate
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    // If trying to publish, check if product is ready
+    if (newStatus === 'available' && !isProductReadyForPublication(product)) {
+      // Don't show error message, just prevent the action
+      return;
+    }
+
+    setUpdatingStatus(productId);
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/catalog/products/${productId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setProducts(products.map(p => 
+          p.id === productId ? { ...p, status: newStatus } : p
+        ));
+      } else {
+        const errorData = await response.json();
+        setError(errorData.detail || 'Fout bij het bijwerken van de status');
+      }
+    } catch (error) {
+      setError('Fout bij het bijwerken van de status');
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
@@ -656,6 +714,9 @@ export default function CatalogusPage() {
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
+                      {isAdmin && (
+                        <TableHead className="font-semibold text-center">Status</TableHead>
+                      )}
                       <TableHead className="font-semibold text-center">Acties</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -708,6 +769,33 @@ export default function CatalogusPage() {
                             placeholder="Versie"
                           />
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-center">
+                                                          <div className="flex items-center justify-center space-x-2">
+                                <div 
+                                  className={`w-3 h-3 rounded-full ${
+                                    newProduct.status === 'available' 
+                                      ? 'bg-green-500' 
+                                      : 'bg-blue-500'
+                                  }`}
+                                  title={newProduct.status === 'available' ? 'Published' : 'Draft'}
+                                />
+                              <select
+                                value={newProduct.status || 'draft'}
+                                onChange={e => handleNewProductChange('status', e.target.value)}
+                                disabled={!newProduct.code || !newProduct.title || !newProduct.description || !newProduct.credits}
+                                className={`text-xs px-1 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
+                                  newProduct.status === 'available' 
+                                    ? 'text-green-600 font-medium' 
+                                    : 'text-blue-600 font-medium'
+                                }`}
+                              >
+                                <option value="draft" className="text-blue-600">Draft</option>
+                                <option value="available" className="text-green-600">Published</option>
+                              </select>
+                            </div>
+                          </TableCell>
+                        )}
                         <TableCell className="text-center">
                           <div className="flex gap-2 justify-center">
                             <Button
@@ -733,7 +821,7 @@ export default function CatalogusPage() {
                     )}
                     {filteredAndSortedProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
                           {searchTerm ? 'Geen examens gevonden voor je zoekopdracht.' : 'Geen examens beschikbaar.'}
                         </TableCell>
                       </TableRow>
@@ -771,6 +859,43 @@ export default function CatalogusPage() {
                               onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
                             />
                           </TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center space-x-2">
+                                <div 
+                                  className={`w-3 h-3 rounded-full ${
+                                    product.status === 'available' 
+                                      ? 'bg-green-500' 
+                                      : 'bg-blue-500'
+                                  }`}
+                                  title={product.status === 'available' ? 'Published' : 'Draft'}
+                                />
+                                {!isProductReadyForPublication(product) && product.status === 'draft' && (
+                                  <div className="text-xs text-red-500" title="Product not ready for publication">
+                                    ⚠️
+                                  </div>
+                                )}
+                                <select
+                                  value={product.status || 'draft'}
+                                  onChange={(e) => handleStatusChange(product.id, e.target.value as 'draft' | 'available')}
+                                  disabled={updatingStatus === product.id}
+                                  className={`text-xs px-1 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
+                                    product.status === 'available' 
+                                      ? 'text-green-600 font-medium' 
+                                      : 'text-blue-600 font-medium'
+                                  }`}
+                                >
+                                  <option value="draft" className="text-blue-600">Draft</option>
+                                  <option value="available" className="text-green-600">Published</option>
+                                </select>
+                              </div>
+                              {updatingStatus === product.id && (
+                                <div className="mt-1">
+                                  <Loader2 className="h-4 w-4 animate-spin mx-auto text-examen-cyan" />
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
                           <TableCell className="align-top">
                             <div className="flex flex-col space-y-2 min-w-[120px]">
                               {!product.isPurchased && (
