@@ -90,6 +90,7 @@ interface BackendProduct {
   version: string;
   cost: number;
   valid_from: string;
+  status?: 'draft' | 'available';
   versions: BackendProductVersion[];
 }
 
@@ -146,6 +147,7 @@ interface ExamProduct {
   versions: Version[];
   cost: number;
   validFrom: string;
+  status?: 'draft' | 'available';
 }
 
 export default function EditExamPage() {
@@ -204,6 +206,7 @@ export default function EditExamPage() {
   
   // Product publication status
   const [productPublicationStatus, setProductPublicationStatus] = useState<'draft' | 'published'>('draft');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   
   // Track if product was published to detect changes
   const [wasPublished, setWasPublished] = useState(false);
@@ -786,6 +789,7 @@ export default function EditExamPage() {
         version: backendProduct.version,
         cost: backendProduct.cost,
         validFrom: backendProduct.valid_from,
+        status: backendProduct.status || 'draft',
         versions: backendProduct.versions?.map(version => ({
           id: version.id,
           version: version.version,
@@ -821,6 +825,9 @@ export default function EditExamPage() {
       console.log('Transformed assessment onderdelen:', transformedProduct.versions?.[0]?.assessmentOnderdelen);
       setProduct(transformedProduct);
       setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
+      
+      // Set publication status based on product status
+      setProductPublicationStatus(transformedProduct.status === 'available' ? 'published' : 'draft');
       
       // Initialize edit values
       setEditValues({
@@ -1506,15 +1513,29 @@ export default function EditExamPage() {
     }
     
     try {
-      // For now, simulate backend call
-      // TODO: Replace with actual API call when backend is ready
-      console.log('Simulating backend call for product publication:', { productId, newStatus });
+      setUpdatingStatus(true);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Convert to backend status values
+      const backendStatus = newStatus === 'published' ? 'available' : 'draft';
+      
+      const token = await getToken();
+      const response = await fetch(`/api/catalog/products/${productId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: backendStatus }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update status');
+      }
       
       // Update local state
       setProductPublicationStatus(newStatus);
+      setProduct(prev => prev ? { ...prev, status: backendStatus } : prev);
       
       // Track if product is now published
       if (newStatus === 'published') {
@@ -1534,6 +1555,8 @@ export default function EditExamPage() {
         description: "Er is een fout opgetreden bij het bijwerken van de publicatiestatus.",
         variant: "destructive",
       });
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -1855,29 +1878,35 @@ export default function EditExamPage() {
           {/* Product Publication Status */}
           <div className="flex flex-col items-end space-y-1">
             <div className="flex items-center space-x-3">
-              <span className="text-sm font-medium text-gray-700">Publicatiestatus:</span>
-              <Select
-                value={productPublicationStatus}
-                onValueChange={(value: 'draft' | 'published') => handleProductPublicationChange(value)}
-                disabled={!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft'}
-              >
-                <SelectTrigger className={`w-40 ${
-                  productPublicationStatus === 'published' 
-                    ? 'bg-green-50 border-green-500 text-green-700 focus:ring-green-500 focus:border-green-500' 
-                    : ''
-                }`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Concept</SelectItem>
-                  <SelectItem 
-                    value="published"
-                    disabled={!getProductPublicationStatus().canPublish}
-                  >
-                    Gepubliceerd
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <span className="text-sm font-medium text-gray-700">Status:</span>
+              <div className="flex items-center space-x-2">
+                <div 
+                  className={`w-3 h-3 rounded-full ${
+                    productPublicationStatus === 'published' 
+                      ? 'bg-green-500' 
+                      : 'bg-blue-500'
+                  }`}
+                  title={productPublicationStatus === 'published' ? 'Published' : 'Draft'}
+                />
+                <select
+                  value={productPublicationStatus}
+                  onChange={(e) => handleProductPublicationChange(e.target.value as 'draft' | 'published')}
+                  disabled={updatingStatus || (!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft')}
+                  className={`text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-examen-cyan focus:border-examen-cyan disabled:opacity-50 ${
+                    productPublicationStatus === 'published' 
+                      ? 'text-green-600 font-medium' 
+                      : 'text-blue-600 font-medium'
+                  }`}
+                >
+                  <option value="draft" className="text-blue-600">Draft</option>
+                  <option value="published" className="text-green-600">Published</option>
+                </select>
+                {updatingStatus && (
+                  <div className="ml-1">
+                    <RefreshCw className="h-4 w-4 animate-spin text-examen-cyan" />
+                  </div>
+                )}
+              </div>
             </div>
             {!getProductPublicationStatus().canPublish && productPublicationStatus === 'draft' && (
               <span className="text-xs text-red-600">
