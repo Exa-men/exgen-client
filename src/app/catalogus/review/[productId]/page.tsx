@@ -7,8 +7,7 @@ import { ArrowLeft, Download, ShoppingCart, Loader2, FileText, Calendar, Tag, Eu
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
-import CreditOrderModal from '../../../components/CreditOrderModal';
-
+import { useCreditModal } from '../../../contexts/CreditModalContext';
 
 interface ExamProduct {
   id: string;
@@ -39,7 +38,7 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreditsError, setShowCreditsError] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
-  const [creditOrderModalOpen, setCreditOrderModalOpen] = useState(false);
+  const { openModal } = useCreditModal();
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -208,7 +207,7 @@ export default function ReviewPage() {
                 </div>
               </div>
               <Button
-                onClick={() => setCreditOrderModalOpen(true)}
+                onClick={openModal}
                 className="bg-red-600 hover:bg-red-700 text-white"
                 size="sm"
               >
@@ -381,11 +380,7 @@ export default function ReviewPage() {
         )}
       </div>
       
-      {/* Credit Order Modal */}
-      <CreditOrderModal
-        isOpen={creditOrderModalOpen}
-        onClose={() => setCreditOrderModalOpen(false)}
-      />
+
     </div>
   );
 } 

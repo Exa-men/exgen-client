@@ -2,9 +2,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
 import { CreditProvider } from './contexts/CreditContext';
+import { CreditModalProvider } from './contexts/CreditModalContext';
 import SmartPrefetcher from './components/SmartPrefetcher';
 import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
+import CreditOrderModal from './components/CreditOrderModal';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -34,10 +36,13 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <CreditProvider>
-            <SmartPrefetcher />
-            <PageTransitionLoader />
-            <UnifiedHeader />
-            {children}
+            <CreditModalProvider>
+              <SmartPrefetcher />
+              <PageTransitionLoader />
+              <UnifiedHeader />
+              {children}
+              <CreditOrderModal />
+            </CreditModalProvider>
           </CreditProvider>
         </body>
       </html>
