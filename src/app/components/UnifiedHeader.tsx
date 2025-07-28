@@ -22,9 +22,9 @@ const UnifiedHeader: React.FC = () => {
   const isActive = (href: string) => {
     if (href === '/catalogus') return pathname.startsWith('/catalogus');
     if (href === '/workflows') return pathname.startsWith('/workflows');
+    if (href === '/verificatie') return pathname.startsWith('/verificatie');
     if (href === '/users') return pathname.startsWith('/users');
     if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
-
     if (href === '/admin/vouchers') return pathname.startsWith('/admin/vouchers');
     if (href === '/?show=true' || href === '/') return pathname === '/' || pathname === '/?show=true';
     return pathname === href;
@@ -70,6 +70,18 @@ const UnifiedHeader: React.FC = () => {
                     }
                   >
                     Ontwikkelen
+                  </Button>
+                </Link>
+                <Link href="/verificatie">
+                  <Button
+                    variant="ghost"
+                    className={
+                      isActive('/verificatie')
+                        ? "text-examen-cyan font-bold underline underline-offset-4"
+                        : "text-gray-700 hover:text-examen-cyan transition-colors"
+                    }
+                  >
+                    Verificatie
                   </Button>
                 </Link>
 
@@ -184,6 +196,18 @@ const UnifiedHeader: React.FC = () => {
                       }
                     >
                       Ontwikkelen
+                    </Button>
+                  </Link>
+                  <Link href="/verificatie">
+                    <Button
+                      variant="ghost"
+                      className={
+                        isActive('/verificatie')
+                          ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                          : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                      }
+                    >
+                      Verificatie
                     </Button>
                   </Link>
 
