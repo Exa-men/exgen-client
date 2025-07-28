@@ -49,7 +49,7 @@ export default function CreditPackagesPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  // Removed useRole hook - letting backend handle admin checks
   
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,25 +69,20 @@ export default function CreditPackagesPage() {
     is_active: true
   });
 
-  // Check authentication and admin role
+  // Check authentication only (let backend handle admin check)
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       router.push('/');
       return;
     }
-    
-    if (isLoaded && !roleLoading && !isAdmin) {
-      router.push('/');
-      return;
-    }
-  }, [isLoaded, isSignedIn, roleLoading, isAdmin, router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  // Fetch packages
+  // Fetch packages when signed in
   useEffect(() => {
-    if (isAdmin) {
+    if (isSignedIn) {
       fetchPackages();
     }
-  }, [isAdmin]);
+  }, [isSignedIn]);
 
   const fetchPackages = async () => {
     setLoading(true);
@@ -101,6 +96,10 @@ export default function CreditPackagesPage() {
       if (response.ok) {
         const data = await response.json();
         setPackages(data.packages);
+      } else if (response.status === 403) {
+        console.error('Access denied: Admin privileges required');
+        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+        router.push('/');
       } else {
         setError('Failed to fetch credit packages');
       }

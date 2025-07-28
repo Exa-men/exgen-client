@@ -50,7 +50,7 @@ export default function VouchersPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  // Removed useRole hook - letting backend handle admin checks
   
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,18 +69,13 @@ export default function VouchersPage() {
   const [editVoucherCredits, setEditVoucherCredits] = useState(10);
   const [editVoucherExpiresAt, setEditVoucherExpiresAt] = useState('');
 
-  // Check authentication and admin role
+  // Check authentication only (let backend handle admin check)
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       router.push('/');
       return;
     }
-    
-    if (isLoaded && !roleLoading && !isAdmin) {
-      router.push('/');
-      return;
-    }
-  }, [isLoaded, isSignedIn, roleLoading, isAdmin, router]);
+  }, [isLoaded, isSignedIn, router]);
 
   // Set default expiration date (10 days from now)
   useEffect(() => {
@@ -89,12 +84,12 @@ export default function VouchersPage() {
     setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
   }, []);
 
-  // Fetch vouchers
+  // Fetch vouchers when signed in
   useEffect(() => {
-    if (isAdmin) {
+    if (isSignedIn) {
       fetchVouchers();
     }
-  }, [isAdmin]);
+  }, [isSignedIn]);
 
   const fetchVouchers = async () => {
     setLoading(true);
@@ -108,6 +103,10 @@ export default function VouchersPage() {
       if (response.ok) {
         const data = await response.json();
         setVouchers(data.vouchers);
+      } else if (response.status === 403) {
+        console.error('Access denied: Admin privileges required');
+        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+        router.push('/');
       } else {
         console.error('Failed to fetch vouchers');
       }
@@ -260,7 +259,7 @@ export default function VouchersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  if (!isAdmin) {
+  if (!isSignedIn) {
     return null;
   }
 
