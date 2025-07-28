@@ -14,6 +14,7 @@ import { cn } from '../../lib/utils';
 import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { useRole } from '../../hooks/use-role';
+import { downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface CreditPackage {
@@ -181,7 +182,7 @@ const CreditOrderModal: React.FC = () => {
 
   const handleSubmitOrder = async () => {
     if (!orderForm.terms_accepted) {
-      alert('Je moet de algemene voorwaarden accepteren om door te gaan.');
+      alert('Je moet de inkoopvoorwaarden accepteren om door te gaan.');
       return;
     }
 
@@ -947,13 +948,13 @@ const CreditOrderModal: React.FC = () => {
                   />
                   <Label htmlFor="terms" className="text-sm">
                     Ik ga akkoord met de{' '}
-                    <a href="/terms" target="_blank" className="text-examen-cyan hover:underline">
-                      algemene voorwaarden
-                    </a>
-                    {' '}en{' '}
-                    <a href="/privacy" target="_blank" className="text-examen-cyan hover:underline">
-                      privacyverklaring
-                    </a>
+                    <button
+                      type="button"
+                      onClick={downloadInkoopvoorwaarden}
+                      className="text-examen-cyan hover:underline cursor-pointer"
+                    >
+                      inkoopvoorwaarden
+                    </button>
                   </Label>
                 </div>
               </div>

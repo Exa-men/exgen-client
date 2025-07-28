@@ -2,6 +2,7 @@
 
 import { Mail, Phone, MapPin, Linkedin } from "lucide-react";
 import Link from "next/link";
+import { downloadInkoopvoorwaarden } from "../../lib/utils";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -123,8 +124,8 @@ const Footer = () => {
                 Privacybeleid
               </button>
               <button className="text-gray-400 hover:text-examen-cyan text-sm" 
-                onClick={() => handleDownload('algemene-voorwaarden.pdf')}>
-                Algemene voorwaarden
+                onClick={downloadInkoopvoorwaarden}>
+                Inkoopvoorwaarden
               </button>
               <button className="text-gray-400 hover:text-examen-cyan text-sm" 
                 onClick={() => handleDownload('cookies.pdf')}>

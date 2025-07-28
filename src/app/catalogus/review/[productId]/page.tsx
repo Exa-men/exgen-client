@@ -135,7 +135,6 @@ export default function ReviewPage() {
       // Update the product to show as purchased
       setProduct(prev => prev ? { ...prev, isPurchased: true, downloadUrl: result.downloadUrl } : null);
       
-      console.log('✅ Purchase successful, remaining credits:', result.remainingCredits);
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');

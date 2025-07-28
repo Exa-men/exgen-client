@@ -17,7 +17,7 @@ import CreditBanner from '../components/CreditBanner';
 
 import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
-import { cn } from '../../lib/utils';
+import { cn, downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { useRole } from '../../hooks/use-role';
 
@@ -339,7 +339,6 @@ export default function CatalogusPage() {
           : product
       ));
       setPurchaseConfirmId(null);
-      console.log('✅ Purchase successful, remaining credits:', result.remainingCredits);
       // Refresh credit balance to update header
       await refreshCredits();
     } catch (err) {
@@ -416,7 +415,6 @@ export default function CatalogusPage() {
   };
 
   const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
-    console.log(`📥 Downloading version ${version} for product ${productId}`);
     await handleDownload(productId, versionId);
   };
 
@@ -440,7 +438,6 @@ export default function CatalogusPage() {
         throw new Error(errorData.error || 'Failed to submit feedback');
       }
       const result = await response.json();
-      console.log('✅ Feedback submitted successfully:', result);
       // Optionally show a success message
     } catch (err) {
       console.error('Feedback submission error:', err);
@@ -1152,14 +1149,13 @@ export default function CatalogusPage() {
             />
             <label htmlFor="purchase-terms" className="text-sm select-none">
               Ik ga akkoord met de{' '}
-              <a
-                href="/inkoopvoorwaarden.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline text-examen-cyan hover:text-examen-cyan/80"
+              <button
+                type="button"
+                onClick={downloadInkoopvoorwaarden}
+                className="underline text-examen-cyan hover:text-examen-cyan/80 cursor-pointer"
               >
                 inkoopvoorwaarden
-              </a>
+              </button>
             </label>
           </div>
           <DialogFooter>

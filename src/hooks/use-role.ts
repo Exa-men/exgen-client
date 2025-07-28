@@ -1,6 +1,8 @@
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useState, useEffect, useRef } from 'react';
 
+
+
 export interface UserRole {
   user_id: string | null;
   role: 'user' | 'admin' | null;
@@ -19,6 +21,8 @@ export const useRole = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+
 
   useEffect(() => {
     const fetchUserRole = async () => {

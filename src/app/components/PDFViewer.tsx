@@ -12,7 +12,6 @@ interface PDFViewerProps {
 }
 
 export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerProps) {
-  console.log('📖 PDFViewer component rendered with props:', { isOpen, pdfUrl, title });
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(3); // Mock total pages
@@ -121,11 +120,9 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
   }, [isOpen, currentPage, scale, rotation]);
 
   if (!isOpen) {
-    console.log('🚫 PDFViewer not open, returning null');
     return null;
   }
 
-      console.log('🎨 Rendering PDF viewer modal');
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
       <div className="relative w-full h-full max-w-7xl max-h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col">

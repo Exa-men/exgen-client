@@ -44,7 +44,6 @@ const SmartPrefetcher: React.FC = () => {
           allPages.map(page => router.prefetch(page))
         );
 
-        console.log(`✅ Prefetched ${allPages.length} pages for ${isAdmin ? 'admin' : 'user'}`);
       } catch (error) {
         console.warn('Failed to prefetch some pages:', error);
       }
