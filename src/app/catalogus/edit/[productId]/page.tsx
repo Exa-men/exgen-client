@@ -33,7 +33,6 @@ import { Separator } from '../../../components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { useToast } from '../../../../hooks/use-toast';
 
-import { useRole } from '../../../../hooks/use-role';
 import { useApi } from '../../../../hooks/use-api';
 
 // Backend API response types
@@ -153,7 +152,6 @@ export default function EditExamPage() {
   const params = useParams();
   const productId = params.productId as string;
   const { toast } = useToast();
-  const { isAdmin, isLoading: roleLoading } = useRole();
   const api = useApi();
   
   const [product, setProduct] = useState<ExamProduct | null>(null);
@@ -188,7 +186,6 @@ export default function EditExamPage() {
   const [lastSavedData, setLastSavedData] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [authCheckRetries, setAuthCheckRetries] = useState(0);
 
   // Document management
   const [dragActive, setDragActive] = useState(false);
@@ -673,65 +670,28 @@ export default function EditExamPage() {
     }
   };
 
-  // Redirect if not signed in or not admin
+  // Redirect if not signed in (let backend handle admin checks)
   useEffect(() => {
     console.log('Auth state changed:', { 
       isLoaded, 
       isSignedIn, 
-      isAdmin, 
-      roleLoading,
       productId,
-      authCheckRetries
+      retryCount
     });
     
-    // Add a longer delay to allow auth state to fully load during page refresh
-    const timeoutId = setTimeout(() => {
-      console.log('Auth check triggered:', { 
-        isLoaded, 
-        isSignedIn, 
-        isAdmin, 
-        roleLoading,
-        productId,
-        authCheckRetries
-      });
-      
-      // Only redirect if we're fully loaded and the user is definitely not authorized
-      if (isLoaded && !roleLoading) {
-        if (!isSignedIn) {
-          console.log('Redirecting: User not signed in');
-          router.push('/catalogus');
-        } else if (isSignedIn && isAdmin === false) {
-          // Only redirect if isAdmin is explicitly false (not undefined/null)
-          console.log('Redirecting: User not admin');
-          router.push('/catalogus');
-        } else if (isSignedIn && isAdmin === true) {
-          console.log('User authorized, staying on page');
-        } else {
-          // isAdmin is undefined/null, still loading or error - don't redirect yet
-          console.log('Admin status unclear, waiting for more info...');
-          // Try to fetch the product anyway - the API will handle auth
-          if (productId) {
-            console.log('Attempting to fetch product despite unclear admin status...');
-            fetchProduct();
-          }
-        }
-      } else {
-        console.log('Still loading auth state...', { isLoaded, roleLoading });
-        // If we've been waiting too long, try again
-        if (authCheckRetries < 3) {
-          console.log('Retrying auth check...');
-          setAuthCheckRetries(prev => prev + 1);
-        } else {
-          console.log('Max auth check retries reached, attempting to proceed anyway...');
-          if (productId) {
-            fetchProduct();
-          }
-        }
-      }
-    }, 1000 + (authCheckRetries * 500)); // Increase delay with each retry
+    // Simple authentication check - let backend handle admin authorization
+    if (isLoaded && !isSignedIn) {
+      console.log('Redirecting: User not signed in');
+      router.push('/catalogus');
+      return;
+    }
     
-    return () => clearTimeout(timeoutId);
-  }, [isLoaded, isSignedIn, isAdmin, roleLoading, router, authCheckRetries]);
+    // If user is signed in and we have a product ID, try to fetch the product
+    if (isLoaded && isSignedIn && productId) {
+      console.log('User signed in, attempting to fetch product...');
+      fetchProduct();
+    }
+  }, [isLoaded, isSignedIn, router, productId]);
 
   // Fetch product data
   const fetchProduct = async () => {
