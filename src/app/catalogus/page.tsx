@@ -13,6 +13,7 @@ import PDFViewer from '../components/PDFViewer';
 import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
+import DownloadModal from '../components/DownloadModal';
 import CreditBanner from '../components/CreditBanner';
 
 import { useCredits } from '../contexts/CreditContext';
@@ -80,6 +81,10 @@ export default function CatalogusPage() {
   const [filter, setFilter] = useState<'alles' | 'ingekocht'>('alles');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackProduct, setFeedbackProduct] = useState<ExamProduct | null>(null);
+  // State for download modal
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadProduct, setDownloadProduct] = useState<ExamProduct | null>(null);
+  const [downloadVersionId, setDownloadVersionId] = useState<string | undefined>(undefined);
   // State for delete modal
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -358,58 +363,17 @@ export default function CatalogusPage() {
   };
 
   const handleDownload = async (productId: string, versionId?: string) => {
-    try {
-      setDownloadingProduct(productId);
-      setError(null);
-      const token = await getToken();
-      
-      // Construct download URL
-      let downloadUrl = `/api/catalog/download/${productId}`;
-      if (versionId) {
-        downloadUrl += `?version_id=${versionId}`;
-      }
-      
-      // Add headers using fetch instead of direct link
-      const response = await fetch(downloadUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status}`);
-      }
-      
-      // Get the blob from the response
-      const blob = await response.blob();
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      
-      // Get filename from response headers or generate one
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'product-package.zip';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename=(.+)/);
-        if (filenameMatch) {
-          filename = filenameMatch[1].replace(/"/g, '');
-        }
-      }
-      
-      downloadLink.download = filename;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      window.URL.revokeObjectURL(url);
-      
-    } catch (err) {
-      console.error('Download error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to download product package');
-    } finally {
-      setDownloadingProduct(null);
+    // Find the product
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+      setError('Product not found');
+      return;
     }
+    
+    // Set up download modal
+    setDownloadProduct(product);
+    setDownloadVersionId(versionId);
+    setDownloadModalOpen(true);
   };
 
   const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
@@ -1100,6 +1064,23 @@ export default function CatalogusPage() {
             versions: feedbackProduct.versions.map(v => ({ version: v.version, isLatest: v.isLatest })),
           }}
           defaultVersion={feedbackProduct.versions.find(v => v.isLatest)?.version || feedbackProduct.version}
+        />
+      )}
+      {downloadProduct && (
+        <DownloadModal
+          open={downloadModalOpen}
+          onClose={() => {
+            setDownloadModalOpen(false);
+            setDownloadProduct(null);
+            setDownloadVersionId(undefined);
+          }}
+          product={{
+            id: downloadProduct.id,
+            code: downloadProduct.code,
+            title: downloadProduct.title,
+            versions: downloadProduct.versions.map(v => ({ version: v.version, isLatest: v.isLatest })),
+          }}
+          versionId={downloadVersionId}
         />
       )}
       {/* Delete confirmation modal */}
