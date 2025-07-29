@@ -26,11 +26,11 @@ const SmartPrefetcher: React.FC = () => {
         // Always prefetch core user pages
         const userPages = [
           '/catalogus',
-          '/workflows',
         ];
 
         // Prefetch admin pages if user is admin
         const adminPages = isAdmin ? [
+          '/workflows',
           '/users',
           '/admin/credit-orders',
           '/admin/vouchers',

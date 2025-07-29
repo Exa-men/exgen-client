@@ -62,18 +62,6 @@ const UnifiedHeader: React.FC = () => {
                     Catalogus
                   </Button>
                 </Link>
-                <Link href="/workflows">
-                  <Button
-                    variant="ghost"
-                    className={
-                      isActive('/workflows')
-                        ? "text-examen-cyan font-bold underline underline-offset-4"
-                        : "text-gray-700 hover:text-examen-cyan transition-colors"
-                    }
-                  >
-                    Ontwikkelen
-                  </Button>
-                </Link>
                 <Link href="/verificatie">
                   <Button
                     variant="ghost"
@@ -90,6 +78,18 @@ const UnifiedHeader: React.FC = () => {
                 {/* Admin Navigation */}
                 {isAdmin && (
                   <>
+                    <Link href="/workflows">
+                      <Button
+                        variant="ghost"
+                        className={
+                          isActive('/workflows')
+                            ? "text-examen-cyan font-bold underline underline-offset-4"
+                            : "text-gray-700 hover:text-examen-cyan transition-colors"
+                        }
+                      >
+                        Ontwikkelen
+                      </Button>
+                    </Link>
                     <Link href="/users">
                       <Button
                         variant="ghost"
@@ -191,18 +191,6 @@ const UnifiedHeader: React.FC = () => {
                       Catalogus
                     </Button>
                   </Link>
-                  <Link href="/workflows">
-                    <Button
-                      variant="ghost"
-                      className={
-                        isActive('/workflows')
-                          ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
-                          : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
-                      }
-                    >
-                      Ontwikkelen
-                    </Button>
-                  </Link>
                   <Link href="/verificatie">
                     <Button
                       variant="ghost"
@@ -219,6 +207,18 @@ const UnifiedHeader: React.FC = () => {
                   {/* Admin Navigation */}
                   {isAdmin && (
                     <>
+                      <Link href="/workflows">
+                        <Button
+                          variant="ghost"
+                          className={
+                            isActive('/workflows')
+                              ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
+                              : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
+                          }
+                        >
+                          Ontwikkelen
+                        </Button>
+                      </Link>
                       <Link href="/users">
                         <Button
                           variant="ghost"
