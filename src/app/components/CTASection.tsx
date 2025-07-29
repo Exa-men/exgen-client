@@ -2,9 +2,11 @@
 
 import { Button } from "./ui/button";
 import { ArrowRight } from "lucide-react";
-import { SignUpButton } from '@clerk/nextjs';
+import { useAuthModal } from '../contexts/AuthModalContext';
 
 const CTASection = () => {
+  const { openAuthModal } = useAuthModal();
+  
   return (
     <section className="py-16 bg-examen-cyan">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -15,12 +17,14 @@ const CTASection = () => {
           Registreer op onze app en bekijk de catalogus met bestaande examenproducten.
         </p>
         <div className="flex justify-center">
-          <SignUpButton mode="modal">
-            <Button size="lg" className="bg-white text-examen-cyan hover:bg-gray-100">
-              Registreer
-              <ArrowRight size={18} className="ml-2" />
-            </Button>
-          </SignUpButton>
+          <Button 
+            size="lg" 
+            className="bg-white text-examen-cyan hover:bg-gray-100"
+            onClick={() => openAuthModal('sign-up')}
+          >
+            Registreer
+            <ArrowRight size={18} className="ml-2" />
+          </Button>
         </div>
       </div>
     </section>

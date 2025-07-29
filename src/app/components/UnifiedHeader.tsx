@@ -4,17 +4,19 @@ import React from 'react';
 import { Button } from "./ui/button";
 import { Menu } from "lucide-react";
 import Link from 'next/link';
-import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useRole } from '../../hooks/use-role';
 import { useCreditModal } from '../contexts/CreditModalContext';
+import { useAuthModal } from '../contexts/AuthModalContext';
 import CreditDisplay from './CreditDisplay';
 
 const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
   const { isAdmin, isLoading: roleLoading } = useRole();
   const { openModal } = useCreditModal();
+  const { openAuthModal } = useAuthModal();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
 
@@ -142,16 +144,19 @@ const UnifiedHeader: React.FC = () => {
             )}
             {isLoaded && !isSignedIn && (
               <>
-                <SignUpButton mode="modal">
-                  <Button variant="outline" className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100">
-                    Registreer
-                  </Button>
-                </SignUpButton>
-                <SignInButton mode="modal">
-                  <Button className="bg-examen-cyan hover:bg-examen-cyan-600 text-white">
-                    Login
-                  </Button>
-                </SignInButton>
+                <Button 
+                  variant="outline" 
+                  className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100"
+                  onClick={() => openAuthModal('sign-up')}
+                >
+                  Registreer
+                </Button>
+                <Button 
+                  className="bg-examen-cyan hover:bg-examen-cyan-600 text-white"
+                  onClick={() => openAuthModal('sign-in')}
+                >
+                  Login
+                </Button>
               </>
             )}
           </div>
@@ -271,16 +276,19 @@ const UnifiedHeader: React.FC = () => {
 
               {isLoaded && !isSignedIn && (
                 <>
-                  <SignUpButton mode="modal">
-                    <Button variant="outline" className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100 w-full justify-start">
-                      Registreer
-                    </Button>
-                  </SignUpButton>
-                  <SignInButton mode="modal">
-                    <Button className="bg-examen-cyan hover:bg-examen-cyan-600 text-white w-full justify-start">
-                      Login
-                    </Button>
-                  </SignInButton>
+                  <Button 
+                    variant="outline" 
+                    className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100 w-full justify-start"
+                    onClick={() => openAuthModal('sign-up')}
+                  >
+                    Registreer
+                  </Button>
+                  <Button 
+                    className="bg-examen-cyan hover:bg-examen-cyan-600 text-white w-full justify-start"
+                    onClick={() => openAuthModal('sign-in')}
+                  >
+                    Login
+                  </Button>
                 </>
               )}
             </div>
