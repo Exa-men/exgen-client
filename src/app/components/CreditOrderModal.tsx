@@ -13,7 +13,7 @@ import { Badge } from './ui/badge';
 import { cn } from '../../lib/utils';
 import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
-import { useRole } from '../../hooks/use-role';
+import { useRole } from '../contexts/RoleContext';
 import { downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 

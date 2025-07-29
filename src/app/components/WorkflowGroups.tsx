@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import WorkflowConfig from './WorkflowConfig';
 import { PlusIcon, TrashIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '@clerk/nextjs';
+import { useWorkflow } from '../contexts/WorkflowContext';
 
 interface StepConfig {
   id: string;
@@ -51,63 +52,12 @@ const mapWorkflowGroup = (group: any): WorkflowGroup => ({
 
 export default function WorkflowGroups() {
   const { getToken } = useAuth();
-  const [groups, setGroups] = useState<WorkflowGroup[]>([]);
-  const [availableModels, setAvailableModels] = useState<AvailableModels | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { workflowGroups: groups, availableModels, isLoading: loading, error, refetch } = useWorkflow();
   const [expandedGroups, setExpandedGroups] = useState<{ [id: string]: boolean }>({});
-
-  // Fetch workflow groups and models on mount
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const token = await getToken();
-        // Fetch workflow groups
-        const res = await fetch('/api/v1/workflow/groups', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error('Failed to fetch workflow groups');
-        const data = await res.json();
-        // Map backend snake_case to frontend camelCase
-        const mappedData = data.map(mapWorkflowGroup);
-        setGroups(mappedData);
-        // Fetch available models
-        const modelsRes = await fetch('/api/v1/models/available', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (!modelsRes.ok) throw new Error('Failed to fetch models');
-        const modelsData = await modelsRes.json();
-        setAvailableModels(modelsData);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [getToken]);
 
   // Add new group
   const handleAddGroup = async () => {
     try {
-      // Create optimistic group with temporary ID
-      const optimisticGroup: WorkflowGroup = {
-        id: `temp-${Date.now()}`, // Temporary ID for optimistic update
-        name: 'Nieuwe workflow',
-        isActive: false,
-        isDefault: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        config: { steps: [] },
-        prompts: {}
-      };
-      
-      // Optimistically add to UI immediately
-      setGroups(prev => [...prev, optimisticGroup]);
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch('/api/v1/workflow/groups', {
         method: 'POST',
@@ -116,29 +66,20 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        setGroups(prev => prev.filter(g => g.id !== optimisticGroup.id));
         throw new Error('Failed to create group');
       }
       
-      const newGroup = await res.json();
-      const mappedNewGroup = mapWorkflowGroup(newGroup);
-      
-      // Replace optimistic group with real one
-      setGroups(prev => prev.map(g => g.id === optimisticGroup.id ? mappedNewGroup : g));
+      // Refresh the workflow data from context
+      refetch();
       
     } catch (err: any) {
-      setError(err.message || 'Failed to create group');
+      console.error('Failed to create group', err);
     }
   };
 
   // Rename group
   const handleRenameGroup = async (id: string, name: string) => {
     try {
-      // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => g.id === id ? { ...g, name } : g));
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}`, {
         method: 'PATCH',
@@ -147,19 +88,14 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        // Note: We'd need to store the previous name to revert properly
-        // For now, we'll just show an error and let the user retry
         throw new Error('Failed to rename group');
       }
       
-      // Optional: Update with server response if needed
-      // const updated = await res.json();
-      // const mappedUpdated = mapWorkflowGroup(updated);
-      // setGroups(prev => prev.map(g => g.id === id ? mappedUpdated : g));
+      // Refresh the workflow data from context
+      refetch();
       
     } catch (err: any) {
-      setError(err.message || 'Failed to rename group');
+      console.error('Failed to rename group', err);
     }
   };
 
@@ -169,14 +105,10 @@ export default function WorkflowGroups() {
       // Check if this is the default group (frontend check)
       const groupToDelete = groups.find(g => g.id === id);
       if (groupToDelete?.isDefault) {
-        setError('Cannot delete the default workflow group');
+        console.error('Cannot delete the default workflow group');
         return;
       }
       
-      // Optimistically remove from UI immediately
-      setGroups(prev => prev.filter(g => g.id !== id));
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}`, {
         method: 'DELETE',
@@ -184,26 +116,20 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        // We'd need to refetch the group data to restore it properly
-        // For now, we'll just show an error and let the user refresh
         throw new Error('Failed to delete group');
       }
       
+      // Refresh the workflow data from context
+      refetch();
+      
     } catch (err: any) {
-      setError(err.message || 'Failed to delete group');
+      console.error('Failed to delete group', err);
     }
   };
 
   // Set active group
   const handleSetActive = async (id: string) => {
     try {
-      // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => ({
-        ...g,
-        isActive: g.id === id
-      })));
-      
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}/activate`, {
         method: 'POST',
@@ -211,67 +137,42 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        setGroups(prev => prev.map(g => ({
-          ...g,
-          isActive: g.id === id ? false : g.isActive
-        })));
-        throw new Error('Failed to set active group');
+        throw new Error('Failed to activate group');
       }
       
-      // Use the response data to confirm the update (optional, for consistency)
-      const updatedGroup = await res.json();
-      setGroups(prev => prev.map(g => 
-        g.id === id 
-          ? { ...g, isActive: updatedGroup.is_active, updated_at: updatedGroup.updated_at }
-          : { ...g, isActive: false }
-      ));
+      // Refresh the workflow data from context
+      refetch();
       
     } catch (err: any) {
-      setError(err.message || 'Failed to set active group');
+      console.error('Failed to activate group', err);
     }
   };
 
-  // Update config for a group
+  // Update config
   const handleConfigChange = async (id: string, config: WorkflowConfigType) => {
     try {
-      // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => g.id === id ? { ...g, config } : g));
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}/config`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config }),
+        body: JSON.stringify(config),
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        // Note: We'd need to store the previous config to revert properly
-        // For now, we'll just show an error and let the user retry
         throw new Error('Failed to update config');
       }
       
-      // Optional: Update with server response if needed
-      // const updatedGroup = await res.json();
-      // setGroups(prev => prev.map(g => g.id === id ? { ...g, config: updatedGroup.config } : g));
+      // Refresh the workflow data from context
+      refetch();
       
     } catch (err: any) {
-      setError(err.message || 'Failed to update config');
+      console.error('Failed to update config', err);
     }
   };
 
-  // Update prompt for a group
+  // Update prompt
   const handlePromptChange = async (id: string, promptName: string, content: string) => {
     try {
-      // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => g.id === id ? {
-        ...g,
-        prompts: { ...g.prompts, [promptName]: content }
-      } : g));
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}/config`, {
         method: 'PATCH',
@@ -280,35 +181,42 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        // Note: We'd need to store the previous prompt content to revert properly
-        // For now, we'll just show an error and let the user retry
         throw new Error('Failed to update prompt');
       }
       
+      // Refresh the workflow data from context
+      refetch();
+      
     } catch (err: any) {
-      setError(err.message || 'Failed to update prompt');
+      console.error('Failed to update prompt', err);
     }
   };
 
-  // Delete prompt for a group (handled by config update)
+  // Delete prompt
   const handlePromptDelete = async (id: string, promptName: string) => {
-    // Not implemented in backend; could be added if needed
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/v1/workflow/groups/${id}/config`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompts: { [promptName]: null } }),
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to delete prompt');
+      }
+      
+      // Refresh the workflow data from context
+      refetch();
+      
+    } catch (err: any) {
+      console.error('Failed to delete prompt', err);
+    }
   };
 
-  // Update base instructions for a group
+  // Update base instructions
   const handleBaseInstructionsChange = async (id: string, content: string) => {
     try {
-      // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => g.id === id ? {
-        ...g,
-        prompts: { 
-          ...g.prompts,
-          _base_instructions: content
-        }
-      } : g));
-      
-      // Make API call in background
       const token = await getToken();
       const res = await fetch(`/api/v1/workflow/groups/${id}/config`, {
         method: 'PATCH',
@@ -317,68 +225,76 @@ export default function WorkflowGroups() {
       });
       
       if (!res.ok) {
-        // Revert optimistic update on error
-        // Note: We'd need to store the previous base_instructions to revert properly
-        // For now, we'll just show an error and let the user retry
         throw new Error('Failed to update base instructions');
       }
       
+      // Refresh the workflow data from context
+      refetch();
+      
     } catch (err: any) {
-      setError(err.message || 'Failed to update base instructions');
+      console.error('Failed to update base instructions', err);
     }
   };
 
   if (loading) {
-    return <div className="bg-white rounded-lg p-6 shadow-md mb-8 text-center text-gray-600">Laden...</div>;
+    return (
+      <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="space-y-3">
+            <div className="h-4 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+          </div>
+        </div>
+      </div>
+    );
   }
+
   if (error) {
-    return <div className="bg-white rounded-lg p-6 shadow-md mb-8 text-center text-red-600">Fout: {error}</div>;
-  }
-  if (!availableModels) {
-    return <div className="bg-white rounded-lg p-6 shadow-md mb-8 text-center text-red-600">Geen modellen beschikbaar</div>;
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <div className="flex items-center">
+          <span className="text-red-600 mr-2">❌</span>
+          <p className="text-red-700">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="space-y-6">
-        {groups.map((group) => (
-          availableModels && (
-            <WorkflowConfig
-              key={group.id}
-              workflowConfig={group.config || { steps: [] }}
-              prompts={group.prompts || {}}
-              availableModels={availableModels}
-              onConfigChange={config => handleConfigChange(group.id, config)}
-              onPromptChange={(promptName, content) => handlePromptChange(group.id, promptName, content)}
-              onPromptDelete={promptName => handlePromptDelete(group.id, promptName)}
-              onBaseInstructionsChange={content => handleBaseInstructionsChange(group.id, content)}
-              groupName={group.name}
-              onGroupNameChange={name => handleRenameGroup(group.id, name)}
-              isActive={group.isActive}
-              onSetActive={() => handleSetActive(group.id)}
-              onDeleteGroup={() => handleDeleteGroup(group.id)}
-              editableGroupName={true}
-              showDelete={true}
-              showActiveIndicator={true}
-              isDefault={group.isDefault}
-              expanded={!!expandedGroups[group.id]}
-              onToggleExpand={() => setExpandedGroups(prev => ({ ...prev, [group.id]: !prev[group.id] }))}
-            />
-          )
-        ))}
-      </div>
-      
-      {/* Add button positioned outside the space-y-6 container */}
-      <div className="flex justify-center mt-4 mb-6">
+    <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold text-gray-800">Workflow Groups</h2>
         <button
           onClick={handleAddGroup}
-          className="w-10 h-10 flex items-center justify-center border-2 border-gray-300 rounded-lg bg-white hover:bg-blue-50 hover:border-blue-400 text-blue-600 text-2xl font-bold transition-colors shadow-sm"
-          title="Nieuwe workflow toevoegen"
-          style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}
+          className="flex items-center px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         >
-          <PlusIcon className="h-6 w-6" />
+          <PlusIcon className="h-4 w-4 mr-2" />
+          Add Group
         </button>
+      </div>
+      
+      <div className="space-y-4">
+        {groups.map((group) => (
+          <div key={group.id} className="border rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">{group.name}</h3>
+              <div className="flex items-center space-x-2">
+                {group.isActive && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Active
+                  </span>
+                )}
+                {group.isDefault && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Default
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
-} 
+}

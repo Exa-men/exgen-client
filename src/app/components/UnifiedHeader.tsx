@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
-import { useRole } from '../../hooks/use-role';
+import { useRole } from '../contexts/RoleContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { useAuthModal } from '../contexts/AuthModalContext';
 import CreditDisplay from './CreditDisplay';

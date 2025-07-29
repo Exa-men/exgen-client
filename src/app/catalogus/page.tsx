@@ -14,12 +14,13 @@ import TruncatedText from '../components/TruncatedText';
 import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import CreditBanner from '../components/CreditBanner';
+import ProductSkeleton from '../components/ProductSkeleton';
 
 import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { cn, downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { useRole } from '../../hooks/use-role';
+import { useRole } from '../contexts/RoleContext';
 
 interface Version {
   version: string;
@@ -196,8 +197,23 @@ export default function CatalogusPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
+  // Request deduplication - prevent multiple simultaneous requests
+  const fetchInProgressRef = useRef<boolean>(false);
+  const lastRequestRef = useRef<string>('');
+
   const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
     if (!isSignedIn) return;
+    
+    // Create a unique request key for deduplication
+    const requestKey = `${pageNum}-${searchTerm}-${filter}`;
+    
+    // Prevent duplicate requests
+    if (fetchInProgressRef.current && lastRequestRef.current === requestKey) {
+      return;
+    }
+    
+    fetchInProgressRef.current = true;
+    lastRequestRef.current = requestKey;
     
     try {
       if (pageNum === 1) setLoading(true);
@@ -239,13 +255,16 @@ export default function CatalogusPage() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      fetchInProgressRef.current = false;
     }
-  }, [isSignedIn, getToken, searchTerm, filter, PAGE_SIZE]);
+  }, [isSignedIn, getToken, searchTerm, filter]);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
-    fetchProducts(1, false);
-  }, [fetchProducts]);
+    if (isSignedIn) {
+      fetchProducts(1, false);
+    }
+  }, [isSignedIn, searchTerm, filter]); // Direct dependencies instead of fetchProducts
 
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
@@ -640,9 +659,8 @@ export default function CatalogusPage() {
         {/* Table for md+ screens */}
         <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+            <div className="p-4">
+              <ProductSkeleton />
             </div>
           ) : (
             <>
@@ -973,9 +991,8 @@ export default function CatalogusPage() {
         {/* Card layout for mobile (below md) */}
         <div className="md:hidden">
           {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+            <div className="p-4">
+              <ProductSkeleton />
             </div>
           ) : filteredAndSortedProducts.length === 0 ? (
             <div className="text-center py-8 text-gray-500">

@@ -29,6 +29,9 @@ export default function WorkflowsPage() {
   const { signOut } = useClerk();
   const { getToken } = useAuth();
   const { workflowConfig } = useWorkflow();
+  const { isSignedIn, user, isLoaded } = useUser();
+  const { signOut } = useClerk();
+  const { getToken } = useAuth();
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

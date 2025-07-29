@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRole } from '../hooks/use-role';
+import { useRole } from '../app/contexts/RoleContext';
 
 interface RoleGuardProps {
   children: React.ReactNode;

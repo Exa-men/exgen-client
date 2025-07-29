@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { useRole } from '../../hooks/use-role';
+import { useRole } from '../contexts/RoleContext';
 
 /**
  * SmartPrefetcher component that prefetches pages based on user authentication and role

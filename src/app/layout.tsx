@@ -4,6 +4,8 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { CreditProvider } from './contexts/CreditContext';
 import { CreditModalProvider } from './contexts/CreditModalContext';
 import { AuthModalProvider } from './contexts/AuthModalContext';
+import { RoleProvider } from './contexts/RoleContext';
+import { WorkflowProvider } from './contexts/WorkflowContext';
 import SmartPrefetcher from './components/SmartPrefetcher';
 import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
@@ -38,16 +40,20 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <CreditProvider>
-            <CreditModalProvider>
-              <AuthModalProvider>
-                <SmartPrefetcher />
-                <PageTransitionLoader />
-                <UnifiedHeader />
-                {children}
-                <CreditOrderModal />
-                <AuthModal />
-              </AuthModalProvider>
-            </CreditModalProvider>
+            <RoleProvider>
+              <WorkflowProvider>
+                <CreditModalProvider>
+                  <AuthModalProvider>
+                    <SmartPrefetcher />
+                    <PageTransitionLoader />
+                    <UnifiedHeader />
+                    {children}
+                    <CreditOrderModal />
+                    <AuthModal />
+                  </AuthModalProvider>
+                </CreditModalProvider>
+              </WorkflowProvider>
+            </RoleProvider>
           </CreditProvider>
         </body>
       </html>
