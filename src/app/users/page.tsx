@@ -20,6 +20,8 @@ interface UserData {
   email: string;
   role: 'user' | 'admin';
   credits: number;
+  school_name: string | null;
+  department: string | null;
   created_at: string;
 }
 
@@ -28,7 +30,7 @@ interface UserListResponse {
   total: number;
 }
 
-type SortField = 'first_name' | 'last_name' | 'email' | 'role' | 'credits' | 'created_at';
+type SortField = 'first_name' | 'last_name' | 'email' | 'role' | 'credits' | 'school_name' | 'department' | 'created_at';
 type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
@@ -167,6 +169,64 @@ export default function UsersPage() {
     }
   };
 
+  const updateUserSchool = async (userId: string, schoolName: string) => {
+    try {
+      setUpdatingUser(userId);
+      const token = await getToken();
+      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ school_name: schoolName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user school');
+      }
+
+      // Update the user in the local state
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, school_name: schoolName } : user
+      ));
+    } catch (err) {
+      console.error('Error updating user school:', err);
+      setError('Failed to update user school');
+    } finally {
+      setUpdatingUser(null);
+    }
+  };
+
+  const updateUserDepartment = async (userId: string, department: string) => {
+    try {
+      setUpdatingUser(userId);
+      const token = await getToken();
+      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ department }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user department');
+      }
+
+      // Update the user in the local state
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, department } : user
+      ));
+    } catch (err) {
+      console.error('Error updating user department:', err);
+      setError('Failed to update user department');
+    } finally {
+      setUpdatingUser(null);
+    }
+  };
+
   // Initial fetch
   useEffect(() => {
     fetchUsers();
@@ -177,15 +237,23 @@ export default function UsersPage() {
     let filtered = users.filter(user => {
       const matchesSearch = user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.email.toLowerCase().includes(searchTerm.toLowerCase());
+                           user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (user.school_name && user.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                           (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
       return matchesSearch && matchesRole;
     });
 
     // Sort the filtered results
     filtered.sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
+      
+      // Handle null values for school_name and department
+      if (sortField === 'school_name' || sortField === 'department') {
+        aValue = aValue || '';
+        bValue = bValue || '';
+      }
       
       if (sortField === 'credits') {
         aValue = Number(aValue);
@@ -256,7 +324,7 @@ export default function UsersPage() {
               <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400 h-10 w-10" />
               <Input
                 type="text"
-                placeholder="Search by name or email..."
+                placeholder="Search by name, email, school, or department..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-16 h-20 !text-3xl w-full shadow-lg border-2 border-examen-cyan focus:border-examen-cyan focus:ring-2 focus:ring-examen-cyan/30 transition-all"
@@ -374,6 +442,26 @@ export default function UsersPage() {
                         <TableHead>
                           <Button
                             variant="ghost"
+                            onClick={() => handleSort('school_name')}
+                            className="h-auto p-0 font-semibold"
+                          >
+                            School
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
+                            onClick={() => handleSort('department')}
+                            className="h-auto p-0 font-semibold"
+                          >
+                            Department
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
                             onClick={() => handleSort('created_at')}
                             className="h-auto p-0 font-semibold"
                           >
@@ -381,13 +469,13 @@ export default function UsersPage() {
                             <ArrowUpDown className="ml-2 h-4 w-4" />
                           </Button>
                         </TableHead>
-                        <TableHead className="font-semibold text-center">Actions</TableHead>
+
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAndSortedUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                             {searchTerm ? 'No users found for your search.' : 'No users available.'}
                           </TableCell>
                         </TableRow>
@@ -420,14 +508,29 @@ export default function UsersPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-2">
-                                {userData.role === 'admin' ? (
-                                  <Crown className="h-4 w-4 text-yellow-500" />
-                                ) : (
-                                  <User className="h-4 w-4 text-gray-500" />
-                                )}
-                                <Badge variant={userData.role === 'admin' ? 'default' : 'secondary'}>
-                                  {userData.role}
-                                </Badge>
+                                <Select
+                                  value={userData.role}
+                                  onValueChange={(value: 'user' | 'admin') => updateUserRole(userData.id, value)}
+                                  disabled={updatingUser === userData.id}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="user">
+                                      <div className="flex items-center space-x-2">
+                                        <User className="h-4 w-4 text-gray-500" />
+                                        <span>User</span>
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="admin">
+                                      <div className="flex items-center space-x-2">
+                                        <Crown className="h-4 w-4 text-yellow-500" />
+                                        <span>Admin</span>
+                                      </div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -449,22 +552,47 @@ export default function UsersPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {formatDate(userData.created_at)}
+                              <div className="flex items-center space-x-2">
+                                <span className={userData.school_name ? '' : 'text-gray-400 italic'}>
+                                  {userData.school_name || 'N/a'}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newSchool = prompt(`Enter school name for ${userData.first_name} ${userData.last_name}:`, userData.school_name || '');
+                                    if (newSchool !== null) {
+                                      updateUserSchool(userData.id, newSchool);
+                                    }
+                                  }}
+                                  disabled={updatingUser === userData.id}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-center">
-                              <Select
-                                value={userData.role}
-                                onValueChange={(value: 'user' | 'admin') => updateUserRole(userData.id, value)}
-                                disabled={updatingUser === userData.id}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="user">User</SelectItem>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <span className={userData.department ? '' : 'text-gray-400 italic'}>
+                                  {userData.department || 'N/a'}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newDepartment = prompt(`Enter department for ${userData.first_name} ${userData.last_name}:`, userData.department || '');
+                                    if (newDepartment !== null) {
+                                      updateUserDepartment(userData.id, newDepartment);
+                                    }
+                                  }}
+                                  disabled={updatingUser === userData.id}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(userData.created_at)}
                             </TableCell>
                           </TableRow>
                         ))

@@ -3,9 +3,11 @@
 import { Button } from "./ui/button";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
-import { SignUpButton } from '@clerk/nextjs';
+import { useAuthModal } from '../contexts/AuthModalContext';
 
 const Hero = () => {
+  const { openAuthModal } = useAuthModal();
+  
   return (
     <div className="relative bg-gradient-to-br from-examen-cyan-200 via-white to-examen-mint-100 pt-20 pb-24 md:pt-24 md:pb-28 overflow-hidden">
       {/* Background image with high transparency */}
@@ -32,12 +34,14 @@ const Hero = () => {
               Een complete oplossing voor het inkopen én ontwikkelen van examenproducten.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <SignUpButton mode="modal">
-                <Button size="lg" className="bg-examen-cyan hover:bg-examen-cyan-600 text-white">
-                  Registreer
-                  <ArrowRight size={18} className="ml-2" />
-                </Button>
-              </SignUpButton>
+              <Button 
+                size="lg" 
+                className="bg-examen-cyan hover:bg-examen-cyan-600 text-white"
+                onClick={() => openAuthModal('sign-up')}
+              >
+                Registreer
+                <ArrowRight size={18} className="ml-2" />
+              </Button>
               {/* <Link href="/demo">
                 <Button size="lg" variant="outline" className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100">
                   Demo aanvragen

@@ -3,10 +3,12 @@ import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
 import { CreditProvider } from './contexts/CreditContext';
 import { CreditModalProvider } from './contexts/CreditModalContext';
+import { AuthModalProvider } from './contexts/AuthModalContext';
 import SmartPrefetcher from './components/SmartPrefetcher';
 import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
 import CreditOrderModal from './components/CreditOrderModal';
+import { AuthModal } from './components/auth/AuthModal';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -37,11 +39,14 @@ export default function RootLayout({
         >
           <CreditProvider>
             <CreditModalProvider>
-              <SmartPrefetcher />
-              <PageTransitionLoader />
-              <UnifiedHeader />
-              {children}
-              <CreditOrderModal />
+              <AuthModalProvider>
+                <SmartPrefetcher />
+                <PageTransitionLoader />
+                <UnifiedHeader />
+                {children}
+                <CreditOrderModal />
+                <AuthModal />
+              </AuthModalProvider>
             </CreditModalProvider>
           </CreditProvider>
         </body>
