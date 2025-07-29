@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSignUp } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
-export default function SignUpVerifyPage() {
+function SignUpVerifyContent() {
   const { signUp, isLoaded } = useSignUp();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -226,5 +226,24 @@ export default function SignUpVerifyPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+        <p className="text-gray-600">Laden...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function SignUpVerifyPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <SignUpVerifyContent />
+    </Suspense>
   );
 } 
