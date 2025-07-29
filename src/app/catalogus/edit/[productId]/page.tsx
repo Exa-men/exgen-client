@@ -1832,7 +1832,7 @@ export default function EditExamPage() {
 
               {/* Cohort */}
               <div>
-                <label className="text-sm font-medium text-gray-700">Cohort</label>
+                <label className="text-sm font-medium text-gray-700">v.a. Cohort</label>
                 {isEditing ? (
                   <Input
                     value={editValues.cohort}

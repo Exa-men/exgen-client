@@ -55,7 +55,7 @@ function SignUpVerifyContent() {
       console.log('Session created:', searchParams.get('__clerk_created_session'));
       setVerificationStatus('success');
       setTimeout(() => {
-        router.push('/workflows');
+        router.push('/catalogus');
       }, 2000);
       return;
     }
@@ -98,7 +98,7 @@ function SignUpVerifyContent() {
         console.log('Verification successful!');
         setVerificationStatus('success');
         setTimeout(() => {
-          router.push('/workflows');
+          router.push('/catalogus');
         }, 2000);
       } else {
         console.log('Verification failed, status:', result.status);
@@ -131,7 +131,7 @@ function SignUpVerifyContent() {
       console.log('Sign-up already complete');
       setVerificationStatus('success');
       setTimeout(() => {
-        router.push('/workflows');
+        router.push('/catalogus');
       }, 2000);
     } else if (signUp.status === 'missing_requirements') {
       console.log('Sign-up missing requirements');

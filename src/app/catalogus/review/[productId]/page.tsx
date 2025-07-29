@@ -341,7 +341,7 @@ export default function ReviewPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center">
                       <Calendar className="h-5 w-5 mr-2" />
-                      Cohort
+                      v.a. Cohort
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -349,7 +349,7 @@ export default function ReviewPage() {
                       <div className="text-2xl font-bold text-gray-900 mb-1">
                         {formatCohort(product.validFrom)}
                       </div>
-                      <div className="text-sm text-gray-500">Cohort</div>
+                      <div className="text-sm text-gray-500">v.a. Cohort</div>
                     </div>
                   </CardContent>
                 </Card>

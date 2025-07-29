@@ -689,7 +689,7 @@ export default function CatalogusPage() {
                           onClick={() => handleSort('validFrom')}
                           className="h-auto p-0 font-semibold"
                         >
-                          Cohort
+                          v.a. Cohort
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
