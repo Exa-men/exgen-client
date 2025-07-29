@@ -9,7 +9,7 @@ const mockProducts = [
     description: 'Fundamentele Nederlandse taalvaardigheid voor MBO niveau 2',
     longDescription: 'Dit examen test de fundamentele Nederlandse taalvaardigheid die vereist is voor MBO niveau 2. Het examen bestaat uit verschillende onderdelen: leesvaardigheid, schrijfvaardigheid, luistervaardigheid en spreekvaardigheid. De vragen zijn gebaseerd op realistische situaties die studenten kunnen tegenkomen in hun dagelijks leven en werk.',
     cost: 25.00,
-    validFrom: '2024-25',
+    cohort: '2024-25',
     version: '2.1',
     isPurchased: false,
     requirements: [
@@ -29,7 +29,7 @@ const mockProducts = [
     description: 'Wiskundige vaardigheden voor MBO niveau 3',
     longDescription: 'Dit wiskunde examen focust op praktische wiskundige vaardigheden die nodig zijn voor MBO niveau 3. Het omvat algebra, meetkunde, statistiek en kansberekening. Studenten leren wiskunde toe te passen in realistische contexten.',
     cost: 30.00,
-    validFrom: '2024-25',
+    cohort: '2024-25',
     version: '1.8',
     isPurchased: true,
     downloadUrl: '/downloads/ex002.pdf',
@@ -50,7 +50,7 @@ const mockProducts = [
     description: 'Engelse communicatievaardigheden op B1 niveau',
     longDescription: 'Dit examen test de Engelse communicatievaardigheden op B1 niveau volgens het Europees Referentiekader. Het focust op praktische communicatie in zowel professionele als sociale contexten.',
     cost: 28.50,
-    validFrom: '2025-26',
+    cohort: '2025-26',
     version: '3.2',
     isPurchased: false,
     requirements: [

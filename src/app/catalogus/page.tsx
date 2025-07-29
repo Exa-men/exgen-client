@@ -37,7 +37,7 @@ interface ExamProduct {
   cost: number;
   credits: number;
   cohort: string;
-  validFrom: string;
+
   version: string;
   versions: Version[];
   isPurchased: boolean;
@@ -45,7 +45,7 @@ interface ExamProduct {
   status?: 'draft' | 'available'; // New status field
 }
 
-type SortField = 'code' | 'title' | 'credits' | 'validFrom';
+type SortField = 'code' | 'title' | 'credits' | 'cohort';
 type SortDirection = 'asc' | 'desc';
 
 export default function CatalogusPage() {
@@ -113,7 +113,6 @@ export default function CatalogusPage() {
     description: '',
     credits: '',
     cohort: '2025-26',
-    validFrom: '2025-26',
     status: 'draft' as 'draft' | 'available',
   });
   const [savingNewProduct, setSavingNewProduct] = useState(false);
@@ -135,7 +134,6 @@ export default function CatalogusPage() {
       description: '',
       credits: '',
       cohort: '2025-26',
-      validFrom: '2025-26',
       status: 'draft',
     });
   };
@@ -159,7 +157,7 @@ export default function CatalogusPage() {
           cost: Number(newProduct.credits),
           credits: Number(newProduct.credits),
           cohort: newProduct.cohort,
-          validFrom: newProduct.validFrom,
+
           status: newProduct.status,
         }),
       });
@@ -686,7 +684,7 @@ export default function CatalogusPage() {
                       <TableHead>
                         <Button
                           variant="ghost"
-                          onClick={() => handleSort('validFrom')}
+                          onClick={() => handleSort('cohort')}
                           className="h-auto p-0 font-semibold"
                         >
                           v.a. Cohort
@@ -835,7 +833,7 @@ export default function CatalogusPage() {
                             {formatCredits(product.credits || 0)}
                           </TableCell>
                           <TableCell>
-                            {formatCohort(product.cohort || product.validFrom)}
+                            {formatCohort(product.cohort)}
                           </TableCell>
                           <TableCell>
                             <VersionDropdown
@@ -990,7 +988,7 @@ export default function CatalogusPage() {
                   <div key={product.id} className="bg-white rounded-lg shadow p-4 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-semibold text-examen-cyan text-lg">{product.code}</span>
-                      <span className="text-xs text-gray-500">{formatCohort(product.cohort || product.validFrom)}</span>
+                      <span className="text-xs text-gray-500">{formatCohort(product.cohort)}</span>
                     </div>
                     <div className="font-bold text-lg mb-1">
                       <TruncatedText text={product.title} maxWords={8} showExpandButton={false} />

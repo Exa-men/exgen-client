@@ -87,7 +87,6 @@ interface BackendProduct {
   cohort: string;
   version: string;
   cost: number;
-  valid_from: string;
   status?: 'draft' | 'available';
   versions: BackendProductVersion[];
 }
@@ -141,7 +140,7 @@ interface ExamProduct {
   version: string;
   versions: Version[];
   cost: number;
-  validFrom: string;
+
   status?: 'draft' | 'available';
 }
 
@@ -531,7 +530,7 @@ export default function EditExamPage() {
           credits: product.credits,
           cohort: product.cohort,
           cost: product.credits,  // Keep cost in sync with credits
-          valid_from: product.validFrom,
+
         },
         versions_data: product.versions.map(version => ({
           id: version.id,  // Add version ID for backend lookup
@@ -732,7 +731,7 @@ export default function EditExamPage() {
         cohort: backendProduct.cohort,
         version: backendProduct.version,
         cost: backendProduct.credits,  // Use credits as the cost
-        validFrom: backendProduct.valid_from,
+
         status: backendProduct.status || 'draft',
         versions: backendProduct.versions?.map(version => ({
           id: version.id,
@@ -797,7 +796,7 @@ export default function EditExamPage() {
           cohort: '2024-25',
           version: '2.1',
           cost: 25.00,
-          validFrom: '2024-25',
+
           versions: [
             {
               id: 'v1',

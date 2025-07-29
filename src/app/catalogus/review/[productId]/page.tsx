@@ -13,9 +13,9 @@ interface ExamProduct {
   id: string;
   code: string;
   title: string;
-  description: string;
+    description: string;
   cost: number;
-  validFrom: string;
+  cohort: string;
   version: string;
   isPurchased: boolean;
   downloadUrl?: string;
@@ -82,9 +82,9 @@ export default function ReviewPage() {
           title: 'Basis Examen Nederlands',
           description: 'Fundamentele Nederlandse taalvaardigheid voor MBO niveau 2',
           longDescription: 'Dit examen test de fundamentele Nederlandse taalvaardigheid die vereist is voor MBO niveau 2. Het examen bestaat uit verschillende onderdelen: leesvaardigheid, schrijfvaardigheid, luistervaardigheid en spreekvaardigheid. De vragen zijn gebaseerd op realistische situaties die studenten kunnen tegenkomen in hun dagelijks leven en werk.',
-          cost: 25.00,
-          validFrom: '2024-25',
-          version: '2.1',
+                      cost: 25.00,
+            cohort: '2024-25',
+            version: '2.1',
           isPurchased: false,
           requirements: [
             'Basis kennis van Nederlandse grammatica',
@@ -347,7 +347,7 @@ export default function ReviewPage() {
                   <CardContent>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-gray-900 mb-1">
-                        {formatCohort(product.validFrom)}
+                        {formatCohort(product.cohort || '2024-25')}
                       </div>
                       <div className="text-sm text-gray-500">v.a. Cohort</div>
                     </div>
