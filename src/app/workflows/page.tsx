@@ -5,6 +5,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from '../components/WorkflowConfig';
 import WorkflowGroups from '../components/WorkflowGroups';
+import { AdminOnly } from '../../components/RoleGuard';
 
 
 interface JobStatus {
@@ -344,24 +345,34 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* Modal overlay for sign-in */}
-      {!isSignedIn && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-          <div className="w-full max-w-md p-8 bg-white rounded shadow">
-            <SignIn routing="hash" />
+    <AdminOnly
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+            <p className="text-gray-600">You need admin privileges to access this page.</p>
           </div>
         </div>
-      )}
-
-      {/* The rest of your app (only visible when signed in) */}
-      {isSignedIn && (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Title and subtitle */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Ontwikkelen</h1>
+      }
+    >
+      <main className="min-h-screen bg-gray-50">
+        {/* Modal overlay for sign-in */}
+        {!isSignedIn && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <div className="w-full max-w-md p-8 bg-white rounded shadow">
+              <SignIn routing="hash" />
+            </div>
           </div>
-          <WorkflowGroups />
+        )}
+
+        {/* The rest of your app (only visible when signed in) */}
+        {isSignedIn && (
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* Title and subtitle */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Ontwikkelen</h1>
+            </div>
+            <WorkflowGroups />
           
           {/* Error Display */}
           {error && (
@@ -604,5 +615,6 @@ export default function WorkflowsPage() {
         </div>
       )}
     </main>
+    </AdminOnly>
   );
 } 
