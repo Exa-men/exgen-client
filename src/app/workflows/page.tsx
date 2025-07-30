@@ -135,11 +135,12 @@ export default function WorkflowsPage() {
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       const file = files[0];
-      if (file.type === "application/xml" || file.type === "text/xml" || file.name.endsWith('.xml')) {
+      if (file.type === "application/xml" || file.type === "text/xml" || file.name.endsWith('.xml') ||
+          file.type === "application/pdf" || file.name.endsWith('.pdf')) {
         setSelectedFile(file);
         setError(null);
       } else {
-        setError("Please upload an XML file");
+        setError("Please upload a PDF or XML file");
       }
     }
   }, []);
@@ -147,11 +148,12 @@ export default function WorkflowsPage() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type === "application/xml" || file.type === "text/xml" || file.name.endsWith('.xml')) {
+      if (file.type === "application/xml" || file.type === "text/xml" || file.name.endsWith('.xml') ||
+          file.type === "application/pdf" || file.name.endsWith('.pdf')) {
         setSelectedFile(file);
         setError(null);
       } else {
-        setError("Please upload an XML file");
+        setError("Please upload a PDF or XML file");
       }
     }
   }, []);
@@ -427,7 +429,7 @@ export default function WorkflowsPage() {
                 <div className="text-4xl">📄</div>
                 <div>
                   <p className="text-lg font-medium text-gray-700">
-                    {selectedFile ? selectedFile.name : "Drag and drop your XML file here"}
+                    {selectedFile ? selectedFile.name : "Drag and drop your PDF or XML file here"}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     or click to browse
@@ -437,7 +439,7 @@ export default function WorkflowsPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".xml,application/xml,text/xml"
+                  accept=".xml,application/xml,text/xml,.pdf,application/pdf"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
