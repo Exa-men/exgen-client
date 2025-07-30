@@ -404,6 +404,7 @@ export default function WorkflowsPage() {
                 >
                   <option value="Examentemplate vanaf 2025-26">Examentemplate vanaf 2025-26</option>
                   <option value="Kwalificerend Leren vanaf 2025-26">Kwalificerend Leren vanaf 2025-26</option>
+                  <option value="Valideren">Valideren</option>
                 </select>
                 {/* Custom arrow */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
