@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { MigrationModal } from './MigrationModal';
 
 interface SignInFormData {
   email: string;
@@ -25,6 +26,8 @@ export const SignInForm: React.FC = () => {
   const [errors, setErrors] = useState<Partial<SignInFormData>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [migrationModalOpen, setMigrationModalOpen] = useState(false);
+  const [migratedUserEmail, setMigratedUserEmail] = useState('');
 
   const validateForm = (): boolean => {
     const newErrors: Partial<SignInFormData> = {};
@@ -59,6 +62,26 @@ export const SignInForm: React.FC = () => {
     setIsLoading(true);
     
     try {
+      // First, check if this is a migrated user
+      const migrationCheck = await fetch('/api/v1/auth/check-migrated-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email })
+      });
+      
+      if (migrationCheck.ok) {
+        const migrationData = await migrationCheck.json();
+        
+        if (migrationData.is_migrated && migrationData.requires_password_reset) {
+          // Show migration modal instead of regular sign-in
+          setMigratedUserEmail(formData.email);
+          setMigrationModalOpen(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Continue with normal sign-in flow
       const result = await signIn.create({
         identifier: formData.email,
         password: formData.password
@@ -189,6 +212,18 @@ export const SignInForm: React.FC = () => {
           </button>
         </p>
       </div>
+
+      {/* Migration Modal */}
+      {migrationModalOpen && (
+        <MigrationModal
+          email={migratedUserEmail}
+          onClose={() => {
+            setMigrationModalOpen(false);
+            setMigratedUserEmail('');
+            closeAuthModal();
+          }}
+        />
+      )}
     </div>
   );
 }; 

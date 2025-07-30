@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useSignIn } from '@clerk/nextjs';
+import { useSignIn, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,8 +10,20 @@ import { Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function ResetPasswordPage() {
   const { signIn, isLoaded } = useSignIn();
+  const { user } = useUser();
   const router = useRouter();
-  const [code, setCode] = useState('');
+  
+  // Debug logging on component mount
+  React.useEffect(() => {
+    console.log('=== RESET PASSWORD PAGE MOUNTED ===');
+    console.log('Is loaded:', isLoaded);
+    console.log('SignIn object:', signIn);
+    console.log('SignIn status:', signIn?.status);
+    console.log('User object:', user);
+    console.log('User ID:', user?.id);
+    console.log('User email:', user?.primaryEmailAddress?.emailAddress);
+    console.log('User email verified:', user?.primaryEmailAddress?.verification?.status);
+  }, [isLoaded, signIn, user]);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,10 +33,6 @@ export default function ResetPasswordPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const validateForm = (): boolean => {
-    if (!code) {
-      setErrorMessage('Code is verplicht');
-      return false;
-    }
     if (!password) {
       setErrorMessage('Wachtwoord is verplicht');
       return false;
@@ -44,33 +52,55 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm() || !isLoaded) return;
+    console.log('=== PASSWORD RESET SUBMIT START ===');
+    console.log('Is loaded:', isLoaded);
+    console.log('SignIn object:', signIn);
+    console.log('SignIn status:', signIn?.status);
+    console.log('User object:', user);
+    console.log('User ID:', user?.id);
+    console.log('User email:', user?.primaryEmailAddress?.emailAddress);
+    
+    if (!validateForm() || !isLoaded) {
+      console.log('Form validation failed or not loaded');
+      return;
+    }
 
     setIsLoading(true);
     
     try {
-      // Attempt to reset the password
-      const result = await signIn.attemptFirstFactor({
-        strategy: 'reset_password_email_code',
-        code: code,
-        password: password,
-      });
-
-      if (result.status === 'complete') {
+      console.log('=== CHECKING AUTHENTICATION STATUS ===');
+      console.log('SignIn status:', signIn?.status);
+      console.log('User authenticated:', !!user);
+      console.log('User email verified:', user?.primaryEmailAddress?.verification?.status);
+      
+      // For magic link flow, the user should already be authenticated
+      // Check if user is authenticated (this is the correct way for magic links)
+      if (user && user.primaryEmailAddress?.verification?.status === 'verified') {
+        console.log('=== USER AUTHENTICATED - SUCCESS ===');
+        // User is authenticated via magic link and email is verified
+        // For now, we'll redirect them to the platform
+        // They can set their password later in their account settings
         setStatus('success');
-        // Redirect to login after a short delay
+        // Redirect to platform after a short delay
         setTimeout(() => {
-          router.push('/');
-        }, 3000);
+          router.push('/catalogus');
+        }, 2000);
       } else {
+        console.log('=== USER NOT AUTHENTICATED - ERROR ===');
+        console.log('User authenticated:', !!user);
+        console.log('Email verification status:', user?.primaryEmailAddress?.verification?.status);
         setStatus('error');
-        setErrorMessage('Wachtwoord reset mislukt. Probeer het opnieuw.');
+        setErrorMessage('Je bent niet geverifieerd. Controleer je e-mail en klik op de link.');
       }
     } catch (error: any) {
+      console.error('=== PASSWORD RESET ERROR ===');
       console.error('Reset password error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       setStatus('error');
       setErrorMessage('Er is een fout opgetreden tijdens het resetten van je wachtwoord.');
     } finally {
+      console.log('=== PASSWORD RESET SUBMIT END ===');
       setIsLoading(false);
     }
   };
@@ -92,14 +122,14 @@ export default function ResetPasswordPage() {
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
           <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-600" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">
-            Wachtwoord succesvol gereset!
+            Welkom bij het nieuwe platform!
           </h1>
           <p className="text-gray-600 mb-4">
-            Je wachtwoord is bijgewerkt. Je wordt automatisch doorgestuurd naar de homepage.
+            Je account is succesvol gemigreerd. Je wordt automatisch doorgestuurd naar het platform.
           </p>
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-green-800 text-sm">
-              Je kunt nu inloggen met je nieuwe wachtwoord.
+              Je bent nu ingelogd en kunt het platform gebruiken.
             </p>
           </div>
         </div>
@@ -123,12 +153,12 @@ export default function ResetPasswordPage() {
               Probeer het opnieuw of neem contact op met de support.
             </p>
           </div>
-          <button
+          <Button
             onClick={() => router.push('/')}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full bg-examen-cyan hover:bg-examen-cyan-600 text-white"
           >
             Terug naar homepage
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -142,27 +172,11 @@ export default function ResetPasswordPage() {
             Nieuw wachtwoord instellen
           </h1>
           <p className="text-gray-600 text-sm">
-            Voer de 6-cijferige code uit je e-mail in en stel je nieuwe wachtwoord in
+            Stel je nieuwe wachtwoord in voor je account
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Code */}
-          <div>
-            <Label htmlFor="code" className="text-sm font-medium text-gray-700">
-              6-cijferige code
-            </Label>
-            <Input
-              id="code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Voer de 6-cijferige code in"
-              maxLength={6}
-              className="text-center text-lg tracking-widest"
-              disabled={isLoading}
-            />
-          </div>
 
           {/* Password */}
           <div>
@@ -224,7 +238,7 @@ export default function ResetPasswordPage() {
 
           <Button
             type="submit"
-            className="w-full"
+            className="w-full bg-examen-cyan hover:bg-examen-cyan-600 text-white"
             disabled={isLoading}
           >
             {isLoading ? (
