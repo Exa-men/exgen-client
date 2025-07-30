@@ -369,6 +369,87 @@ export default function UsersPage() {
             </button>
           </div>
 
+          {/* Statistics Section */}
+          <div className="mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Users */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-examen-cyan">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <User className="h-6 w-6 text-examen-cyan" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Users</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Users */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <Crown className="h-6 w-6 text-blue-500" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Administrators</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {users.filter(user => user.role === 'admin').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Regular Users */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <User className="h-6 w-6 text-green-500" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Regular Users</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {users.filter(user => user.role === 'user').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Credits */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className="h-6 w-6 bg-purple-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-xs">€</span>
+                      </div>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Credits</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {users.reduce((total, user) => total + user.credits, 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
