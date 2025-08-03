@@ -65,26 +65,29 @@ export const SignInForm: React.FC = () => {
       });
 
       if (result.status === 'complete') {
-        // Sign in successful
         closeAuthModal();
-        // Optionally refresh the page or redirect
-        window.location.reload();
+        // Use router.push instead of window.location.reload() for better UX
+        window.location.href = '/catalogus';
       } else if (result.status === 'needs_first_factor') {
-        // Handle 2FA if needed
         console.log('2FA required');
       }
     } catch (error: any) {
       console.error('Sign in error:', error);
       
-      // Handle specific Clerk errors
-      if (error.errors?.[0]?.code === 'form_identifier_not_found') {
-        setErrors({ email: 'Geen account gevonden met dit e-mailadres' });
-      } else if (error.errors?.[0]?.code === 'form_password_incorrect') {
-        setErrors({ password: 'Onjuist wachtwoord' });
-      } else if (error.errors?.[0]?.code === 'form_identifier_not_verified') {
-        setErrors({ email: 'E-mailadres is niet geverifieerd. Controleer je inbox.' });
-      } else {
-        setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
+      // Simplified error handling
+      const errorCode = error.errors?.[0]?.code;
+      switch (errorCode) {
+        case 'form_identifier_not_found':
+          setErrors({ email: 'Geen account gevonden met dit e-mailadres' });
+          break;
+        case 'form_password_incorrect':
+          setErrors({ password: 'Onjuist wachtwoord' });
+          break;
+        case 'form_identifier_not_verified':
+          setErrors({ email: 'E-mailadres is niet geverifieerd. Controleer je inbox.' });
+          break;
+        default:
+          setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
       }
     } finally {
       setIsLoading(false);

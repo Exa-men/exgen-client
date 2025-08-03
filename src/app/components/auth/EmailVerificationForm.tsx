@@ -8,56 +8,24 @@ import { Loader2, CheckCircle, Mail, ArrowLeft } from 'lucide-react';
 
 export const EmailVerificationForm: React.FC = () => {
   const { signUp, isLoaded } = useSignUp();
-  const { switchModalMode, closeAuthModal } = useAuthModal();
+  const { switchModalMode } = useAuthModal();
   
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
 
-  // Get the email link flow
-  const { startEmailLinkFlow } = signUp?.createEmailLinkFlow() || {};
-
   const handleResendVerification = async () => {
-    console.log('=== RESEND VERIFICATION START ===');
-    console.log('Is loaded:', isLoaded);
-    console.log('startEmailLinkFlow function:', startEmailLinkFlow);
+    if (!isLoaded || !signUp) return;
     
-    if (!isLoaded || !startEmailLinkFlow) {
-      console.error('Cannot resend: not loaded or startEmailLinkFlow not available');
-      return;
-    }
-
     setIsResending(true);
     
     try {
-      // Dynamically set the host domain for dev and prod
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      console.log('Redirect URL will be:', `${protocol}//${host}/sign-up/verify`);
-
-      console.log('Calling prepareEmailAddressVerification for resend...');
-      
-      // Use the same approach that works for sign-up
-      const resendResult = await signUp.prepareEmailAddressVerification({
-        strategy: 'email_link',
-        redirectUrl: `${protocol}//${host}/sign-up/verify`,
-      });
-      
-      console.log('=== RESEND VERIFICATION RESULT ===');
-      console.log('Resend result:', resendResult);
-      console.log('Resend status:', resendResult.status);
-      
+      // Use Clerk's simplified API for resending
+      await signUp.prepareEmailAddressVerification();
       setResendSuccess(true);
-      
-      // Reset success message after 3 seconds
       setTimeout(() => setResendSuccess(false), 3000);
     } catch (error: any) {
-      console.error('=== RESEND VERIFICATION ERROR ===');
-      console.error('Resend verification error:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error('Resend error:', error);
     } finally {
-      console.log('Resend process finished, setting isResending to false');
       setIsResending(false);
     }
   };

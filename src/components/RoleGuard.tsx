@@ -14,16 +14,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
   fallback = null,
   requireAuth = true
 }) => {
-  const { isAdmin, isUser, hasRole, isLoading } = useRole();
-
-  // Show loading state while checking role
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const { isAdmin, isUser, hasRole } = useRole();
 
   // If auth is required but user is not signed in, show fallback
   if (requireAuth && !hasRole) {

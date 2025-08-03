@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, CheckCircle, Mail } from 'lucide-react';
 
 export const ForgotPasswordForm: React.FC = () => {
   const { signIn, isLoaded } = useSignIn();
@@ -33,83 +33,34 @@ export const ForgotPasswordForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('=== FORGOT PASSWORD START ===');
-    console.log('Email:', email);
-    console.log('Is loaded:', isLoaded);
-    console.log('SignIn object:', signIn);
-    
-    if (!validateEmail() || !isLoaded) {
-      console.log('Validation failed or not loaded');
-      return;
-    }
+    if (!validateEmail() || !isLoaded) return;
 
     setIsLoading(true);
     
     try {
-      console.log('=== CREATING SIGN-IN ATTEMPT ===');
-      
-      // Create the sign-in attempt first
-      const { supportedFirstFactors } = await signIn.create({
-        identifier: email
+      // Use Clerk's magic link strategy for password reset
+      await signIn.create({
+        strategy: 'email_link',
+        identifier: email,
       });
-
-      console.log('=== SUPPORTED FIRST FACTORS ===');
-      console.log('Supported factors:', supportedFirstFactors);
-
-      // Find the email link factor for password reset
-      const emailLinkFactor = supportedFirstFactors?.find(
-        (factor) => factor.strategy === 'email_link'
-      );
-
-      console.log('=== EMAIL LINK FACTOR ===');
-      console.log('Email link factor:', emailLinkFactor);
-
-      if (!emailLinkFactor) {
-        throw new Error('Email link factor not found');
-      }
-
-      // Dynamically set the host domain for dev and prod
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      const redirectUrl = `${protocol}//${host}/reset-password`;
-
-      console.log('=== SENDING EMAIL LINK ===');
-      console.log('Email address ID:', emailLinkFactor.emailAddressId);
-
-      // Try startEmailLinkFlow with a shorter timeout
-      const emailPromise = signIn.createEmailLinkFlow().startEmailLinkFlow({
-        emailAddressId: emailLinkFactor.emailAddressId,
-        redirectUrl: redirectUrl,
-      });
-
-      // Add a timeout of 5 seconds
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email link flow timeout (5s)')), 5000);
-      });
-
-      // Race between the email promise and timeout
-      const result = await Promise.race([emailPromise, timeoutPromise]);
-
-      console.log('=== EMAIL LINK RESULT ===');
-      console.log('Result:', result);
-      console.log('=== EMAIL LINK SENT SUCCESSFULLY ===');
       
       setIsEmailSent(true);
     } catch (error: any) {
-      console.error('=== FORGOT PASSWORD ERROR ===');
       console.error('Forgot password error:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      console.error('Error errors:', error.errors);
       
-      if (error.errors?.[0]?.code === 'form_identifier_not_found') {
-        setError('Geen account gevonden met dit e-mailadres');
-      } else {
-        setError('Er is een fout opgetreden. Probeer het opnieuw.');
+      // Simplified error handling using Clerk's error codes
+      const errorCode = error.errors?.[0]?.code;
+      switch (errorCode) {
+        case 'form_identifier_not_found':
+          setError('Geen account gevonden met dit e-mailadres');
+          break;
+        case 'form_identifier_not_verified':
+          setError('E-mailadres is niet geverifieerd. Controleer je inbox.');
+          break;
+        default:
+          setError('Er is een fout opgetreden. Probeer het opnieuw.');
       }
     } finally {
-      console.log('=== FORGOT PASSWORD FINISHED ===');
       setIsLoading(false);
     }
   };
@@ -118,16 +69,28 @@ export const ForgotPasswordForm: React.FC = () => {
     return (
       <div className="w-full mx-auto text-center">
         <div className="mb-6">
+          <div className="mx-auto w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+            <Mail className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+          </div>
           <p className="text-sm sm:text-base text-gray-600">
-            We hebben een 6-cijferige code verzonden naar:
+            We hebben een wachtwoord reset link verzonden naar:
           </p>
           <p className="font-medium text-gray-900 mt-1">{email}</p>
         </div>
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <p className="text-blue-800 text-sm">
-            Controleer je inbox en voer de code in op de volgende pagina om je wachtwoord te resetten.
-          </p>
+          <div className="flex items-start space-x-3">
+            <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-left">
+              <p className="text-blue-800 text-sm font-medium">
+                Controleer je inbox
+              </p>
+              <p className="text-blue-700 text-sm mt-1">
+                Klik op de link in de e-mail om je wachtwoord te resetten. 
+                De link is 1 uur geldig.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -143,7 +106,10 @@ export const ForgotPasswordForm: React.FC = () => {
           <p className="text-sm text-gray-600">
             Geen e-mail ontvangen?{' '}
             <button
-              onClick={() => setIsEmailSent(false)}
+              onClick={() => {
+                setIsEmailSent(false);
+                setError('');
+              }}
               className="text-examen-cyan hover:text-examen-cyan-600 font-medium"
             >
               Probeer opnieuw
@@ -158,7 +124,7 @@ export const ForgotPasswordForm: React.FC = () => {
     <div className="w-full mx-auto">
       <div className="text-center mb-6">
         <p className="text-sm sm:text-base text-gray-600">
-          Voer je e-mailadres in en we sturen je een 6-cijferige code om je wachtwoord te resetten
+          Voer je e-mailadres in en we sturen je een link om je wachtwoord te resetten
         </p>
       </div>
 
@@ -194,10 +160,10 @@ export const ForgotPasswordForm: React.FC = () => {
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              E-mail verzenden...
+              Reset link verzenden...
             </>
           ) : (
-            'Reset code verzenden'
+            'Reset link verzenden'
           )}
         </Button>
       </form>

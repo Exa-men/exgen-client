@@ -3,9 +3,18 @@
  */
 import { useAuth } from '@clerk/nextjs';
 import { useCallback } from 'react';
-import { api, ApiResponse } from '../lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+export interface ApiError {
+  detail: string;
+  status?: number;
+}
+
+export interface ApiResponse<T> {
+  data?: T;
+  error?: ApiError;
+}
 
 export function useApi() {
   const { getToken } = useAuth();
