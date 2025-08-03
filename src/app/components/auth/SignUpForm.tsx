@@ -19,7 +19,7 @@ interface SignUpFormData {
 
 export const SignUpForm: React.FC = () => {
   const { signUp, isLoaded } = useSignUp();
-  const { switchModalMode, closeAuthModal } = useAuthModal();
+  const { switchModalMode } = useAuthModal();
   
   const [formData, setFormData] = useState<SignUpFormData>({
     firstName: '',
@@ -32,9 +32,6 @@ export const SignUpForm: React.FC = () => {
   
   const [errors, setErrors] = useState<Partial<SignUpFormData>>({});
   const [isLoading, setIsLoading] = useState(false);
-
-  // Get the email link flow
-  const { startEmailLinkFlow } = signUp?.createEmailLinkFlow() || {};
 
   const validateForm = (): boolean => {
     const newErrors: Partial<SignUpFormData> = {};
@@ -71,20 +68,53 @@ export const SignUpForm: React.FC = () => {
     }
   };
 
+  const handleClerkError = (error: any) => {
+    const errorCode = error.errors?.[0]?.code;
+    switch (errorCode) {
+      case 'form_identifier_exists':
+        setErrors({ email: 'Dit e-mailadres is al in gebruik' });
+        break;
+      case 'form_password_pwned':
+        setErrors({ password: 'Dit wachtwoord is te zwak. Kies een sterker wachtwoord' });
+        break;
+      case 'form_password_validation_failed':
+        setErrors({ password: 'Wachtwoord voldoet niet aan de vereisten' });
+        break;
+      default:
+        setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm() || !isLoaded) return;
+    console.log('=== SIGN-UP PROCESS START ===');
+    console.log('Form data:', formData);
+    console.log('Is loaded:', isLoaded);
+    console.log('SignUp object:', signUp);
+    
+    if (!validateForm() || !isLoaded) {
+      console.log('Validation failed or not loaded, returning early');
+      return;
+    }
 
     setIsLoading(true);
+    console.log('Set loading to true');
     
     try {
-      console.log('=== SIGN-UP PROCESS START ===');
-      console.log('Form data:', formData);
-      console.log('Is loaded:', isLoaded);
+      console.log('=== CREATING SIGN-UP ===');
+      console.log('About to call signUp.create with:', {
+        emailAddress: formData.email,
+        password: '[HIDDEN]',
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        unsafeMetadata: {
+          school_name: formData.schoolName || null,
+          department: formData.department || null
+        }
+      });
       
-      // Create the sign-up attempt
-      console.log('Creating sign-up attempt...');
+      // Use Clerk's simplified API
       const signUpResult = await signUp.create({
         emailAddress: formData.email,
         password: formData.password,
@@ -95,73 +125,64 @@ export const SignUpForm: React.FC = () => {
           department: formData.department || null
         }
       });
-
+      
       console.log('=== SIGN-UP CREATE RESULT ===');
       console.log('Full result:', signUpResult);
       console.log('Status:', signUpResult.status);
       console.log('Verifications:', signUpResult.verifications);
-      console.log('Unsafe metadata:', signUpResult.unsafeMetadata);
-
-      // Dynamically set the host domain for dev and prod
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      console.log('Redirect URL will be:', `${protocol}//${host}/sign-up/verify`);
-
-      // Send the user an email with the verification link
-      console.log('=== STARTING EMAIL VERIFICATION ===');
+      console.log('Required fields:', signUpResult.requiredFields);
+      console.log('Optional fields:', signUpResult.optionalFields);
+      console.log('ID:', signUpResult.id);
       
-      try {
-        console.log('Calling prepareEmailAddressVerification directly...');
-        
-        // Try using prepareEmailAddressVerification directly
-        const verificationResult = await signUp.prepareEmailAddressVerification({
-          strategy: 'email_link',
-          redirectUrl: `${protocol}//${host}/sign-up/verify`,
-        });
-        
-        console.log('=== EMAIL VERIFICATION RESULT ===');
-        console.log('Verification result:', verificationResult);
-        console.log('Verification status:', verificationResult.status);
-        console.log('Verification verifications:', verificationResult.verifications);
-        console.log('Verification requiredFields:', verificationResult.requiredFields);
-        console.log('Verification optionalFields:', verificationResult.optionalFields);
-        console.log('Verification id:', verificationResult.id);
-        
-        // Check if email was actually sent
-        if (verificationResult.verifications?.emailAddress) {
-          console.log('Email verification details:', verificationResult.verifications.emailAddress);
-        }
-        
-        // Email verification required - show verification screen
-        console.log('Email verification prepared, showing verification screen...');
-        switchModalMode('verification-sent');
-        
-      } catch (verificationError: any) {
-        console.error('=== EMAIL VERIFICATION ERROR ===');
-        console.error('Verification error:', verificationError);
-        console.error('Error name:', verificationError.name);
-        console.error('Error stack:', verificationError.stack);
-        throw verificationError;
+      // Check if email verification is needed
+      if (signUpResult.verifications?.emailAddress) {
+        console.log('=== EMAIL VERIFICATION DETAILS ===');
+        console.log('Email verification status:', signUpResult.verifications.emailAddress.status);
+        console.log('Email verification strategy:', signUpResult.verifications.emailAddress.strategy);
+        console.log('Email verification error:', signUpResult.verifications.emailAddress.error);
       }
-
-      // Email verification is now handled above
+      
+      // Check if we need to prepare email verification
+      if (signUpResult.status === 'missing_requirements') {
+        console.log('=== MISSING REQUIREMENTS DETECTED ===');
+        console.log('Required fields:', signUpResult.requiredFields);
+        console.log('Optional fields:', signUpResult.optionalFields);
+        
+        // Check if email verification is required
+        if (signUpResult.requiredFields?.includes('email_address')) {
+          console.log('Email verification is required, preparing...');
+          try {
+            const verificationResult = await signUp.prepareEmailAddressVerification({
+              strategy: 'email_link',
+              redirectUrl: `${window.location.origin}/sign-up/verify`
+            });
+            console.log('=== EMAIL VERIFICATION PREPARED ===');
+            console.log('Verification result:', verificationResult);
+            console.log('Verification status:', verificationResult.status);
+          } catch (verificationError) {
+            console.error('=== EMAIL VERIFICATION ERROR ===');
+            console.error('Verification error:', verificationError);
+          }
+        }
+      }
+      
+      console.log('=== SWITCHING TO VERIFICATION SENT ===');
+      // Clerk handles email verification automatically
+      switchModalMode('verification-sent');
+      console.log('Modal mode switched to verification-sent');
+      
     } catch (error: any) {
       console.error('=== SIGN-UP ERROR ===');
       console.error('Error object:', error);
       console.error('Error message:', error.message);
       console.error('Error errors:', error.errors);
       console.error('Error code:', error.errors?.[0]?.code);
-      
-      // Handle specific Clerk errors
-      if (error.errors?.[0]?.code === 'form_identifier_exists') {
-        setErrors({ email: 'Dit e-mailadres is al in gebruik' });
-      } else if (error.errors?.[0]?.code === 'form_password_pwned') {
-        setErrors({ password: 'Dit wachtwoord is te zwak. Kies een sterker wachtwoord' });
-      } else {
-        setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
-      }
+      console.error('Error stack:', error.stack);
+      handleClerkError(error);
     } finally {
+      console.log('=== SIGN-UP PROCESS END ===');
       setIsLoading(false);
+      console.log('Set loading to false');
     }
   };
 

@@ -12,14 +12,11 @@ import { useRole } from '../../hooks/use-role';
 const SmartPrefetcher: React.FC = () => {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin, isLoading: roleLoading } = useRole();
+  const { isAdmin } = useRole();
 
   useEffect(() => {
     // Only start prefetching when user is loaded and signed in
     if (!isLoaded || !isSignedIn) return;
-
-    // Wait for role to be loaded before prefetching role-specific pages
-    if (roleLoading) return;
 
     const prefetchPages = async () => {
       try {
@@ -53,7 +50,7 @@ const SmartPrefetcher: React.FC = () => {
     const timer = setTimeout(prefetchPages, 1000);
 
     return () => clearTimeout(timer);
-  }, [isLoaded, isSignedIn, roleLoading, isAdmin, router]);
+  }, [isLoaded, isSignedIn, isAdmin, router]);
 
   // This component doesn't render anything
   return null;

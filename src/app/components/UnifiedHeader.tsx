@@ -14,7 +14,7 @@ import CreditDisplay from './CreditDisplay';
 
 const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin, isLoading: roleLoading } = useRole();
+  const { isAdmin } = useRole();
   const { openModal } = useCreditModal();
   const { openAuthModal } = useAuthModal();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);

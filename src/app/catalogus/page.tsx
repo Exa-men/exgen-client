@@ -53,7 +53,7 @@ export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isLoading: roleLoading, isAdmin } = useRole();
+  const { userRole, isAdmin } = useRole();
   const { refreshCredits } = useCredits();
   const { openModal } = useCreditModal();
   
