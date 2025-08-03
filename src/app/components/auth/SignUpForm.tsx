@@ -88,13 +88,34 @@ export const SignUpForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm() || !isLoaded) return;
+    console.log('=== SIGN-UP PROCESS START ===');
+    console.log('Form data:', formData);
+    console.log('Is loaded:', isLoaded);
+    console.log('SignUp object:', signUp);
+    
+    if (!validateForm() || !isLoaded) {
+      console.log('Validation failed or not loaded, returning early');
+      return;
+    }
 
     setIsLoading(true);
+    console.log('Set loading to true');
     
     try {
+      console.log('=== CREATING SIGN-UP ===');
+      console.log('About to call signUp.create with:', {
+        emailAddress: formData.email,
+        password: '[HIDDEN]',
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        unsafeMetadata: {
+          school_name: formData.schoolName || null,
+          department: formData.department || null
+        }
+      });
+      
       // Use Clerk's simplified API
-      await signUp.create({
+      const signUpResult = await signUp.create({
         emailAddress: formData.email,
         password: formData.password,
         firstName: formData.firstName,
@@ -105,12 +126,63 @@ export const SignUpForm: React.FC = () => {
         }
       });
       
+      console.log('=== SIGN-UP CREATE RESULT ===');
+      console.log('Full result:', signUpResult);
+      console.log('Status:', signUpResult.status);
+      console.log('Verifications:', signUpResult.verifications);
+      console.log('Required fields:', signUpResult.requiredFields);
+      console.log('Optional fields:', signUpResult.optionalFields);
+      console.log('ID:', signUpResult.id);
+      
+      // Check if email verification is needed
+      if (signUpResult.verifications?.emailAddress) {
+        console.log('=== EMAIL VERIFICATION DETAILS ===');
+        console.log('Email verification status:', signUpResult.verifications.emailAddress.status);
+        console.log('Email verification strategy:', signUpResult.verifications.emailAddress.strategy);
+        console.log('Email verification error:', signUpResult.verifications.emailAddress.error);
+      }
+      
+      // Check if we need to prepare email verification
+      if (signUpResult.status === 'missing_requirements') {
+        console.log('=== MISSING REQUIREMENTS DETECTED ===');
+        console.log('Required fields:', signUpResult.requiredFields);
+        console.log('Optional fields:', signUpResult.optionalFields);
+        
+        // Check if email verification is required
+        if (signUpResult.requiredFields?.includes('email_address')) {
+          console.log('Email verification is required, preparing...');
+          try {
+            const verificationResult = await signUp.prepareEmailAddressVerification({
+              strategy: 'email_link',
+              redirectUrl: `${window.location.origin}/sign-up/verify`
+            });
+            console.log('=== EMAIL VERIFICATION PREPARED ===');
+            console.log('Verification result:', verificationResult);
+            console.log('Verification status:', verificationResult.status);
+          } catch (verificationError) {
+            console.error('=== EMAIL VERIFICATION ERROR ===');
+            console.error('Verification error:', verificationError);
+          }
+        }
+      }
+      
+      console.log('=== SWITCHING TO VERIFICATION SENT ===');
       // Clerk handles email verification automatically
       switchModalMode('verification-sent');
+      console.log('Modal mode switched to verification-sent');
+      
     } catch (error: any) {
+      console.error('=== SIGN-UP ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error message:', error.message);
+      console.error('Error errors:', error.errors);
+      console.error('Error code:', error.errors?.[0]?.code);
+      console.error('Error stack:', error.stack);
       handleClerkError(error);
     } finally {
+      console.log('=== SIGN-UP PROCESS END ===');
       setIsLoading(false);
+      console.log('Set loading to false');
     }
   };
 

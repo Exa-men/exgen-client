@@ -21,6 +21,12 @@ function HomeContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    console.log('=== HOMEPAGE REDIRECT LOGIC ===');
+    console.log('isLoaded:', isLoaded);
+    console.log('isSignedIn:', isSignedIn);
+    console.log('show parameter:', searchParams.get('show'));
+    console.log('Current pathname:', window.location.pathname);
+    console.log('Current URL:', window.location.href);
     // Only redirect if user is signed in and there's no 'show' parameter
     if (isLoaded && isSignedIn && !searchParams.get('show')) {
       router.push('/catalogus');
