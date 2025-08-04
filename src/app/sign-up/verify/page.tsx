@@ -9,7 +9,7 @@ function SignUpVerifyContent() {
   const { signUp, isLoaded, setActive } = useSignUp();
   const { handleEmailLinkVerification } = useClerk();
   const router = useRouter();
-  const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'password-reset-success' | 'error'>('loading');
+  const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'password-reset-success' | 'migrated-user-success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -22,11 +22,13 @@ function SignUpVerifyContent() {
         const createdSessionId = urlParams.get('__clerk_created_session');
         const status = urlParams.get('__clerk_status');
         const flowType = urlParams.get('flow'); // 'registration' or 'password-reset'
+        const isMigratedUser = urlParams.get('migrated') === 'true'; // Check for migrated user indicator
 
         console.log('=== VERIFICATION DEBUG ===');
         console.log('URL Session ID:', createdSessionId);
         console.log('URL Status:', status);
         console.log('Flow Type:', flowType);
+        console.log('Is Migrated User:', isMigratedUser);
         console.log('Current URL:', window.location.href);
 
         if (status === 'verified' && createdSessionId) {
@@ -36,7 +38,11 @@ function SignUpVerifyContent() {
           
           // Set appropriate success status based on flow type
           if (flowType === 'password-reset') {
-            setVerificationStatus('password-reset-success');
+            if (isMigratedUser) {
+              setVerificationStatus('migrated-user-success');
+            } else {
+              setVerificationStatus('password-reset-success');
+            }
           } else {
             setVerificationStatus('success');
           }
@@ -64,7 +70,11 @@ function SignUpVerifyContent() {
         if (flowType === 'password-reset') {
           // Password reset is already complete, just show success
           console.log('Password reset flow detected, showing success message');
-          setVerificationStatus('password-reset-success');
+          if (isMigratedUser) {
+            setVerificationStatus('migrated-user-success');
+          } else {
+            setVerificationStatus('password-reset-success');
+          }
           setTimeout(() => {
             router.push('/catalogus');
           }, 2000);
@@ -137,6 +147,23 @@ function SignUpVerifyContent() {
             </h1>
             <p className="text-gray-600 mb-4">
               Je wachtwoord is veilig bijgewerkt. Je wordt automatisch doorgestuurd naar de dashboard.
+            </p>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-green-800 text-sm">
+                Je kunt nu inloggen met je nieuwe wachtwoord.
+              </p>
+            </div>
+          </>
+        )}
+
+        {verificationStatus === 'migrated-user-success' && (
+          <>
+            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-600" />
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">
+              Account succesvol gemigreerd!
+            </h1>
+            <p className="text-gray-600 mb-4">
+              Je account is succesvol gemigreerd. Je wordt automatisch doorgestuurd naar de dashboard.
             </p>
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-green-800 text-sm">

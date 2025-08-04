@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useSignIn } from '@clerk/nextjs';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,7 +14,7 @@ interface SignInFormData {
 }
 
 export const SignInForm: React.FC = () => {
-  const { signIn, isLoaded } = useSignIn();
+  const { signIn, isLoaded, setActive } = useSignIn();
   const { switchModalMode, closeAuthModal } = useAuthModal();
   
   const [formData, setFormData] = useState<SignInFormData>({
@@ -25,6 +25,15 @@ export const SignInForm: React.FC = () => {
   const [errors, setErrors] = useState<Partial<SignInFormData>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Enhanced state for risk mitigation
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const lastAttemptRef = useRef<number>(0);
+  
+  // Rate limiting: prevent multiple submissions within 2 seconds
+  const RATE_LIMIT_DELAY = 2000;
+  const MAX_RETRIES = 3;
 
   const validateForm = (): boolean => {
     const newErrors: Partial<SignInFormData> = {};
@@ -51,12 +60,56 @@ export const SignInForm: React.FC = () => {
     }
   };
 
+  // Enhanced error detection for migrated users
+  const isMigratedUserError = (error: any): boolean => {
+    const errorCode = error.errors?.[0]?.code;
+    const errorMessage = error.message || '';
+    
+    // Check for all possible migrated user error patterns
+    return (
+      errorCode === 'form_password_incorrect' ||
+      errorCode === 'form_password_pwned' ||
+      errorCode === 'form_identifier_not_found' ||
+      errorMessage.includes('verification strategy is not valid') ||
+      errorMessage.includes('strategy is not valid for this account') ||
+      errorMessage.includes('verification strategy is not valid for this account')
+    );
+  };
+
+  // Enhanced migrated user detection with validation
+  const validateMigratedUser = async (email: string): Promise<boolean> => {
+    try {
+      // Optional: Add backend validation here
+      // const response = await fetch(`/api/validate-user?email=${encodeURIComponent(email)}`);
+      // const data = await response.json();
+      // return data.isMigratedUser;
+      
+      // For now, assume any password-related error indicates a migrated user
+      return true;
+    } catch (error) {
+      console.error('Error validating migrated user:', error);
+      // Fallback to error-based detection
+      return true;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm() || !isLoaded) return;
 
+    // Rate limiting protection
+    const now = Date.now();
+    if (now - lastAttemptRef.current < RATE_LIMIT_DELAY) {
+      setErrors({ email: 'Te veel pogingen. Wacht even en probeer opnieuw.' });
+      return;
+    }
+    
+    if (isProcessing) return; // Prevent multiple submissions
+    
     setIsLoading(true);
+    setIsProcessing(true);
+    lastAttemptRef.current = now;
     
     try {
       const result = await signIn.create({
@@ -65,32 +118,82 @@ export const SignInForm: React.FC = () => {
       });
 
       if (result.status === 'complete') {
+        // Use setActive to properly activate the session
+        if (setActive && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+        }
+        
         closeAuthModal();
-        // Use router.push instead of window.location.reload() for better UX
         window.location.href = '/catalogus';
       } else if (result.status === 'needs_first_factor') {
-        console.log('2FA required');
+        // Handle first factor requirement (if needed in the future)
+        console.log('First factor required');
+        setErrors({ email: 'Extra verificatie vereist.' });
       }
     } catch (error: any) {
       console.error('Sign in error:', error);
       
-      // Simplified error handling
+      // Enhanced migrated user detection
+      if (isMigratedUserError(error)) {
+        const isValidMigratedUser = await validateMigratedUser(formData.email);
+        
+        if (isValidMigratedUser) {
+          await handleMigratedUserDetection(formData.email, error.errors?.[0]?.code || 'migrated_user');
+          return;
+        }
+      }
+      
+      // Handle other errors with retry logic
       const errorCode = error.errors?.[0]?.code;
       switch (errorCode) {
-        case 'form_identifier_not_found':
-          setErrors({ email: 'Geen account gevonden met dit e-mailadres' });
-          break;
-        case 'form_password_incorrect':
-          setErrors({ password: 'Onjuist wachtwoord' });
-          break;
         case 'form_identifier_not_verified':
           setErrors({ email: 'E-mailadres is niet geverifieerd. Controleer je inbox.' });
+          break;
+        case 'form_identifier_not_found':
+          setErrors({ email: 'Geen account gevonden met dit e-mailadres.' });
+          break;
+        case 'form_password_incorrect':
+          setRetryCount(prev => prev + 1);
+          if (retryCount >= MAX_RETRIES) {
+            setErrors({ password: 'Te veel foutieve pogingen. Probeer later opnieuw of reset je wachtwoord.' });
+          } else {
+            setErrors({ password: 'Onjuist wachtwoord. Probeer opnieuw.' });
+          }
           break;
         default:
           setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
       }
     } finally {
       setIsLoading(false);
+      setIsProcessing(false);
+    }
+  };
+
+  const handleMigratedUserDetection = async (email: string, errorCode: string) => {
+    try {
+      console.log('Checking for migrated user:', email, 'Error code:', errorCode);
+      
+      // Show migration message
+      setErrors({ 
+        password: 'Je account is gemigreerd. Je moet je wachtwoord opnieuw instellen.' 
+      });
+      
+      // Add migrated user indicator and email to URL
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('migrated', 'true');
+      currentUrl.searchParams.set('email', email); // Add email to URL
+      window.history.replaceState({}, '', currentUrl.toString());
+      
+      // Switch to forgot password modal (fresh SignIn context)
+      switchModalMode('forgot-password');
+      
+      console.log('Migrated user detected, switched to password reset flow with email:', email);
+      
+    } catch (resetError) {
+      console.error('Error handling migrated user:', resetError);
+      setErrors({ 
+        password: 'Er is een fout opgetreden bij het opnieuw instellen van je wachtwoord.' 
+      });
     }
   };
 
@@ -113,7 +216,7 @@ export const SignInForm: React.FC = () => {
             onChange={(e) => handleInputChange('email', e.target.value)}
             className={errors.email ? 'border-red-500' : ''}
             placeholder="Voer je e-mailadres in"
-            disabled={isLoading}
+            disabled={isLoading || isProcessing}
           />
           {errors.email && (
             <p className="text-red-500 text-sm mt-1">{errors.email}</p>
@@ -133,13 +236,13 @@ export const SignInForm: React.FC = () => {
               onChange={(e) => handleInputChange('password', e.target.value)}
               className={errors.password ? 'border-red-500 pr-10' : 'pr-10'}
               placeholder="Voer je wachtwoord in"
-              disabled={isLoading}
+              disabled={isLoading || isProcessing}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              disabled={isLoading}
+              disabled={isLoading || isProcessing}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -155,9 +258,9 @@ export const SignInForm: React.FC = () => {
             type="button"
             onClick={() => switchModalMode('forgot-password')}
             className="text-sm text-examen-cyan hover:text-examen-cyan-600"
-            disabled={isLoading}
+            disabled={isLoading || isProcessing}
           >
-            Wachtwoord vergeten?
+            Wachtwoord herstellen?
           </button>
         </div>
 
@@ -165,7 +268,7 @@ export const SignInForm: React.FC = () => {
         <Button
           type="submit"
           className="w-full bg-examen-cyan hover:bg-examen-cyan-600 text-white"
-          disabled={isLoading}
+          disabled={isLoading || isProcessing}
         >
           {isLoading ? (
             <>
@@ -186,7 +289,7 @@ export const SignInForm: React.FC = () => {
             type="button"
             onClick={() => switchModalMode('sign-up')}
             className="text-examen-cyan hover:text-examen-cyan-600 font-medium"
-            disabled={isLoading}
+            disabled={isLoading || isProcessing}
           >
             Account aanmaken
           </button>

@@ -18,7 +18,7 @@ export const AuthModal: React.FC = () => {
       case 'sign-up':
         return 'Account aanmaken';
       case 'forgot-password':
-        return 'Wachtwoord vergeten';
+        return 'Wachtwoord herstellen';
       case 'verification-sent':
         return 'E-mail verificatie';
       default:
