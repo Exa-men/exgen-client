@@ -60,11 +60,21 @@ function SignUpVerifyContent() {
           return;
         }
 
-        // If no status params, call handleEmailLinkVerification
-        console.log('No verification status found, calling handleEmailLinkVerification...');
-        await handleEmailLinkVerification({
-          redirectUrlComplete: '/catalogus'
-        });
+        // If no status params, check if this is a password reset flow
+        if (flowType === 'password-reset') {
+          // Password reset is already complete, just show success
+          console.log('Password reset flow detected, showing success message');
+          setVerificationStatus('password-reset-success');
+          setTimeout(() => {
+            router.push('/catalogus');
+          }, 2000);
+        } else {
+          // Call handleEmailLinkVerification for email link flows
+          console.log('No verification status found, calling handleEmailLinkVerification...');
+          await handleEmailLinkVerification({
+            redirectUrlComplete: '/catalogus'
+          });
+        }
 
       } catch (err: any) {
         console.error('Email link verification error:', err);
