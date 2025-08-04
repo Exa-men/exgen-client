@@ -13,41 +13,76 @@ function SignUpVerifyContent() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    if (!isLoaded) return;
+    console.log('=== VERIFICATION DEBUG START ===');
+    console.log('isLoaded:', isLoaded);
+    console.log('signUp object:', signUp);
+    console.log('signUp?.status:', signUp?.status);
+    console.log('signUp?.id:', signUp?.id);
+    console.log('Current URL:', window.location.href);
+    console.log('URL search params:', window.location.search);
+    console.log('verificationStatus:', verificationStatus);
+    
+    if (!isLoaded) {
+      console.log('Not loaded yet, returning early');
+      return;
+    }
 
     const verifyEmailLink = async () => {
+      console.log('=== STARTING VERIFICATION PROCESS ===');
+      console.log('About to call handleEmailLinkVerification...');
+      
       try {
         // Handle the email link verification
+        console.log('Calling handleEmailLinkVerification with redirectUrl:', `${window.location.origin}/sign-up/verify`);
         await handleEmailLinkVerification({
           redirectUrl: `${window.location.origin}/sign-up/verify`
         });
+        console.log('handleEmailLinkVerification completed successfully');
         
         // Check if signup is complete after verification
+        console.log('Checking signup status after verification...');
+        console.log('signUp?.status:', signUp?.status);
+        console.log('signUp?.createdSessionId:', signUp?.createdSessionId);
+        
         if (signUp && signUp.status === 'complete') {
+          console.log('Signup is complete, setting active session...');
           // Set the session as active
           await setActive({ session: signUp.createdSessionId });
+          console.log('Session set active successfully');
           setVerificationStatus('success');
+          console.log('Setting verification status to success');
           setTimeout(() => {
+            console.log('Redirecting to catalogus...');
             router.push('/catalogus');
           }, 2000);
         } else if (signUp && signUp.status === 'missing_requirements') {
+          console.log('Signup missing requirements');
           setVerificationStatus('error');
           setErrorMessage('Verificatie nog niet voltooid. Controleer je e-mail en klik op de link.');
         } else if (signUp && signUp.status === 'abandoned') {
+          console.log('Signup abandoned');
           setVerificationStatus('error');
           setErrorMessage('Verificatie is verlopen. Probeer opnieuw in te schrijven.');
         } else {
+          console.log('Signup still processing, status:', signUp?.status);
           // Still processing
           setVerificationStatus('loading');
         }
       } catch (err: any) {
-        console.error('Email verification error:', err);
+        console.error('=== VERIFICATION ERROR ===');
+        console.error('Error type:', typeof err);
+        console.error('Error message:', err.message);
+        console.error('Error code:', err.errors?.[0]?.code);
+        console.error('Error details:', err.errors);
+        console.error('Full error object:', err);
         setVerificationStatus('error');
         setErrorMessage('Verificatie mislukt. Probeer het opnieuw of neem contact op met de beheerder.');
       }
     };
 
+    console.log('Calling verifyEmailLink function...');
     verifyEmailLink();
+    console.log('=== VERIFICATION DEBUG END ===');
   }, [isLoaded, signUp, setActive, handleEmailLinkVerification, router]);
 
   if (!isLoaded) {
