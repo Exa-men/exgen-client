@@ -1,36 +1,54 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from 'react';
-import { useSignUp } from '@clerk/nextjs';
+import { useSignUp, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 function SignUpVerifyContent() {
-  const { signUp, isLoaded } = useSignUp();
+  const { signUp, isLoaded, setActive } = useSignUp();
+  const { handleEmailLinkVerification } = useClerk();
   const router = useRouter();
   const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded) return;
 
-    // Let Clerk handle verification automatically
-    if (signUp.status === 'complete') {
-      setVerificationStatus('success');
-      setTimeout(() => {
-        router.push('/catalogus');
-      }, 2000);
-    } else if (signUp.status === 'missing_requirements') {
-      setVerificationStatus('error');
-      setErrorMessage('Verificatie nog niet voltooid. Controleer je e-mail en klik op de link.');
-    } else if (signUp.status === 'abandoned') {
-      setVerificationStatus('error');
-      setErrorMessage('Verificatie is verlopen. Probeer opnieuw in te schrijven.');
-    } else {
-      // Still loading or processing
-      setVerificationStatus('loading');
-    }
-  }, [isLoaded, signUp, router]);
+    const verifyEmailLink = async () => {
+      try {
+        // Handle the email link verification
+        await handleEmailLinkVerification({
+          redirectUrl: `${window.location.origin}/sign-up/verify`
+        });
+        
+        // Check if signup is complete after verification
+        if (signUp && signUp.status === 'complete') {
+          // Set the session as active
+          await setActive({ session: signUp.createdSessionId });
+          setVerificationStatus('success');
+          setTimeout(() => {
+            router.push('/catalogus');
+          }, 2000);
+        } else if (signUp && signUp.status === 'missing_requirements') {
+          setVerificationStatus('error');
+          setErrorMessage('Verificatie nog niet voltooid. Controleer je e-mail en klik op de link.');
+        } else if (signUp && signUp.status === 'abandoned') {
+          setVerificationStatus('error');
+          setErrorMessage('Verificatie is verlopen. Probeer opnieuw in te schrijven.');
+        } else {
+          // Still processing
+          setVerificationStatus('loading');
+        }
+      } catch (err: any) {
+        console.error('Email verification error:', err);
+        setVerificationStatus('error');
+        setErrorMessage('Verificatie mislukt. Probeer het opnieuw of neem contact op met de beheerder.');
+      }
+    };
+
+    verifyEmailLink();
+  }, [isLoaded, signUp, setActive, handleEmailLinkVerification, router]);
 
   if (!isLoaded) {
     return (
