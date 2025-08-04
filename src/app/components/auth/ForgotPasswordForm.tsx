@@ -116,8 +116,8 @@ export const ForgotPasswordForm: React.FC = () => {
       });
       
       if (result.status === 'complete') {
-        // Password reset successful - redirect to catalogus
-        window.location.href = '/catalogus';
+        // Password reset successful - redirect to verification page with flow parameter
+        window.location.href = '/sign-up/verify?flow=password-reset';
       } else if (result.status === 'needs_second_factor') {
         setError('Tweefactor authenticatie is vereist, maar wordt niet ondersteund in deze interface');
       } else {

@@ -9,7 +9,7 @@ function SignUpVerifyContent() {
   const { signUp, isLoaded, setActive } = useSignUp();
   const { handleEmailLinkVerification } = useClerk();
   const router = useRouter();
-  const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'password-reset-success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -17,21 +17,30 @@ function SignUpVerifyContent() {
 
     const verifyEmailLink = async () => {
       try {
-        // Extract session ID from URL params
+        // Extract session ID and flow type from URL params
         const urlParams = new URLSearchParams(window.location.search);
         const createdSessionId = urlParams.get('__clerk_created_session');
         const status = urlParams.get('__clerk_status');
+        const flowType = urlParams.get('flow'); // 'registration' or 'password-reset'
 
         console.log('=== VERIFICATION DEBUG ===');
         console.log('URL Session ID:', createdSessionId);
         console.log('URL Status:', status);
+        console.log('Flow Type:', flowType);
         console.log('Current URL:', window.location.href);
 
         if (status === 'verified' && createdSessionId) {
           // Verification was successful, set the session active
           console.log('Setting session active with ID:', createdSessionId);
           await setActive({ session: createdSessionId });
-          setVerificationStatus('success');
+          
+          // Set appropriate success status based on flow type
+          if (flowType === 'password-reset') {
+            setVerificationStatus('password-reset-success');
+          } else {
+            setVerificationStatus('success');
+          }
+          
           setTimeout(() => {
             router.push('/catalogus');
           }, 2000);
@@ -105,6 +114,23 @@ function SignUpVerifyContent() {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-green-800 text-sm">
                 Je account is nu actief en je kunt inloggen.
+              </p>
+            </div>
+          </>
+        )}
+
+        {verificationStatus === 'password-reset-success' && (
+          <>
+            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-600" />
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">
+              Wachtwoord succesvol gewijzigd!
+            </h1>
+            <p className="text-gray-600 mb-4">
+              Je wachtwoord is veilig bijgewerkt. Je wordt automatisch doorgestuurd naar de dashboard.
+            </p>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-green-800 text-sm">
+                Je kunt nu inloggen met je nieuwe wachtwoord.
               </p>
             </div>
           </>
