@@ -1,20 +1,36 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from 'react';
-import { useSignUp } from '@clerk/nextjs';
+import { useSignUp, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 function SignUpVerifyContent() {
   const { signUp, isLoaded } = useSignUp();
+  const { user, isSignedIn } = useUser();
   const router = useRouter();
   const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded) return;
 
-    // Let Clerk handle verification automatically
+    // Check if user is already signed in (verification completed)
+    if (isSignedIn && user) {
+      setVerificationStatus('success');
+      setTimeout(() => {
+        router.push('/catalogus');
+      }, 2000);
+      return;
+    }
+
+    // If no signUp context, redirect to login
+    if (!signUp) {
+      router.push('/');
+      return;
+    }
+
+    // Handle signup states
     if (signUp.status === 'complete') {
       setVerificationStatus('success');
       setTimeout(() => {
@@ -27,10 +43,15 @@ function SignUpVerifyContent() {
       setVerificationStatus('error');
       setErrorMessage('Verificatie is verlopen. Probeer opnieuw in te schrijven.');
     } else {
-      // Still loading or processing
-      setVerificationStatus('loading');
+      // Still loading - add timeout
+      const timeout = setTimeout(() => {
+        setVerificationStatus('error');
+        setErrorMessage('Verificatie duurt te lang. Probeer opnieuw in te loggen.');
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeout);
     }
-  }, [isLoaded, signUp, router]);
+  }, [isLoaded, signUp, router, isSignedIn, user]);
 
   if (!isLoaded) {
     return (
