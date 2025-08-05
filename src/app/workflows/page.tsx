@@ -399,6 +399,7 @@ export default function WorkflowsPage() {
                   <option value="Kwalificerend Leren vanaf 2025-26">Kwalificerend Leren vanaf 2025-26</option>
                   <option value="Valideren">Valideren</option>
                   <option value="Blueprint">Blueprint</option>
+                  <option value="Blueprint V1.1">Blueprint V1.1</option>
                 </select>
                 {/* Custom arrow */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
