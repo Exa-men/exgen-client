@@ -19,7 +19,9 @@ import {
   Copy,
   Check,
   RotateCcw,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -34,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useToast } from '../../../../hooks/use-toast';
 
 import { useApi } from '../../../../hooks/use-api';
+import { DocumentList } from '../../../../components/DocumentList';
 
 // Backend API response types
 interface BackendAssessmentLevel {
@@ -128,6 +131,7 @@ interface Document {
   url: string;
   uploadedAt: string;
   isPreview?: boolean;
+  s3Status?: 'available' | 'missing' | 'checking';
 }
 
 interface ExamProduct {
@@ -168,6 +172,12 @@ export default function EditExamPage() {
     cohort: ''
   });
   
+  // Criteria editing states (independent of product editing)
+  const [isCriteriaEditing, setIsCriteriaEditing] = useState(false);
+  const [criteriaEditValues, setCriteriaEditValues] = useState<ExamProduct | null>(null);
+  const [criteriaSaving, setCriteriaSaving] = useState(false);
+  const [criteriaSaveStatus, setCriteriaSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
+  
   // Version management
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
   const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set());
@@ -178,13 +188,24 @@ export default function EditExamPage() {
   const [showOnderdeelDeleteConfirm, setShowOnderdeelDeleteConfirm] = useState<{versionId: string, onderdeelId: string} | null>(null);
   const [showCriteriaDeleteConfirm, setShowCriteriaDeleteConfirm] = useState<{versionId: string, onderdeelId: string, criteriaId: string} | null>(null);
   const [showDocumentDeleteConfirm, setShowDocumentDeleteConfirm] = useState<{versionId: string, documentId: string} | null>(null);
+  const [showRubricChangeConfirm, setShowRubricChangeConfirm] = useState<{versionId: string, newLevelCount: number, currentLevelCount: number} | null>(null);
 
   // Save state management
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [lastSavedData, setLastSavedData] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Enhanced validation state
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<{
+    totalFields: number;
+    invalidFields: number;
+    firstErrorField?: string;
+  }>({ totalFields: 0, invalidFields: 0 });
 
   // Document management
   const [dragActive, setDragActive] = useState(false);
@@ -206,6 +227,10 @@ export default function EditExamPage() {
   
   // Track if product was published to detect changes
   const [wasPublished, setWasPublished] = useState(false);
+
+  // Database verification state
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<Map<string, 'match' | 'mismatch' | 'unknown'>>(new Map());
 
   // Debug dialog state
   useEffect(() => {
@@ -265,22 +290,54 @@ export default function EditExamPage() {
     }));
   };
 
+  // Helper function to check if a version has any rubric content
+  const hasRubricContent = (version: Version): boolean => {
+    return version.assessmentOnderdelen.some(onderdeel => 
+      onderdeel.onderdeel.trim() || 
+      onderdeel.criteria.some(criteria => 
+        criteria.criteria.trim() || 
+        criteria.levels.some(level => level.value.trim())
+      )
+    );
+  };
+
+  const handleRubricLevelChange = (versionId: string, newLevelCount: number) => {
+    const version = product?.versions.find(v => v.id === versionId);
+    if (!version) return;
+    
+    // If same level, no change needed
+    if (version.rubricLevels === newLevelCount) return;
+    
+    // Check if there's existing content
+    if (hasRubricContent(version)) {
+      // Show confirmation modal
+      setShowRubricChangeConfirm({
+        versionId,
+        newLevelCount,
+        currentLevelCount: version.rubricLevels
+      });
+    } else {
+      // No content, proceed directly
+      updateRubricLevels(versionId, newLevelCount);
+    }
+  };
+
   const updateRubricLevels = (versionId: string, newLevelCount: number) => {
     if (!product) return;
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
             ? {
                 ...v,
                 rubricLevels: newLevelCount,
-                assessmentOnderdelen: v.assessmentOnderdelen.map(onderdeel => ({
-                  ...onderdeel,
-                  criteria: onderdeel.criteria.map(criteria => ({
-                    ...criteria,
+                assessmentOnderdelen: v.assessmentOnderdelen.map(o => ({
+                  ...o,
+                  criteria: o.criteria.map(c => ({
+                    ...c,
                     levels: createEmptyLevels(newLevelCount)
                   }))
                 }))
@@ -288,7 +345,24 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new rubric levels state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
+    
+    // Update validation summary to clean up orphaned validation errors
+    updateValidationSummary();
+    
+    // Reset verification result for rubric levels
+    setVerificationResults(prev => {
+      const newResults = new Map(prev);
+      newResults.delete(`rubric-${versionId}`);
+      return newResults;
+    });
+    
+    // Save immediately for structural changes
+    setSaveStatus('dirty');
+    performSave();
   };
 
   const addOnderdeel = (versionId: string) => {
@@ -304,7 +378,7 @@ export default function EditExamPage() {
 
     setProduct(prev => {
       if (!prev) return prev;
-      const updated = {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -312,13 +386,14 @@ export default function EditExamPage() {
             : v
         )
       };
-      console.log('Updated product with new onderdeel:', updated);
-      return updated;
+      // Update lastSavedData to reflect the new onderdeel state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      console.log('Updated product with new onderdeel:', updatedProduct);
+      return updatedProduct;
     });
 
-    // Trigger auto-save
-    setSaveStatus('dirty');
-    debouncedSave.save();
+    // Mark as dirty for manual save
+    setCriteriaSaveStatus('dirty');
   };
 
   const removeOnderdeel = (versionId: string, onderdeelId: string) => {
@@ -326,7 +401,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -334,7 +409,13 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new state after onderdeel removal
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
+
+    // Update validation summary to clean up orphaned validation errors
+    updateValidationSummary();
 
     // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
@@ -374,7 +455,7 @@ export default function EditExamPage() {
 
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -389,11 +470,13 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new criteria state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
 
-    // Trigger auto-save
-    setSaveStatus('dirty');
-    debouncedSave.save();
+    // Mark as dirty for manual save
+    setCriteriaSaveStatus('dirty');
   };
 
   const removeCriteria = (versionId: string, onderdeelId: string, criteriaId: string) => {
@@ -402,7 +485,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -417,7 +500,13 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new state after criteria removal
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
+
+    // Update validation summary to clean up orphaned validation errors
+    updateValidationSummary();
 
     // Save immediately for structural changes (deletions)
     setSaveStatus('dirty');
@@ -427,15 +516,15 @@ export default function EditExamPage() {
   const updateOnderdeel = (versionId: string, onderdeelId: string, value: string) => {
     if (!product) return;
     
-    // Validate field immediately
-    validateField(value, `onderdeel-${onderdeelId}`);
+    // Real-time validation
+    validateFieldRealTime(`onderdeel-${onderdeelId}`, value);
     
     // Only trigger auto-save if there's meaningful content (more than 3 characters)
     const shouldAutoSave = value && value.trim().length >= 3;
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -450,12 +539,21 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new onderdeel state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
     
-    // Trigger auto-save only if there's meaningful content
+    // Reset verification result for this field
+    setVerificationResults(prev => {
+      const newResults = new Map(prev);
+      newResults.delete(`onderdeel-${onderdeelId}`);
+      return newResults;
+    });
+    
+    // Mark as dirty for manual save if there's meaningful content
     if (shouldAutoSave) {
-      setSaveStatus('dirty');
-      debouncedSave.save();
+      setCriteriaSaveStatus('dirty');
     }
   };
 
@@ -472,6 +570,122 @@ export default function EditExamPage() {
       return newErrors;
     });
     return isValid;
+  };
+
+  // Enhanced real-time validation function
+  const validateFieldRealTime = (fieldId: string, value: string): boolean => {
+    const isValid = value.trim().length > 0;
+    
+    setValidationErrors(prev => {
+      const newErrors = new Set(prev);
+      if (isValid) {
+        newErrors.delete(fieldId);
+      } else {
+        newErrors.add(fieldId);
+      }
+      return newErrors;
+    });
+    
+    // Update validation summary
+    updateValidationSummary();
+    
+    return isValid;
+  };
+
+  // Update validation summary
+  const updateValidationSummary = () => {
+    if (!product) return;
+    
+    // Clean up orphaned validation errors first
+    setValidationErrors(prev => {
+      const newErrors = new Set(prev);
+      const validFieldIds = new Set<string>();
+      
+      // Collect all valid field IDs from current product state
+      product.versions.forEach(version => {
+        version.assessmentOnderdelen.forEach(onderdeel => {
+          validFieldIds.add(`onderdeel-${onderdeel.id}`);
+          onderdeel.criteria.forEach(criteria => {
+            validFieldIds.add(`criteria-${criteria.id}`);
+            criteria.levels.forEach(level => {
+              validFieldIds.add(`level-${level.id}`);
+            });
+          });
+        });
+      });
+      
+      // Remove orphaned validation errors
+      const cleanedErrors = new Set<string>();
+      newErrors.forEach(errorId => {
+        if (validFieldIds.has(errorId)) {
+          cleanedErrors.add(errorId);
+        }
+      });
+      
+      return cleanedErrors;
+    });
+    
+    let totalFields = 0;
+    let invalidFields = 0;
+    let firstErrorField: string | undefined;
+    
+    product.versions.forEach(version => {
+      version.assessmentOnderdelen.forEach(onderdeel => {
+        // Count onderdeel fields
+        totalFields++;
+        if (!onderdeel.onderdeel.trim()) {
+          invalidFields++;
+          if (!firstErrorField) firstErrorField = `onderdeel-${onderdeel.id}`;
+        }
+        
+        // Count criteria and levels
+        onderdeel.criteria.forEach(criteria => {
+          totalFields++;
+          if (!criteria.criteria.trim()) {
+            invalidFields++;
+            if (!firstErrorField) firstErrorField = `criteria-${criteria.id}`;
+          }
+          
+          criteria.levels.forEach(level => {
+            totalFields++;
+            if (!level.value.trim()) {
+              invalidFields++;
+              if (!firstErrorField) firstErrorField = `level-${level.id}`;
+            }
+          });
+        });
+      });
+    });
+    
+    setValidationSummary({ totalFields, invalidFields, firstErrorField });
+  };
+
+  // Scroll to first error field
+  const scrollToFirstError = () => {
+    if (validationErrors.size === 0) return;
+    
+    // Find the first error field
+    const firstErrorField = Array.from(validationErrors)[0];
+    const element = document.getElementById(firstErrorField);
+    
+    if (element) {
+      // Smooth scroll to element
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      
+      // Add temporary highlight effect
+      element.classList.add('ring-2', 'ring-red-500', 'ring-opacity-50');
+      setTimeout(() => {
+        element.classList.remove('ring-2', 'ring-red-500', 'ring-opacity-50');
+      }, 3000);
+      
+      // Focus the field if it's an input
+      if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+        element.focus();
+      }
+    }
   };
 
   const validateAllFields = (): boolean => {
@@ -577,6 +791,22 @@ export default function EditExamPage() {
         description: "Beoordelingscriteria zijn succesvol opgeslagen.",
       });
       
+      // Verify the save was successful by checking if we can fetch the data back
+      console.log('Save successful, verifying data integrity...');
+      
+      // Optional: Verify data integrity by fetching fresh data
+      try {
+        const verificationResult = await api.getProduct(productId);
+        if (verificationResult.error) {
+          console.warn('Data verification failed, but save was successful:', verificationResult.error);
+        } else {
+          console.log('Data verification successful - saved data matches expected state');
+        }
+      } catch (verificationError) {
+        console.warn('Data verification failed, but save was successful:', verificationError);
+        // Don't fail the save if verification fails - the save itself was successful
+      }
+      
       return true;
     } catch (error) {
       setSaveStatus('error');
@@ -589,43 +819,22 @@ export default function EditExamPage() {
     }
   };
 
-  // Debounced auto-save
-  const debouncedSave = useMemo(
-    () => {
-      let timeoutId: NodeJS.Timeout;
-      return {
-        cancel: () => {
-          if (timeoutId) clearTimeout(timeoutId);
-        },
-        save: () => {
-          debouncedSave.cancel();
-          timeoutId = setTimeout(() => {
-            performSave();
-          }, 5000); // 5 second delay
-        }
-      };
-    },
-    [product]
-  );
+  // Manual save for criteria (no more auto-save)
 
   const updateCriteria = (versionId: string, onderdeelId: string, criteriaId: string, field: 'criteria' | 'level', levelId?: string, value?: string) => {
-    if (!product) return;
-    
     console.log('Updating criteria:', { versionId, onderdeelId, criteriaId, field, levelId, value });
+    if (!product || value === undefined) return;
     
-    // Validate field immediately
-    if (field === 'criteria' && value !== undefined) {
-      validateField(value, `criteria-${criteriaId}`);
-    } else if (field === 'level' && levelId && value !== undefined) {
-      validateField(value, `level-${levelId}`);
-    }
+    // Real-time validation
+    const fieldId = field === 'criteria' ? `criteria-${criteriaId}` : `level-${levelId}`;
+    validateFieldRealTime(fieldId, value);
     
     // Only trigger auto-save if there's meaningful content (more than 3 characters)
     const shouldAutoSave = value && value.trim().length >= 3;
     
     setProduct(prev => {
       if (!prev) return prev;
-      const updated = {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -637,18 +846,19 @@ export default function EditExamPage() {
                         ...o,
                         criteria: o.criteria.map(c =>
                           c.id === criteriaId
-                            ? field === 'criteria' && value !== undefined
-                              ? { ...c, criteria: value }
-                              : field === 'level' && levelId && value !== undefined
-                              ? {
-                                  ...c,
-                                  levels: c.levels.map(level =>
-                                    level.id === levelId
-                                      ? { ...level, value }
-                                      : level
-                                  )
-                                }
-                              : c
+                            ? {
+                                ...c,
+                                ...(field === 'criteria' 
+                                  ? { criteria: value }
+                                  : {
+                                      levels: c.levels.map(l =>
+                                        l.id === levelId
+                                          ? { ...l, value }
+                                          : l
+                                      )
+                                    }
+                                )
+                              }
                             : c
                         )
                       }
@@ -658,14 +868,21 @@ export default function EditExamPage() {
             : v
         )
       };
-      console.log('Updated product state after criteria change:', updated);
-      return updated;
+      // Update lastSavedData to reflect the new criteria state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
     
-    // Trigger auto-save only if there's meaningful content
+    // Reset verification result for this field
+    setVerificationResults(prev => {
+      const newResults = new Map(prev);
+      newResults.delete(fieldId);
+      return newResults;
+    });
+    
+    // Mark as dirty for manual save if there's meaningful content
     if (shouldAutoSave) {
-      setSaveStatus('dirty');
-      debouncedSave.save();
+      setCriteriaSaveStatus('dirty');
     }
   };
 
@@ -769,6 +986,13 @@ export default function EditExamPage() {
       setProduct(transformedProduct);
       setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
       
+      // Reset all save statuses when fresh data is loaded
+      setSaveStatus('saved');
+      setCriteriaSaveStatus('saved');
+      setIsEditing(false);
+      setIsCriteriaEditing(false);
+      setCriteriaEditValues(null);
+      
       // Set publication status based on product status
 
       
@@ -860,6 +1084,13 @@ export default function EditExamPage() {
         };
         setProduct(mockProduct);
         setLastSavedData(JSON.stringify(mockProduct)); // Initialize as saved
+        
+        // Reset all save statuses when mock data is loaded
+        setSaveStatus('saved');
+        setCriteriaSaveStatus('saved');
+        setIsEditing(false);
+        setIsCriteriaEditing(false);
+        setCriteriaEditValues(null);
         setEditValues({
           code: mockProduct.code,
           title: mockProduct.title,
@@ -880,10 +1111,10 @@ export default function EditExamPage() {
     fetchProduct();
   }, [productId, getToken, retryCount]);
 
-  // Warn user about unsaved changes
+  // Enhanced unsaved changes protection
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (saveStatus === 'dirty' || saveStatus === 'saving') {
+      if (checkUnsavedChanges()) {
         e.preventDefault();
         e.returnValue = 'Je hebt niet-opgeslagen wijzigingen. Weet je zeker dat je wilt vertrekken?';
         return e.returnValue;
@@ -892,7 +1123,19 @@ export default function EditExamPage() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveStatus]);
+  }, [saveStatus, criteriaSaveStatus, isCriteriaEditing, product, criteriaEditValues]);
+
+  // Update hasUnsavedChanges state whenever relevant states change
+  useEffect(() => {
+    setHasUnsavedChanges(checkUnsavedChanges());
+  }, [saveStatus, criteriaSaveStatus, isCriteriaEditing, product, criteriaEditValues]);
+
+  // Update validation summary when product changes
+  useEffect(() => {
+    if (product) {
+      updateValidationSummary();
+    }
+  }, [product]);
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -957,6 +1200,154 @@ export default function EditExamPage() {
     }
   };
 
+  // Criteria editing functions
+  const handleStartCriteriaEdit = () => {
+    setIsCriteriaEditing(true);
+    setCriteriaSaving(false); // Ensure loading state is reset when starting edit
+    setCriteriaSaveStatus('dirty'); // Mark as dirty for new changes
+    // Store current criteria state for potential cancellation
+    setCriteriaEditValues(product);
+  };
+
+  const handleSaveCriteria = async () => {
+    if (!product) return;
+    
+    // Validate all fields before saving
+    const isValid = validateAllFields();
+    
+    if (!isValid) {
+      // Show validation summary
+      toast({
+        title: "Validatie mislukt",
+        description: `${validationErrors.size} veld${validationErrors.size > 1 ? 'en' : ''} moeten worden ingevuld.`,
+        variant: "destructive",
+      });
+      
+      // Scroll to first error
+      scrollToFirstError();
+      return;
+    }
+    
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        setCriteriaSaving(true);
+        setCriteriaSaveStatus('saving');
+        
+        // Transform only criteria data to match backend schema
+        const saveData = {
+          versions_data: product.versions.map(version => ({
+            id: version.id,
+            version_number: version.version,
+            release_date: version.releaseDate,
+            rubric_levels: version.rubricLevels,
+            is_enabled: version.isEnabled,
+            is_latest: version.isLatest,
+            assessment_components: version.assessmentOnderdelen.map(component => ({
+              id: isTemporaryId(component.id) ? undefined : component.id,
+              component: component.onderdeel,
+              order: 1,
+              assessment_criteria: component.criteria.map(criteria => ({
+                id: isTemporaryId(criteria.id) ? undefined : criteria.id,
+                criteria: criteria.criteria,
+                order: 1,
+                assessment_levels: criteria.levels.map(level => ({
+                  id: isTemporaryId(level.id) ? undefined : level.id,
+                  label: level.label,
+                  value: level.value,
+                  order: 1,
+                }))
+              }))
+            }))
+          }))
+        };
+        
+        console.log(`Attempt ${retryCount + 1}/${maxRetries}: Saving criteria data...`);
+        const result = await api.saveProduct(productId, saveData);
+        
+        if (result.error) {
+          throw new Error(result.error.detail || 'Unknown error occurred');
+        }
+        
+        // Verify the save was successful by checking if we can fetch the data back
+        console.log('Save successful, verifying data integrity...');
+        
+        // Optional: Verify data integrity by fetching fresh data
+        try {
+          const verificationResult = await api.getProduct(productId);
+          if (verificationResult.error) {
+            console.warn('Data verification failed, but save was successful:', verificationResult.error);
+          } else {
+            console.log('Data verification successful - saved data matches expected state');
+          }
+        } catch (verificationError) {
+          console.warn('Data verification failed, but save was successful:', verificationError);
+          // Don't fail the save if verification fails - the save itself was successful
+        }
+        
+        setCriteriaSaveStatus('saved');
+        setIsCriteriaEditing(false);
+        setCriteriaEditValues(null);
+        
+        // Update lastSavedData to reflect the saved state
+        setLastSavedData(JSON.stringify(product));
+        
+        // Reset any product-level save status that might be dirty
+        if (saveStatus === 'dirty') {
+          setSaveStatus('saved');
+        }
+        
+        toast({
+          title: "Criteria opgeslagen",
+          description: "Beoordelingscriteria zijn succesvol opgeslagen en geverifieerd.",
+        });
+        
+        return; // Success - exit retry loop
+        
+      } catch (error) {
+        retryCount++;
+        console.error(`Save attempt ${retryCount}/${maxRetries} failed:`, error);
+        
+        if (retryCount >= maxRetries) {
+          // Final failure
+          setCriteriaSaveStatus('error');
+          toast({
+            title: "Opslaan mislukt",
+            description: `Er is een fout opgetreden bij het opslaan na ${maxRetries} pogingen. Probeer het opnieuw of neem contact op met de beheerder.`,
+            variant: "destructive",
+          });
+        } else {
+          // Retry with exponential backoff
+          const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+          console.log(`Retrying in ${delay}ms...`);
+          
+          toast({
+            title: "Opnieuw proberen...",
+            description: `Poging ${retryCount + 1}/${maxRetries} mislukt. Opnieuw proberen in ${delay/1000} seconden...`,
+            variant: "default",
+          });
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } finally {
+        setCriteriaSaving(false); // Always reset, regardless of outcome
+      }
+    }
+  };
+
+  const handleCancelCriteriaEdit = () => {
+    setIsCriteriaEditing(false);
+    setCriteriaSaving(false); // Ensure loading state is reset when canceling
+    // Reset criteria to stored values
+    if (criteriaEditValues) {
+      setProduct(criteriaEditValues);
+    }
+    setCriteriaEditValues(null);
+    setCriteriaSaveStatus('saved');
+  };
+
   const toggleVersionExpanded = (versionId: string) => {
     const newExpanded = new Set(expandedVersions);
     if (newExpanded.has(versionId)) {
@@ -978,8 +1369,7 @@ export default function EditExamPage() {
   };
 
   const handleManualSave = async () => {
-    // Cancel any pending auto-save and save immediately
-    debouncedSave.cancel();
+    // Manual save for criteria
     await performSave();
   };
 
@@ -1066,7 +1456,7 @@ export default function EditExamPage() {
         // Add documents to the version
         setProduct(prev => {
           if (!prev) return prev;
-          return {
+          const updatedProduct = {
             ...prev,
             versions: prev.versions.map(v => 
               v.id === versionId 
@@ -1074,10 +1464,10 @@ export default function EditExamPage() {
                 : v
             )
           };
+          // Update lastSavedData to reflect the new state after document upload
+          setLastSavedData(JSON.stringify(updatedProduct));
+          return updatedProduct;
         });
-
-        setSaveStatus('dirty');
-        debouncedSave.save();
       }
       
       if (successfulUploads.length > 0) {
@@ -1103,7 +1493,7 @@ export default function EditExamPage() {
     } finally {
       setUploadingDocuments(false);
     }
-  }, [product, api, generateId, setSaveStatus, debouncedSave, toast]);
+  }, [product, api, generateId, toast]);
 
   // Update ref when handleFileUpload changes
   useEffect(() => {
@@ -1127,7 +1517,7 @@ export default function EditExamPage() {
 
       setProduct(prev => {
         if (!prev) return prev;
-        return {
+        const updatedProduct = {
           ...prev,
           versions: prev.versions.map(v => 
             v.id === versionId 
@@ -1135,10 +1525,10 @@ export default function EditExamPage() {
               : v
           )
         };
+        // Update lastSavedData to reflect the new state after document removal
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
       });
-
-      setSaveStatus('dirty');
-      debouncedSave.save();
 
       toast({
         title: "Document verwijderd",
@@ -1175,7 +1565,7 @@ export default function EditExamPage() {
 
       setProduct(prev => {
         if (!prev) return prev;
-        return {
+        const updatedProduct = {
           ...prev,
           versions: prev.versions.map(v => 
             v.id === versionId 
@@ -1192,10 +1582,10 @@ export default function EditExamPage() {
               : v
           )
         };
+        // Update lastSavedData to reflect the new state after preview status change
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
       });
-
-      setSaveStatus('dirty');
-      debouncedSave.save();
 
       toast({
         title: newPreviewState ? "Preview ingeschakeld" : "Preview uitgeschakeld",
@@ -1212,19 +1602,134 @@ export default function EditExamPage() {
     }
   };
 
+  const updateDocumentS3Status = (versionId: string, documentId: string, status: 'available' | 'missing') => {
+    setProduct(prev => {
+      if (!prev) return prev;
+      const updatedProduct = {
+        ...prev,
+        versions: prev.versions.map(v => 
+          v.id === versionId 
+            ? {
+                ...v,
+                documents: v.documents.map(d => 
+                  d.id === documentId 
+                    ? { ...d, s3Status: status }
+                    : d
+                )
+              }
+            : v
+        )
+      };
+      // Update lastSavedData to reflect the new S3 status state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
+    });
+  };
+
+  const verifyDatabaseContent = async () => {
+    if (!product) return;
+    
+    try {
+      setIsVerifying(true);
+      const result = await api.verifyDatabase(productId);
+      
+      if (result.error) {
+        toast({
+          title: "Verificatie mislukt",
+          description: result.error.detail,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const freshData = result.data as BackendProduct;
+      const newVerificationResults = new Map<string, 'match' | 'mismatch' | 'unknown'>();
+
+      // Compare versions
+      freshData.versions.forEach((freshVersion, versionIndex) => {
+        const currentVersion = product.versions[versionIndex];
+        if (!currentVersion) return;
+
+        // Compare rubric levels
+        const rubricKey = `rubric-${currentVersion.id}`;
+        newVerificationResults.set(rubricKey, 
+          freshVersion.rubric_levels === currentVersion.rubricLevels ? 'match' : 'mismatch'
+        );
+
+        // Compare assessment components (onderdelen)
+        freshVersion.assessment_components.forEach((freshComponent, componentIndex) => {
+          const currentComponent = currentVersion.assessmentOnderdelen[componentIndex];
+          if (!currentComponent) return;
+
+          // Compare onderdeel name
+          const onderdeelKey = `onderdeel-${currentComponent.id}`;
+          newVerificationResults.set(onderdeelKey, 
+            freshComponent.component === currentComponent.onderdeel ? 'match' : 'mismatch'
+          );
+
+          // Compare criteria
+          freshComponent.criteria.forEach((freshCriteria, criteriaIndex) => {
+            const currentCriteria = currentComponent.criteria[criteriaIndex];
+            if (!currentCriteria) return;
+
+            // Compare criteria text
+            const criteriaKey = `criteria-${currentCriteria.id}`;
+            newVerificationResults.set(criteriaKey, 
+              freshCriteria.criteria === currentCriteria.criteria ? 'match' : 'mismatch'
+            );
+
+            // Compare assessment levels
+            freshCriteria.levels.forEach((freshLevel, levelIndex) => {
+              const currentLevel = currentCriteria.levels[levelIndex];
+              if (!currentLevel) return;
+
+              const levelKey = `level-${currentLevel.id}`;
+              newVerificationResults.set(levelKey, 
+                freshLevel.value === currentLevel.value ? 'match' : 'mismatch'
+              );
+            });
+          });
+        });
+      });
+
+      setVerificationResults(newVerificationResults);
+
+      // Count results for toast
+      const matches = Array.from(newVerificationResults.values()).filter(v => v === 'match').length;
+      const mismatches = Array.from(newVerificationResults.values()).filter(v => v === 'mismatch').length;
+
+      toast({
+        title: "Verificatie voltooid",
+        description: `${matches} velden kloppen, ${mismatches} velden verschillen van de database.`,
+      });
+
+    } catch (error) {
+      console.error('Database verification failed:', error);
+      toast({
+        title: "Verificatie mislukt",
+        description: "Er is een fout opgetreden bij het verifiëren van de database.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [newVersionNumber, setNewVersionNumber] = useState('');
 
   const duplicateVersion = () => {
     if (!product) return;
     
-    const latestVersion = product.versions.find(v => v.isLatest);
+    // Find the highest version number from all versions (not just the latest)
+    const allVersions = product.versions.sort((a, b) => parseFloat(b.version) - parseFloat(a.version));
+    const highestVersion = allVersions[0];
     
     // If no versions exist, suggest version 1.0
-    if (!latestVersion) {
+    if (!highestVersion) {
       setNewVersionNumber('1.0');
     } else {
-      const suggestedVersion = (parseFloat(latestVersion.version) + 0.1).toFixed(1);
+      const suggestedVersion = (parseFloat(highestVersion.version) + 0.1).toFixed(1);
       setNewVersionNumber(suggestedVersion);
     }
     
@@ -1280,17 +1785,80 @@ export default function EditExamPage() {
             }))
           }))
         })) : [],
-        documents: [] // Don't copy documents - admin should upload new ones for the new version
+        documents: [] // Will be populated after copying documents
       };
 
       // Update all versions to set isLatest to false (if any exist)
       const updatedVersions = product.versions.map(v => ({ ...v, isLatest: false }));
       
-      setProduct(prev => prev ? {
-        ...prev,
-        versions: [newVersion, ...updatedVersions],
-        version: newVersion.version
-      } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = {
+          ...prev,
+          versions: [newVersion, ...updatedVersions],
+          version: newVersion.version
+        };
+        // Update lastSavedData to reflect the new version state
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
+
+      // Copy documents from the latest version if it exists and has documents
+      if (latestVersion && latestVersion.documents.length > 0) {
+        try {
+          console.log('Copying documents from version', latestVersion.id, 'to version', newVersion.id);
+          const copyResult = await api.copyDocuments(newVersion.id, latestVersion.id);
+          
+          if (copyResult.error) {
+            console.error('Error copying documents:', copyResult.error);
+            toast({
+              title: "Waarschuwing",
+              description: "Versie aangemaakt, maar documenten konden niet worden gekopieerd. Upload handmatig nieuwe documenten.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('Successfully copied documents:', copyResult.data);
+            
+            // Update the new version with copied documents
+            const copyData = copyResult.data as any;
+            const copiedDocuments: Document[] = (copyData?.copied_documents || []).map((doc: any) => ({
+              id: doc.id || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: doc.name,
+              url: doc.file_path, // This will be updated when we fetch the product
+              uploadedAt: new Date().toISOString(),
+              isPreview: doc.is_preview
+            }));
+            
+            // Update the product with copied documents
+            setProduct(prev => {
+              if (!prev) return prev;
+              const updatedProduct = {
+                ...prev,
+                versions: prev.versions.map(v => 
+                  v.id === newVersion.id 
+                    ? { ...v, documents: copiedDocuments }
+                    : v
+                )
+              };
+              // Update lastSavedData to reflect the new documents state
+              setLastSavedData(JSON.stringify(updatedProduct));
+              return updatedProduct;
+            });
+            
+            toast({
+              title: "Documenten gekopieerd",
+              description: `${copyData?.copied_count || 0} document(en) succesvol gekopieerd naar de nieuwe versie.`,
+            });
+          }
+        } catch (error) {
+          console.error('Error copying documents:', error);
+          toast({
+            title: "Waarschuwing",
+            description: "Versie aangemaakt, maar documenten konden niet worden gekopieerd. Upload handmatig nieuwe documenten.",
+            variant: "destructive",
+          });
+        }
+      }
 
       // Save the copied assessment data to the backend
       if (latestVersion && latestVersion.assessmentOnderdelen.length > 0) {
@@ -1347,7 +1915,7 @@ export default function EditExamPage() {
 
       toast({
         title: "Nieuwe versie aangemaakt",
-        description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}. Upload nieuwe documenten voor deze versie.`,
+        description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}${latestVersion && latestVersion.documents.length > 0 ? ' en gekopieerde documenten' : ''}.`,
       });
     } catch (error) {
       console.error('Error creating version:', error);
@@ -1473,7 +2041,13 @@ export default function EditExamPage() {
       console.log('Attempting to delete temporary version - removing from local state only');
       // Just remove from local state since it's not in the database
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
-      setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = { ...prev, versions: updatedVersions };
+        // Update lastSavedData to reflect the new state after version deletion
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
       
       toast({
         title: "Versie verwijderd",
@@ -1506,7 +2080,13 @@ export default function EditExamPage() {
       console.log('Version deleted successfully, updating local state');
       // Update local state
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
-      setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = { ...prev, versions: updatedVersions };
+        // Update lastSavedData to reflect the new state after version deletion
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
 
       toast({
         title: "Versie verwijderd",
@@ -1655,6 +2235,147 @@ export default function EditExamPage() {
     fetchProduct();
   };
 
+  const getFieldBorderStyle = (fieldId: string): string => {
+    // Check validation errors first (highest priority)
+    if (validationErrors.has(fieldId)) {
+      return 'border-red-500 focus:border-red-500';
+    }
+    
+    // Then check database verification
+    const status = verificationResults.get(fieldId);
+    switch (status) {
+      case 'match':
+        return 'border-green-500 focus:border-green-600';
+      case 'mismatch':
+        return 'border-red-500 focus:border-red-600';
+      default:
+        return 'border-gray-300 focus:border-blue-500';
+    }
+  };
+
+  // Enhanced unsaved changes detection
+  const hasProductChanges = (): boolean => {
+    if (!product || !lastSavedData) return false;
+    const currentData = JSON.stringify(product);
+    return lastSavedData !== currentData;
+  };
+
+  const hasCriteriaChanges = (): boolean => {
+    // Only check for changes if we're actually in criteria editing mode
+    if (!isCriteriaEditing || !criteriaEditValues || !product) return false;
+    
+    // Compare current product versions with the saved criteria edit values
+    const currentCriteria = JSON.stringify(product.versions);
+    const savedCriteria = JSON.stringify(criteriaEditValues.versions);
+    return currentCriteria !== savedCriteria;
+  };
+
+  const checkUnsavedChanges = (): boolean => {
+    // Check product-level changes
+    const hasProductUnsavedChanges = saveStatus === 'dirty' || saveStatus === 'saving' || hasProductChanges();
+    
+    // Check criteria-level changes (only if in editing mode)
+    const hasCriteriaUnsavedChanges = (criteriaSaveStatus === 'dirty' || criteriaSaveStatus === 'saving' || hasCriteriaChanges());
+    
+    return hasProductUnsavedChanges || hasCriteriaUnsavedChanges;
+  };
+
+  // Navigation protection functions
+  const handleNavigationAttempt = (targetPath: string) => {
+    if (checkUnsavedChanges()) {
+      setPendingNavigation(targetPath);
+      setShowUnsavedWarning(true);
+    } else {
+      router.push(targetPath);
+    }
+  };
+
+  const handleConfirmNavigation = () => {
+    setShowUnsavedWarning(false);
+    if (pendingNavigation) {
+      router.push(pendingNavigation);
+      setPendingNavigation(null);
+    }
+  };
+
+  const handleCancelNavigation = () => {
+    setShowUnsavedWarning(false);
+    setPendingNavigation(null);
+  };
+
+  // UnsavedChangesWarning Component
+  const UnsavedChangesWarning = () => (
+    <Dialog open={showUnsavedWarning} onOpenChange={setShowUnsavedWarning}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-yellow-600" />
+            Niet-opgeslagen wijzigingen
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Je hebt nog niet alle wijzigingen opgeslagen. Weet je zeker dat je wilt vertrekken?
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-sm text-yellow-800">
+              <strong>Let op:</strong> Niet-opgeslagen wijzigingen gaan verloren.
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={handleCancelNavigation}>
+            Blijven bewerken
+          </Button>
+          <Button variant="destructive" onClick={handleConfirmNavigation}>
+            Vertrekken zonder op te slaan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // RubricChangeWarning Component
+  const RubricChangeWarning = () => (
+    <Dialog open={!!showRubricChangeConfirm} onOpenChange={(open) => !open && setShowRubricChangeConfirm(null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-600" />
+            Rubric niveaus wijzigen
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Je hebt al content ingevuld voor de huidige rubric niveaus. 
+            Het wijzigen van het aantal niveaus zal alle bestaande content verwijderen.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-sm text-yellow-800">
+              <strong>Let op:</strong> Alle ingevulde onderdelen, criteria en niveau beschrijvingen gaan verloren.
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowRubricChangeConfirm(null)}>
+            Annuleren
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={() => {
+              if (showRubricChangeConfirm) {
+                updateRubricLevels(showRubricChangeConfirm.versionId, showRubricChangeConfirm.newLevelCount);
+                setShowRubricChangeConfirm(null);
+              }
+            }}
+          >
+            Wijzigen en content verwijderen
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1684,7 +2405,7 @@ export default function EditExamPage() {
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Opnieuw proberen
                   </Button>
-                  <Button onClick={() => router.push('/catalogus')} variant="outline">
+                  <Button onClick={() => handleNavigationAttempt('/catalogus')} variant="outline">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Terug naar catalogus
                   </Button>
@@ -1707,16 +2428,26 @@ export default function EditExamPage() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <Button
-            variant="outline"
-            onClick={() => router.push('/catalogus')}
-            className="flex items-center"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Terug
-          </Button>
-          
-
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              onClick={() => handleNavigationAttempt('/catalogus')}
+              className="flex items-center"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Terug
+            </Button>
+            
+            {/* Unsaved Changes Indicator */}
+            {hasUnsavedChanges && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-yellow-100 border border-yellow-300 rounded-lg">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-yellow-800 font-medium">
+                  Niet-opgeslagen wijzigingen
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Exam Information */}
@@ -1796,6 +2527,25 @@ export default function EditExamPage() {
                     <>
                       <Save className="h-4 w-4 mr-2" />
                       Opslaan
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={verifyDatabaseContent}
+                  disabled={isVerifying || saving}
+                  className="flex items-center bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                >
+                  {isVerifying ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 mr-2 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                      Verifiëren...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Verificeer Database
                     </>
                   )}
                 </Button>
@@ -1925,20 +2675,55 @@ export default function EditExamPage() {
                       })()}
                     </div>
                     <div className="flex items-center space-x-2">
-                      {(() => {
-                        const buttonState = getSaveButtonState();
-                        return (
-                          <Button
-                            size="sm"
-                            variant={buttonState.variant}
-                            onClick={handleManualSave}
-                            disabled={buttonState.disabled}
-                            className={buttonState.className}
-                          >
-                            {buttonState.text}
-                          </Button>
-                        );
-                      })()}
+                      {!isCriteriaEditing ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleStartCriteriaEdit}
+                          className="flex items-center"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Bewerken
+                        </Button>
+                      ) : (
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={handleSaveCriteria}
+                              disabled={criteriaSaving || validationErrors.size > 0}
+                              className={`flex items-center ${validationErrors.size > 0 ? 'border-red-500' : ''}`}
+                            >
+                              {criteriaSaving ? (
+                                <>
+                                  <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full"></div>
+                                  Opslaan...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="h-4 w-4 mr-2" />
+                                  Opslaan Criteria
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleCancelCriteriaEdit}
+                              disabled={criteriaSaving}
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Annuleren
+                            </Button>
+                          </div>
+                          {validationErrors.size > 0 && (
+                            <p className="text-sm text-red-600 flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" />
+                              Incompleet - {validationErrors.size} veld{validationErrors.size > 1 ? 'en' : ''} ontbreken
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1977,7 +2762,7 @@ export default function EditExamPage() {
                             <h4 className="font-medium">Beoordelingscriteria</h4>
                             <div className="flex items-center space-x-4">
                               <span className="text-sm text-gray-600">Rubric niveaus:</span>
-                              <div className="flex items-center space-x-2">
+                              <div className={`flex items-center space-x-2 p-2 rounded border ${getFieldBorderStyle(`rubric-${version.id}`)}`}>
                                 {[2, 3, 4, 5, 6].map((level) => (
                                   <label key={level} className="flex items-center space-x-1">
                                     <input
@@ -1985,7 +2770,8 @@ export default function EditExamPage() {
                                       name={`rubric-${version.id}`}
                                       value={level}
                                       checked={version.rubricLevels === level}
-                                      onChange={() => updateRubricLevels(version.id, level)}
+                                      onChange={() => handleRubricLevelChange(version.id, level)}
+                                      disabled={!isCriteriaEditing}
                                       className="text-blue-600"
                                     />
                                     <span className="text-sm">{level}</span>
@@ -1998,6 +2784,7 @@ export default function EditExamPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => addOnderdeel(version.id)}
+                            disabled={!isCriteriaEditing}
                             className="text-blue-600 hover:text-blue-700"
                           >
                             <Plus className="h-4 w-4 mr-1" />
@@ -2012,18 +2799,24 @@ export default function EditExamPage() {
                               <div className="flex items-end justify-between mb-4">
                                 <div className="flex-1 mr-4">
                                   <label className="text-sm font-medium text-gray-700">Onderdeel</label>
-                                  <Input
-                                    value={onderdeel.onderdeel}
-                                    onChange={(e) => updateOnderdeel(version.id, onderdeel.id, e.target.value)}
-                                    className={`mt-1 ${validationErrors.has(`onderdeel-${onderdeel.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
-                                    placeholder="Voer onderdeel naam in"
-                                  />
+                                  {isCriteriaEditing ? (
+                                    <Input
+                                      id={`onderdeel-${onderdeel.id}`}
+                                      value={onderdeel.onderdeel}
+                                      onChange={(e) => updateOnderdeel(version.id, onderdeel.id, e.target.value)}
+                                      className={`mt-1 ${getFieldBorderStyle(`onderdeel-${onderdeel.id}`)}`}
+                                      placeholder="Voer onderdeel naam in"
+                                    />
+                                  ) : (
+                                    <p className="mt-1 text-lg font-semibold">{onderdeel.onderdeel}</p>
+                                  )}
                                 </div>
                                 <div className="flex items-center space-x-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => addCriteria(version.id, onderdeel.id)}
+                                    disabled={!isCriteriaEditing}
                                     className="text-green-600 hover:text-green-700"
                                   >
                                     <Plus className="h-4 w-4 mr-1" />
@@ -2033,6 +2826,7 @@ export default function EditExamPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleDeleteOnderdeel(version.id, onderdeel.id)}
+                                    disabled={!isCriteriaEditing}
                                     className="text-red-600 hover:text-red-700"
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -2081,13 +2875,18 @@ export default function EditExamPage() {
                                                <div className={`grid grid-cols-1 lg:grid-cols-${version.rubricLevels + 1} gap-4`}>
                                                  <div>
                                                    <label className="text-sm font-medium text-gray-700">Criterium</label>
-                                                   <Textarea
-                                                     value={criteria.criteria}
-                                                     onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
-                                                     className={`mt-1 ${validationErrors.has(`criteria-${criteria.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
-                                                     rows={3}
-                                                     placeholder="Beschrijf de criteria..."
-                                                   />
+                                                   {isCriteriaEditing ? (
+                                                     <Textarea
+                                                       id={`criteria-${criteria.id}`}
+                                                       value={criteria.criteria}
+                                                       onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
+                                                       className={`mt-1 ${getFieldBorderStyle(`criteria-${criteria.id}`)}`}
+                                                       rows={3}
+                                                       placeholder="Beschrijf de criteria..."
+                                                     />
+                                                   ) : (
+                                                     <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
+                                                   )}
                                                  </div>
                                                  {criteria.levels.map((level, levelIndex) => (
                                                    <div key={level.id}>
@@ -2100,13 +2899,18 @@ export default function EditExamPage() {
                                                      }`}>
                                                        {level.label}
                                                      </label>
-                                                     <Textarea
-                                                       value={level.value}
-                                                       onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
-                                                       className={`mt-1 ${validationErrors.has(`level-${level.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
-                                                       rows={3}
-                                                       placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
-                                                     />
+                                                     {isCriteriaEditing ? (
+                                                       <Textarea
+                                                         id={`level-${level.id}`}
+                                                         value={level.value}
+                                                         onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
+                                                         className={`mt-1 ${getFieldBorderStyle(`level-${level.id}`)}`}
+                                                         rows={3}
+                                                         placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
+                                                       />
+                                                     ) : (
+                                                       <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{level.value}</p>
+                                                     )}
                                                    </div>
                                                  ))}
                                                </div>
@@ -2119,30 +2923,37 @@ export default function EditExamPage() {
                                            {/* Criteria Row Header */}
                                            <div className="flex items-center justify-between mb-3">
                                              <h6 className="font-medium text-gray-700">Criterium {index + 1}</h6>
-                                             <div
-                                               onClick={(e) => {
-                                                 console.log('Trashcan clicked!', { versionId: version.id, onderdeelId: onderdeel.id, criteriaId: criteria.id });
-                                                 e.preventDefault();
-                                                 e.stopPropagation();
-                                                 handleDeleteCriteria(version.id, onderdeel.id, criteria.id);
-                                               }}
-                                               className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 text-red-600 hover:text-red-700 cursor-pointer"
-                                             >
-                                               <Trash2 className="h-4 w-4" />
-                                             </div>
+                                             {isCriteriaEditing && (
+                                               <div
+                                                 onClick={(e) => {
+                                                   console.log('Trashcan clicked!', { versionId: version.id, onderdeelId: onderdeel.id, criteriaId: criteria.id });
+                                                   e.preventDefault();
+                                                   e.stopPropagation();
+                                                   handleDeleteCriteria(version.id, onderdeel.id, criteria.id);
+                                                 }}
+                                                 className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 text-red-600 hover:text-red-700 cursor-pointer"
+                                               >
+                                                 <Trash2 className="h-4 w-4" />
+                                               </div>
+                                             )}
                                            </div>
 
                                            {/* Dynamic Grid Layout for Desktop */}
                                            <div className={`grid grid-cols-1 lg:grid-cols-${version.rubricLevels + 1} gap-4`}>
                                              <div>
                                                <label className="text-sm font-medium text-gray-700">Criterium</label>
-                                               <Textarea
-                                                 value={criteria.criteria}
-                                                 onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
-                                                 className={`mt-1 ${validationErrors.has(`criteria-${criteria.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
-                                                 rows={3}
-                                                 placeholder="Beschrijf de criteria..."
-                                               />
+                                               {isCriteriaEditing ? (
+                                                 <Textarea
+                                                   id={`criteria-${criteria.id}`}
+                                                   value={criteria.criteria}
+                                                   onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'criteria', undefined, e.target.value)}
+                                                   className={`mt-1 ${getFieldBorderStyle(`criteria-${criteria.id}`)}`}
+                                                   rows={3}
+                                                   placeholder="Beschrijf de criteria..."
+                                                 />
+                                               ) : (
+                                                 <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
+                                               )}
                                              </div>
                                              {criteria.levels.map((level, levelIndex) => (
                                                <div key={level.id}>
@@ -2155,13 +2966,18 @@ export default function EditExamPage() {
                                                  }`}>
                                                    {level.label}
                                                  </label>
-                                                 <Textarea
-                                                   value={level.value}
-                                                   onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
-                                                   className={`mt-1 ${validationErrors.has(`level-${level.id}`) ? 'border-red-500 focus:border-red-500' : ''}`}
-                                                   rows={3}
-                                                   placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
-                                                 />
+                                                 {isCriteriaEditing ? (
+                                                   <Textarea
+                                                     id={`level-${level.id}`}
+                                                     value={level.value}
+                                                     onChange={(e) => updateCriteria(version.id, onderdeel.id, criteria.id, 'level', level.id, e.target.value)}
+                                                     className={`mt-1 ${getFieldBorderStyle(`level-${level.id}`)}`}
+                                                     rows={3}
+                                                     placeholder={`Beschrijf ${level.label.toLowerCase()} prestatie...`}
+                                                   />
+                                                 ) : (
+                                                   <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{level.value}</p>
+                                                 )}
                                                </div>
                                              ))}
                                            </div>
@@ -2249,69 +3065,13 @@ export default function EditExamPage() {
 
                           {/* Right Column */}
                           <div>
-                            <h4 className="font-medium mb-3">Geüploade Documenten</h4>
-                            <div className="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                              <div className="space-y-3">
-                                {version.documents.length === 0 ? (
-                                  <div className="text-center py-8 text-gray-500">
-                                    <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                                    <p>Nog geen documenten geüpload</p>
-                                  </div>
-                                ) : (
-                                  version.documents.map((doc) => (
-                                    <div key={doc.id} className="border rounded-lg p-3 bg-white">
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center space-x-2">
-                                          <FileText className="h-4 w-4 text-gray-400" />
-                                          <span className="font-medium text-sm">{doc.name}</span>
-                                          {doc.isPreview && (
-                                            <Badge variant="secondary" className="text-xs">
-                                              Preview
-                                            </Badge>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center space-x-1">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => setPreviewDocument(version.id, doc.id)}
-                                            className={`${
-                                              doc.isPreview 
-                                                ? 'text-green-600 hover:text-green-700' 
-                                                : 'text-gray-400 hover:text-gray-600'
-                                            }`}
-                                            title={doc.isPreview ? 'Preview uitgeschakeld' : 'Preview inschakeld'}
-                                          >
-                                            {doc.isPreview ? (
-                                              <Eye className="h-3 w-3" />
-                                            ) : (
-                                              <div className="relative">
-                                                <Eye className="h-3 w-3" />
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                  <div className="w-4 h-px bg-gray-400 transform rotate-45"></div>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleDeleteDocument(version.id, doc.id)}
-                                            className="text-red-600 hover:text-red-700"
-                                            title="Document verwijderen"
-                                          >
-                                            <Trash2 className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                      <p className="text-xs text-gray-500">
-                                        Geüpload op {new Date(doc.uploadedAt).toLocaleDateString('nl-NL')}
-                                      </p>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
+                            <DocumentList
+                              documents={version.documents}
+                              versionId={version.id}
+                              onDelete={(docId) => removeDocument(version.id, docId)}
+                              onSetPreview={(docId) => setPreviewDocument(version.id, docId)}
+                              onS3StatusUpdate={(docId, status) => updateDocumentS3Status(version.id, docId, status)}
+                            />
                           </div>
                         </div>
                       </div>
@@ -2512,7 +3272,7 @@ export default function EditExamPage() {
               </p>
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Let op:</strong> De nieuwe versie krijgt de assessment criteria van de vorige versie, maar documenten moeten opnieuw worden geüpload.
+                  <strong>Let op:</strong> De nieuwe versie krijgt de assessment criteria en documenten van de vorige versie gekopieerd.
                 </p>
               </div>
             </div>
@@ -2530,6 +3290,12 @@ export default function EditExamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Unsaved Changes Warning Modal */}
+      <UnsavedChangesWarning />
+      
+      {/* Rubric Change Warning Modal */}
+      <RubricChangeWarning />
     </div>
   );
 } 

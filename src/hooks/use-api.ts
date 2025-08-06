@@ -173,6 +173,9 @@ export function useApi() {
       body: JSON.stringify({ is_preview: isPreview }),
     }),
     getDocumentDownloadUrl: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/download`),
+    copyDocuments: (versionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/copy-documents?source_version_id=${sourceVersionId}`, {
+      method: 'POST',
+    }),
     
     // List operations
     listProducts: (page = 1, limit = 10, search?: string, filter = 'alles') => {
@@ -185,5 +188,12 @@ export function useApi() {
       return makeAuthenticatedRequest(`/api/catalog/products?${params}`);
     },
     listDocuments: (versionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/documents`),
+    
+    // S3 Verification operations
+    verifyDocumentS3: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/verify-s3`),
+    verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/documents/verify-all`),
+    
+    // Database verification operations
+    verifyDatabase: (productId: string) => makeAuthenticatedRequest(`/api/catalog/products/${productId}/verify-database`),
   };
 } 
