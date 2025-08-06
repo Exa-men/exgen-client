@@ -113,7 +113,7 @@ export function DocumentList({
           ) : (
             documents.map((doc) => (
               <div
-                key={doc.id}
+                key={doc.id || `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`}
                 className={`border rounded-lg p-3 bg-white transition-opacity ${
                   doc.s3Status === 'missing' ? 'opacity-50 bg-red-50' : ''
                 }`}

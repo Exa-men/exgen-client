@@ -173,6 +173,9 @@ export function useApi() {
       body: JSON.stringify({ is_preview: isPreview }),
     }),
     getDocumentDownloadUrl: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/download`),
+    copyDocuments: (versionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/copy-documents?source_version_id=${sourceVersionId}`, {
+      method: 'POST',
+    }),
     
     // List operations
     listProducts: (page = 1, limit = 10, search?: string, filter = 'alles') => {

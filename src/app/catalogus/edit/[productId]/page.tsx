@@ -327,7 +327,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -345,6 +345,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new rubric levels state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
     
     // Update validation summary to clean up orphaned validation errors
@@ -375,7 +378,7 @@ export default function EditExamPage() {
 
     setProduct(prev => {
       if (!prev) return prev;
-      const updated = {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -383,8 +386,10 @@ export default function EditExamPage() {
             : v
         )
       };
-      console.log('Updated product with new onderdeel:', updated);
-      return updated;
+      // Update lastSavedData to reflect the new onderdeel state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      console.log('Updated product with new onderdeel:', updatedProduct);
+      return updatedProduct;
     });
 
     // Mark as dirty for manual save
@@ -396,7 +401,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -404,6 +409,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new state after onderdeel removal
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
 
     // Update validation summary to clean up orphaned validation errors
@@ -447,7 +455,7 @@ export default function EditExamPage() {
 
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -462,6 +470,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new criteria state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
 
     // Mark as dirty for manual save
@@ -474,7 +485,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -489,6 +500,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new state after criteria removal
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
 
     // Update validation summary to clean up orphaned validation errors
@@ -510,7 +524,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -525,6 +539,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new onderdeel state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
     
     // Reset verification result for this field
@@ -817,7 +834,7 @@ export default function EditExamPage() {
     
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -851,6 +868,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new criteria state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
     
     // Reset verification result for this field
@@ -1436,7 +1456,7 @@ export default function EditExamPage() {
         // Add documents to the version
         setProduct(prev => {
           if (!prev) return prev;
-          return {
+          const updatedProduct = {
             ...prev,
             versions: prev.versions.map(v => 
               v.id === versionId 
@@ -1444,9 +1464,10 @@ export default function EditExamPage() {
                 : v
             )
           };
+          // Update lastSavedData to reflect the new state after document upload
+          setLastSavedData(JSON.stringify(updatedProduct));
+          return updatedProduct;
         });
-
-        setCriteriaSaveStatus('dirty');
       }
       
       if (successfulUploads.length > 0) {
@@ -1472,7 +1493,7 @@ export default function EditExamPage() {
     } finally {
       setUploadingDocuments(false);
     }
-  }, [product, api, generateId, setCriteriaSaveStatus, toast]);
+  }, [product, api, generateId, toast]);
 
   // Update ref when handleFileUpload changes
   useEffect(() => {
@@ -1496,7 +1517,7 @@ export default function EditExamPage() {
 
       setProduct(prev => {
         if (!prev) return prev;
-        return {
+        const updatedProduct = {
           ...prev,
           versions: prev.versions.map(v => 
             v.id === versionId 
@@ -1504,9 +1525,10 @@ export default function EditExamPage() {
               : v
           )
         };
+        // Update lastSavedData to reflect the new state after document removal
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
       });
-
-      setCriteriaSaveStatus('dirty');
 
       toast({
         title: "Document verwijderd",
@@ -1543,7 +1565,7 @@ export default function EditExamPage() {
 
       setProduct(prev => {
         if (!prev) return prev;
-        return {
+        const updatedProduct = {
           ...prev,
           versions: prev.versions.map(v => 
             v.id === versionId 
@@ -1560,9 +1582,10 @@ export default function EditExamPage() {
               : v
           )
         };
+        // Update lastSavedData to reflect the new state after preview status change
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
       });
-
-      setCriteriaSaveStatus('dirty');
 
       toast({
         title: newPreviewState ? "Preview ingeschakeld" : "Preview uitgeschakeld",
@@ -1582,7 +1605,7 @@ export default function EditExamPage() {
   const updateDocumentS3Status = (versionId: string, documentId: string, status: 'available' | 'missing') => {
     setProduct(prev => {
       if (!prev) return prev;
-      return {
+      const updatedProduct = {
         ...prev,
         versions: prev.versions.map(v => 
           v.id === versionId 
@@ -1597,6 +1620,9 @@ export default function EditExamPage() {
             : v
         )
       };
+      // Update lastSavedData to reflect the new S3 status state
+      setLastSavedData(JSON.stringify(updatedProduct));
+      return updatedProduct;
     });
   };
 
@@ -1695,13 +1721,15 @@ export default function EditExamPage() {
   const duplicateVersion = () => {
     if (!product) return;
     
-    const latestVersion = product.versions.find(v => v.isLatest);
+    // Find the highest version number from all versions (not just the latest)
+    const allVersions = product.versions.sort((a, b) => parseFloat(b.version) - parseFloat(a.version));
+    const highestVersion = allVersions[0];
     
     // If no versions exist, suggest version 1.0
-    if (!latestVersion) {
+    if (!highestVersion) {
       setNewVersionNumber('1.0');
     } else {
-      const suggestedVersion = (parseFloat(latestVersion.version) + 0.1).toFixed(1);
+      const suggestedVersion = (parseFloat(highestVersion.version) + 0.1).toFixed(1);
       setNewVersionNumber(suggestedVersion);
     }
     
@@ -1757,17 +1785,80 @@ export default function EditExamPage() {
             }))
           }))
         })) : [],
-        documents: [] // Don't copy documents - admin should upload new ones for the new version
+        documents: [] // Will be populated after copying documents
       };
 
       // Update all versions to set isLatest to false (if any exist)
       const updatedVersions = product.versions.map(v => ({ ...v, isLatest: false }));
       
-      setProduct(prev => prev ? {
-        ...prev,
-        versions: [newVersion, ...updatedVersions],
-        version: newVersion.version
-      } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = {
+          ...prev,
+          versions: [newVersion, ...updatedVersions],
+          version: newVersion.version
+        };
+        // Update lastSavedData to reflect the new version state
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
+
+      // Copy documents from the latest version if it exists and has documents
+      if (latestVersion && latestVersion.documents.length > 0) {
+        try {
+          console.log('Copying documents from version', latestVersion.id, 'to version', newVersion.id);
+          const copyResult = await api.copyDocuments(newVersion.id, latestVersion.id);
+          
+          if (copyResult.error) {
+            console.error('Error copying documents:', copyResult.error);
+            toast({
+              title: "Waarschuwing",
+              description: "Versie aangemaakt, maar documenten konden niet worden gekopieerd. Upload handmatig nieuwe documenten.",
+              variant: "destructive",
+            });
+          } else {
+            console.log('Successfully copied documents:', copyResult.data);
+            
+            // Update the new version with copied documents
+            const copyData = copyResult.data as any;
+            const copiedDocuments: Document[] = (copyData?.copied_documents || []).map((doc: any) => ({
+              id: doc.id || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: doc.name,
+              url: doc.file_path, // This will be updated when we fetch the product
+              uploadedAt: new Date().toISOString(),
+              isPreview: doc.is_preview
+            }));
+            
+            // Update the product with copied documents
+            setProduct(prev => {
+              if (!prev) return prev;
+              const updatedProduct = {
+                ...prev,
+                versions: prev.versions.map(v => 
+                  v.id === newVersion.id 
+                    ? { ...v, documents: copiedDocuments }
+                    : v
+                )
+              };
+              // Update lastSavedData to reflect the new documents state
+              setLastSavedData(JSON.stringify(updatedProduct));
+              return updatedProduct;
+            });
+            
+            toast({
+              title: "Documenten gekopieerd",
+              description: `${copyData?.copied_count || 0} document(en) succesvol gekopieerd naar de nieuwe versie.`,
+            });
+          }
+        } catch (error) {
+          console.error('Error copying documents:', error);
+          toast({
+            title: "Waarschuwing",
+            description: "Versie aangemaakt, maar documenten konden niet worden gekopieerd. Upload handmatig nieuwe documenten.",
+            variant: "destructive",
+          });
+        }
+      }
 
       // Save the copied assessment data to the backend
       if (latestVersion && latestVersion.assessmentOnderdelen.length > 0) {
@@ -1824,7 +1915,7 @@ export default function EditExamPage() {
 
       toast({
         title: "Nieuwe versie aangemaakt",
-        description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}. Upload nieuwe documenten voor deze versie.`,
+        description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}${latestVersion && latestVersion.documents.length > 0 ? ' en gekopieerde documenten' : ''}.`,
       });
     } catch (error) {
       console.error('Error creating version:', error);
@@ -1950,7 +2041,13 @@ export default function EditExamPage() {
       console.log('Attempting to delete temporary version - removing from local state only');
       // Just remove from local state since it's not in the database
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
-      setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = { ...prev, versions: updatedVersions };
+        // Update lastSavedData to reflect the new state after version deletion
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
       
       toast({
         title: "Versie verwijderd",
@@ -1983,7 +2080,13 @@ export default function EditExamPage() {
       console.log('Version deleted successfully, updating local state');
       // Update local state
       const updatedVersions = product.versions.filter(v => v.id !== showVersionDeleteConfirm);
-      setProduct(prev => prev ? { ...prev, versions: updatedVersions } : null);
+      setProduct(prev => {
+        if (!prev) return null;
+        const updatedProduct = { ...prev, versions: updatedVersions };
+        // Update lastSavedData to reflect the new state after version deletion
+        setLastSavedData(JSON.stringify(updatedProduct));
+        return updatedProduct;
+      });
 
       toast({
         title: "Versie verwijderd",
@@ -2580,7 +2683,7 @@ export default function EditExamPage() {
                           className="flex items-center"
                         >
                           <Edit className="h-4 w-4 mr-2" />
-                          Bewerken Criteria
+                          Bewerken
                         </Button>
                       ) : (
                         <div className="flex flex-col space-y-2">
@@ -3169,7 +3272,7 @@ export default function EditExamPage() {
               </p>
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Let op:</strong> De nieuwe versie krijgt de assessment criteria van de vorige versie, maar documenten moeten opnieuw worden geüpload.
+                  <strong>Let op:</strong> De nieuwe versie krijgt de assessment criteria en documenten van de vorige versie gekopieerd.
                 </p>
               </div>
             </div>
