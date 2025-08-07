@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { Check, Gift, Sparkles } from 'lucide-react';
+import { CheckCircle, Gift, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
-import { Card, CardContent } from './ui/card';
 
 interface WelcomeBannerProps {
   onVoucherActivated: (newBalance: number) => void;
@@ -106,78 +105,98 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
   }
 
   return (
-    <Card className="mb-6 border-2 border-gradient-to-r from-yellow-400 to-orange-400 bg-gradient-to-r from-yellow-50 to-orange-50 shadow-lg">
-      <CardContent className="p-6">
-        <div className="flex items-start space-x-4">
-          {/* Icon */}
-          <div className="flex-shrink-0">
-            <div className="w-12 h-12 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full flex items-center justify-center">
-              <Gift className="w-6 h-6 text-white" />
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1">
-            <div className="flex items-center space-x-2 mb-3">
-              <h2 className="text-2xl font-bold text-gray-900">
-                WELKOM IN DE NIEUWE EXA.MENKLUIS! 🎉
-              </h2>
-              <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-            </div>
-
-            <p className="text-gray-700 mb-4 leading-relaxed">
-              Innovatie in het onderwijs begint bij betrouwbare examenproducten die snel beschikbaar zijn. Exa.men heeft de missie om dit mogelijk te maken. Als gecertificeerde leverancier voor MBO examens willen we met nieuwe technologie examenontwikkeling versnellen:
-            </p>
-
-            {/* Feature list */}
-            <div className="space-y-2 mb-6">
-              <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <span className="text-gray-700">Betrouwbareexamenproducten direct beschikbaar</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <span className="text-gray-700">Interactive digitale beoordelingsinstrumenten</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <span className="text-gray-700">Examenontwikkeling met hulp van AI</span>
+    <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-blue-50 rounded-2xl shadow-xl border border-blue-100 mb-6">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent"></div>
+      
+      {/* Content */}
+      <div className="relative z-10 p-8 lg:p-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-start gap-6">
+            {/* Icon */}
+            <div className="flex-shrink-0">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25 animate-pulse">
+                <Gift className="w-8 h-8 text-white" />
               </div>
             </div>
 
-            {/* Error message */}
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-700 text-sm">{error}</p>
+            {/* Main Content */}
+            <div className="flex-1 space-y-6">
+              <div className="space-y-4">
+                <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">
+                  WELKOM IN DE NIEUWE EXA.MENKLUIS 🎉✨
+                </h1>
+                
+                <h2 className="text-xl lg:text-2xl font-semibold text-blue-600">
+                  Sneller. Slimmer. Betrouwbaarder.
+                </h2>
+                
+                <p className="text-lg text-gray-700 leading-relaxed">
+                  De toekomst van examineren begint hier. Exa.men versnelt examenontwikkeling met technologie die werkt—voor scholen, docenten én studenten.
+                </p>
               </div>
-            )}
 
-            {/* Activation button */}
-            <Button
-              onClick={handleActivateVoucher}
-              disabled={isActivating || isCelebrating}
-              className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-200 transform hover:scale-105"
-            >
-              {isActivating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Voucher activeren...
-                </>
-              ) : isCelebrating ? (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2 animate-pulse" />
-                  Voucher geactiveerd! 🎉
-                </>
-              ) : (
-                <>
-                  <Gift className="w-4 h-4 mr-2" />
-                  ACTIVEER JE VOUCHER
-                </>
+              {/* Features List */}
+              <div className="space-y-4">
+                {[
+                  "Direct toegang tot gevalideerde examenproducten",
+                  "Slimme, digitale beoordelingsinstrumenten", 
+                  "AI-ondersteunde ontwikkeling voor meer snelheid en kwaliteit"
+                ].map((feature, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
+                    <span className="text-gray-800 font-medium">{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Additional text */}
+              <div className="pt-2">
+                <p className="text-gray-700 font-medium">
+                  Als gecertificeerde MBO-examenleverancier staan we klaar om het verschil te maken.
+                </p>
+              </div>
+
+              {/* Error message */}
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
               )}
-            </Button>
+
+              {/* CTA Button */}
+              <div className="pt-4">
+                <Button
+                  onClick={handleActivateVoucher}
+                  disabled={isActivating || isCelebrating}
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold text-lg px-8 py-4 h-auto rounded-xl shadow-lg shadow-blue-500/25 transition-all duration-200 transform hover:scale-105"
+                >
+                  {isActivating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                      Voucher activeren...
+                    </>
+                  ) : isCelebrating ? (
+                    <>
+                      <Sparkles className="w-5 h-5 mr-3 animate-pulse" />
+                      Voucher geactiveerd! 🎉
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="w-5 h-5 mr-3" />
+                      ACTIVEER JE VOUCHER
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Decorative Elements */}
+      <div className="absolute top-4 right-4 w-20 h-20 bg-blue-500/10 rounded-full animate-pulse"></div>
+      <div className="absolute bottom-4 left-1/4 w-12 h-12 bg-blue-300/20 rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
+    </div>
   );
-} 
+}
