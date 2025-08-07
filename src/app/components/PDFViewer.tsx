@@ -1,8 +1,27 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '@clerk/nextjs';
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Download, Printer, ExternalLink } from 'lucide-react';
 import { Button } from './ui/button';
+import dynamic from 'next/dynamic';
+
+// Dynamically import react-pdf to avoid SSR issues
+const Document = dynamic(() => import('react-pdf').then(mod => mod.Document), {
+  ssr: false,
+  loading: () => <div className="text-center text-gray-400 p-8">PDF laden...</div>
+});
+
+const Page = dynamic(() => import('react-pdf').then(mod => mod.Page), {
+  ssr: false
+});
+
+// Set up PDF.js worker only on client side
+if (typeof window !== 'undefined') {
+  const { pdfjs } = require('react-pdf');
+  // Use the local worker file
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+}
 
 interface PDFViewerProps {
   isOpen: boolean;
@@ -12,14 +31,32 @@ interface PDFViewerProps {
 }
 
 export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerProps) {
-  
+  const { getToken } = useAuth();
+  const containerRef = useRef<HTMLDivElement>(null);
+ 
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(3); // Mock total pages
+  const [totalPages, setTotalPages] = useState(0);
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [loading, setLoading] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const [pdfUrlObject, setPdfUrlObject] = useState<string | null>(null);
+  const [pdfData, setPdfData] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
+
+  // Calculate container width
+  const calculateWidth = () => {
+    if (containerRef.current) {
+      const width = containerRef.current.clientWidth - 32; // Account for padding
+      setContainerWidth(Math.max(400, Math.min(800, width)));
+    }
+  };
+
+  // Update width on resize
+  useEffect(() => {
+    calculateWidth();
+    window.addEventListener('resize', calculateWidth);
+    return () => window.removeEventListener('resize', calculateWidth);
+  }, [isOpen]);
 
   // Load PDF when modal opens
   useEffect(() => {
@@ -29,40 +66,49 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
       setRotation(0);
       setLoading(true);
       setPdfError(null);
-      // Clean up previous object URL
-      setPdfUrlObject((oldUrl) => {
-        if (oldUrl) URL.revokeObjectURL(oldUrl);
-        return null;
-      });
-      fetch(pdfUrl)
-        .then(response => {
-          if (!response.ok) throw new Error('PDF niet gevonden of niet toegankelijk.');
-          return response.blob();
-        })
-        .then(blob => {
+      setPdfData(null);
+      
+      // Recalculate width after modal opens
+      setTimeout(calculateWidth, 100);
+      
+      const loadPDF = async () => {
+        try {
+          const token = await getToken();
+          const response = await fetch(pdfUrl, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (!response.ok) {
+            throw new Error('PDF niet gevonden of niet toegankelijk.');
+          }
+          
+          const blob = await response.blob();
+          
           // Check if blob is a PDF
           if (blob.type !== 'application/pdf') {
             setPdfError('Het bestand is geen geldig PDF-document.');
             setLoading(false);
             return;
           }
-          const url = URL.createObjectURL(blob);
-          setPdfUrlObject(url);
+          
+          // Convert blob to data URL for react-pdf
+          const reader = new FileReader();
+          reader.onload = () => {
+            setPdfData(reader.result as string);
+            setLoading(false);
+          };
+          reader.readAsDataURL(blob);
+        } catch (error) {
+          setPdfError(error instanceof Error ? error.message : 'PDF kon niet geladen worden.');
           setLoading(false);
-        })
-        .catch(error => {
-          setPdfError(error.message || 'PDF kon niet geladen worden.');
-          setLoading(false);
-        });
+        }
+      };
+      
+      loadPDF();
     }
-    // Cleanup on close
-    return () => {
-      setPdfUrlObject((oldUrl) => {
-        if (oldUrl) URL.revokeObjectURL(oldUrl);
-        return null;
-      });
-    };
-  }, [isOpen, pdfUrl]);
+  }, [isOpen, pdfUrl, getToken]);
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
@@ -119,12 +165,22 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, currentPage, scale, rotation]);
 
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setTotalPages(numPages);
+  };
+
+  const onDocumentLoadError = (error: Error) => {
+    console.error('PDF load error:', error);
+    setPdfError('PDF kon niet geladen worden. Probeer de pagina te verversen.');
+    setLoading(false);
+  };
+
   if (!isOpen) {
     return null;
   }
 
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
       <div className="relative w-full h-full max-w-7xl max-h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -181,6 +237,23 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
           </div>
         </div>
 
+        {/* Yellow Notification Banner */}
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 shadow-sm">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-800 leading-relaxed">
+                Dit inkijkexamplaar toont (een deel van) de verantwoording van het exameninstrument. Naast dit document leveren wij een instructie voor de kandidaat, instructie beoordelaar, hulpdocumenten en een{' '}
+                <strong className="font-semibold">digitaal interactief beoordelingsformulier</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* PDF Content */}
         <div className="flex-1 relative overflow-hidden">
           {loading && (
@@ -192,24 +265,89 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
             </div>
           )}
           
-          <div className="w-full h-full overflow-auto bg-gray-100 flex items-center justify-center">
+          <div ref={containerRef} className="w-full h-full overflow-auto bg-gray-100 flex justify-center p-4">
             {loading ? (
               <div className="text-center text-gray-400">PDF laden...</div>
             ) : pdfError ? (
-              <div className="text-center text-red-500">{pdfError}</div>
-            ) : pdfUrlObject ? (
-              <iframe
-                src={pdfUrlObject}
-                title={title}
-                className="w-[800px] h-[1100px] border border-gray-300 bg-white shadow-lg"
+              <div className="text-center text-red-500 p-8">
+                <div className="mb-4">{pdfError}</div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPdfError(null);
+                    setLoading(true);
+                    // Trigger reload by changing the key
+                    const loadPDF = async () => {
+                      try {
+                        const token = await getToken();
+                        const response = await fetch(pdfUrl, {
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                          },
+                        });
+                        
+                        if (!response.ok) {
+                          throw new Error('PDF niet gevonden of niet toegankelijk.');
+                        }
+                        
+                        const blob = await response.blob();
+                        
+                        if (blob.type !== 'application/pdf') {
+                          setPdfError('Het bestand is geen geldig PDF-document.');
+                          setLoading(false);
+                          return;
+                        }
+                        
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setPdfData(reader.result as string);
+                          setLoading(false);
+                        };
+                        reader.readAsDataURL(blob);
+                      } catch (error) {
+                        setPdfError(error instanceof Error ? error.message : 'PDF kon niet geladen worden.');
+                        setLoading(false);
+                      }
+                    };
+                    loadPDF();
+                  }}
+                >
+                  Opnieuw proberen
+                </Button>
+              </div>
+            ) : pdfData ? (
+              <div 
+                className="bg-white shadow-lg max-w-full"
                 style={{
                   transform: `scale(${scale}) rotate(${rotation}deg)`,
-                  transformOrigin: 'center',
+                  transformOrigin: 'top center',
                   transition: 'transform 0.2s ease-in-out'
                 }}
-                frameBorder={0}
-                allowFullScreen
-              />
+              >
+                <Document
+                  file={pdfData}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  onLoadError={onDocumentLoadError}
+                  loading={
+                    <div className="text-center text-gray-400 p-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-examen-cyan mx-auto mb-2"></div>
+                      PDF laden...
+                    </div>
+                  }
+                  error={
+                    <div className="text-center text-red-500 p-8">
+                      Er is een fout opgetreden bij het laden van de PDF.
+                    </div>
+                  }
+                >
+                  <Page
+                    pageNumber={currentPage}
+                    width={containerWidth}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                  />
+                </Document>
+              </div>
             ) : (
               <div className="text-center text-gray-400">PDF niet beschikbaar</div>
             )}
