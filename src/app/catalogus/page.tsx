@@ -44,6 +44,7 @@ interface ExamProduct {
   isPurchased: boolean;
   downloadUrl?: string;
   status?: 'draft' | 'available'; // New status field
+  hasPreviewDocument?: boolean; // Whether the product has a preview document
 }
 
 type SortField = 'code' | 'title' | 'credits' | 'cohort';
@@ -844,7 +845,7 @@ export default function CatalogusPage() {
                           )}
                           <TableCell className="align-top">
                             <div className="flex flex-col space-y-2 min-w-[120px]">
-                              {!product.isPurchased && (
+                              {!product.isPurchased && product.hasPreviewDocument && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -852,7 +853,7 @@ export default function CatalogusPage() {
                                   className="flex items-center justify-center w-full"
                                 >
                                   <Eye className="h-4 w-4 mr-1" />
-                                  Bekijken
+                                  Inkijken
                                 </Button>
                               )}
                               {product.isPurchased ? (
@@ -965,7 +966,7 @@ export default function CatalogusPage() {
                       <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)} /></span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
-                      {!product.isPurchased && (
+                      {!product.isPurchased && product.hasPreviewDocument && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -973,7 +974,7 @@ export default function CatalogusPage() {
                           className="flex items-center justify-center w-full"
                         >
                           <Eye className="h-4 w-4 mr-1" />
-                          Bekijken
+                          Inkijken
                         </Button>
                       )}
                       {product.isPurchased ? (
@@ -1153,6 +1154,18 @@ export default function CatalogusPage() {
         </DialogContent>
       </Dialog>
       
+      {/* PDF Viewer Modal */}
+      {selectedProduct && (
+        <PDFViewer
+          isOpen={pdfViewerOpen}
+          onClose={() => {
+            setPdfViewerOpen(false);
+            setSelectedProduct(null);
+          }}
+          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/catalog/preview/${selectedProduct.id}`}
+          title={`Preview: ${selectedProduct.title}`}
+        />
+      )}
 
     </div>
   );
