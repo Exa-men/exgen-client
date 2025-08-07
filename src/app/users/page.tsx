@@ -46,6 +46,11 @@ export default function UsersPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+  const [welcomeVoucherStats, setWelcomeVoucherStats] = useState({
+    total_users: 0,
+    activated_welcome_vouchers: 0,
+    activation_rate: 0
+  });
 
   // Redirect if not signed in
   useEffect(() => {
@@ -53,6 +58,14 @@ export default function UsersPage() {
       router.push('/');
     }
   }, [isLoaded, isSignedIn, router]);
+
+  // Fetch data when component mounts
+  useEffect(() => {
+    if (isSignedIn) {
+      fetchUsers();
+      fetchWelcomeVoucherStats();
+    }
+  }, [isSignedIn]);
 
   const fetchUsers = async () => {
     if (!isSignedIn) return;
@@ -79,6 +92,26 @@ export default function UsersPage() {
       setUsers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchWelcomeVoucherStats = async () => {
+    if (!isSignedIn) return;
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/v1/admin/welcome-voucher/stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWelcomeVoucherStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching welcome voucher stats:', err);
     }
   };
 
@@ -443,6 +476,27 @@ export default function UsersPage() {
                   <div className="text-right">
                     <p className="text-2xl font-bold text-gray-900">
                       {users.reduce((total, user) => total + user.credits, 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Welcome Vouchers Activated */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className="h-6 w-6 bg-yellow-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-xs">🎁</span>
+                      </div>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Welcome Vouchers</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {welcomeVoucherStats.activated_welcome_vouchers || 0}
                     </p>
                   </div>
                 </div>
