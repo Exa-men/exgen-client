@@ -63,16 +63,17 @@ export const SignInForm: React.FC = () => {
   // Enhanced error detection for migrated users
   const isMigratedUserError = (error: any): boolean => {
     const errorCode = error.errors?.[0]?.code;
-    const errorMessage = error.message || '';
+    const errorMessage = error.errors?.[0]?.message || '';
     
-    // Check for all possible migrated user error patterns
+    // Primary check: specific error code for migrated users
+    if (errorCode === 'strategy_for_user_invalid') {
+      return true;
+    }
+    
+    // Fallback check: error message patterns for migrated users
     return (
-      errorCode === 'form_password_incorrect' ||
-      errorCode === 'form_password_pwned' ||
-      errorCode === 'form_identifier_not_found' ||
       errorMessage.includes('verification strategy is not valid') ||
-      errorMessage.includes('strategy is not valid for this account') ||
-      errorMessage.includes('verification strategy is not valid for this account')
+      errorMessage.includes('strategy is not valid for this account')
     );
   };
 
@@ -84,13 +85,49 @@ export const SignInForm: React.FC = () => {
       // const data = await response.json();
       // return data.isMigratedUser;
       
-      // For now, assume any password-related error indicates a migrated user
+      // Since we're now using specific error detection, we can trust the error-based detection
       return true;
     } catch (error) {
       console.error('Error validating migrated user:', error);
       // Fallback to error-based detection
       return true;
     }
+  };
+
+  // Comprehensive error handler for Clerk errors
+  const handleClerkError = (error: any) => {
+    // Check for direct error code first (like session_exists)
+    if (error.code === 'session_exists') {
+      return {
+        type: 'already_signed_in',
+        message: 'Je bent al ingelogd. Ververs de pagina.',
+        action: 'redirect'
+      };
+    }
+    
+    // Check for errors array (validation errors)
+    const errorCode = error.errors?.[0]?.code;
+    if (errorCode) {
+      switch (errorCode) {
+        case 'form_identifier_not_verified':
+          return { type: 'not_verified', message: 'E-mailadres is niet geverifieerd. Controleer je inbox.' };
+        case 'form_identifier_not_found':
+          return { type: 'user_not_found', message: 'Geen account gevonden met dit e-mailadres.' };
+        case 'form_password_incorrect':
+          return { type: 'wrong_password', message: 'Onjuist wachtwoord. Probeer opnieuw.' };
+        case 'session_exists':
+          return {
+            type: 'already_signed_in',
+            message: 'Je bent al ingelogd. Ververs de pagina.',
+            action: 'redirect'
+          };
+        default:
+          return { type: 'unknown', message: 'Er is een fout opgetreden. Probeer het opnieuw.' };
+      }
+    }
+    
+    // Fallback for unknown errors
+    return { type: 'unknown', message: 'Er is een fout opgetreden. Probeer het opnieuw.' };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -143,25 +180,34 @@ export const SignInForm: React.FC = () => {
         }
       }
       
-      // Handle other errors with retry logic
-      const errorCode = error.errors?.[0]?.code;
-      switch (errorCode) {
-        case 'form_identifier_not_verified':
-          setErrors({ email: 'E-mailadres is niet geverifieerd. Controleer je inbox.' });
+      // Use comprehensive error handler
+      const errorResult = handleClerkError(error);
+      
+      // Handle the error based on type
+      switch (errorResult.type) {
+        case 'already_signed_in':
+          setErrors({ email: errorResult.message });
+          if (errorResult.action === 'redirect') {
+            setTimeout(() => {
+              closeAuthModal();
+              window.location.reload();
+            }, 2000);
+          }
           break;
-        case 'form_identifier_not_found':
-          setErrors({ email: 'Geen account gevonden met dit e-mailadres.' });
-          break;
-        case 'form_password_incorrect':
+        case 'wrong_password':
           setRetryCount(prev => prev + 1);
           if (retryCount >= MAX_RETRIES) {
             setErrors({ password: 'Te veel foutieve pogingen. Probeer later opnieuw of reset je wachtwoord.' });
           } else {
-            setErrors({ password: 'Onjuist wachtwoord. Probeer opnieuw.' });
+            setErrors({ password: errorResult.message });
           }
           break;
+        case 'not_verified':
+        case 'user_not_found':
+          setErrors({ email: errorResult.message });
+          break;
         default:
-          setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
+          setErrors({ email: errorResult.message });
       }
     } finally {
       setIsLoading(false);

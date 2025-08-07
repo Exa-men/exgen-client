@@ -102,6 +102,16 @@ export const ForgotPasswordForm: React.FC = () => {
     } catch (error: any) {
       console.error('Forgot password error:', error);
       
+      // Check for direct error code first (like session_exists)
+      if (error.code === 'session_exists') {
+        setError('Je bent al ingelogd. Ververs de pagina.');
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+        return;
+      }
+      
+      // Check for errors array (validation errors)
       const errorCode = error.errors?.[0]?.code;
       switch (errorCode) {
         case 'form_identifier_not_found':
@@ -109,6 +119,12 @@ export const ForgotPasswordForm: React.FC = () => {
           break;
         case 'form_identifier_not_verified':
           setError('E-mailadres is niet geverifieerd. Controleer je inbox.');
+          break;
+        case 'session_exists':
+          setError('Je bent al ingelogd. Ververs de pagina.');
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
           break;
         default:
           setError('Er is een fout opgetreden. Probeer het opnieuw.');
@@ -152,6 +168,16 @@ export const ForgotPasswordForm: React.FC = () => {
     } catch (error: any) {
       console.error('Password reset error:', error);
       
+      // Check for direct error code first (like session_exists)
+      if (error.code === 'session_exists') {
+        setError('Je bent al ingelogd. Ververs de pagina.');
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+        return;
+      }
+      
+      // Check for errors array (validation errors)
       const errorCode = error.errors?.[0]?.code;
       switch (errorCode) {
         case 'form_code_incorrect':
@@ -162,6 +188,12 @@ export const ForgotPasswordForm: React.FC = () => {
           break;
         case 'form_password_pwned':
           setError('Dit wachtwoord is te zwak. Kies een sterker wachtwoord.');
+          break;
+        case 'session_exists':
+          setError('Je bent al ingelogd. Ververs de pagina.');
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
           break;
         default:
           setError('Er is een fout opgetreden. Probeer het opnieuw.');

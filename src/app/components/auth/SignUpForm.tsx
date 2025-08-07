@@ -19,7 +19,7 @@ interface SignUpFormData {
 
 export const SignUpForm: React.FC = () => {
   const { signUp, isLoaded } = useSignUp();
-  const { switchModalMode } = useAuthModal();
+  const { switchModalMode, closeAuthModal } = useAuthModal();
   
   const [formData, setFormData] = useState<SignUpFormData>({
     firstName: '',
@@ -69,6 +69,18 @@ export const SignUpForm: React.FC = () => {
   };
 
   const handleClerkError = (error: any) => {
+    // Check for direct error code first (like session_exists)
+    if (error.code === 'session_exists') {
+      setErrors({ email: 'Je bent al ingelogd. Ververs de pagina.' });
+      // Redirect after a delay
+      setTimeout(() => {
+        closeAuthModal();
+        window.location.reload();
+      }, 2000);
+      return;
+    }
+    
+    // Check for errors array (validation errors)
     const errorCode = error.errors?.[0]?.code;
     switch (errorCode) {
       case 'form_identifier_exists':
@@ -79,6 +91,13 @@ export const SignUpForm: React.FC = () => {
         break;
       case 'form_password_validation_failed':
         setErrors({ password: 'Wachtwoord voldoet niet aan de vereisten' });
+        break;
+      case 'session_exists':
+        setErrors({ email: 'Je bent al ingelogd. Ververs de pagina.' });
+        setTimeout(() => {
+          closeAuthModal();
+          window.location.reload();
+        }, 2000);
         break;
       default:
         setErrors({ email: 'Er is een fout opgetreden. Probeer het opnieuw.' });
