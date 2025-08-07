@@ -15,6 +15,7 @@ import VersionDropdown from '../components/VersionDropdown';
 import FeedbackModal from '../components/FeedbackModal';
 import DownloadModal from '../components/DownloadModal';
 import CreditBanner from '../components/CreditBanner';
+import WelcomeBanner from '../components/WelcomeBanner';
 
 import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
@@ -94,6 +95,10 @@ export default function CatalogusPage() {
   
   // State for status updates
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  
+  // State for welcome banner
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+  const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
 
   // Validation functions for product publication
   const isProductReadyForPublication = (product: ExamProduct): boolean => {
@@ -489,6 +494,11 @@ export default function CatalogusPage() {
     return `${credits} credits`;
   };
 
+  const handleVoucherActivated = (newBalance: number) => {
+    setShowWelcomeBanner(false);
+    refreshCredits(); // Update credit display
+  };
+
   // Helper to get product cost for modal
   const purchaseProduct = purchaseConfirmId ? products.find(p => p.id === purchaseConfirmId) : null;
 
@@ -496,6 +506,54 @@ export default function CatalogusPage() {
   useEffect(() => {
     if (!purchaseConfirmId) setPurchaseTermsChecked(false);
   }, [purchaseConfirmId]);
+
+  // Check welcome banner status
+  useEffect(() => {
+    const checkWelcomeBanner = async () => {
+      if (!isSignedIn || !user) return;
+      
+      try {
+        const token = await getToken();
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setShowWelcomeBanner(data.should_show_banner);
+        }
+      } catch (error) {
+        console.error('Error checking welcome banner status:', error);
+      } finally {
+        setWelcomeBannerLoading(false);
+      }
+    };
+
+    checkWelcomeBanner();
+  }, [isSignedIn, user, getToken]);
+
+  // Mark first login
+  useEffect(() => {
+    const markFirstLogin = async () => {
+      if (!isSignedIn || !user) return;
+      
+      try {
+        const token = await getToken();
+        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/mark-first-login`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+      } catch (error) {
+        console.error('Error marking first login:', error);
+      }
+    };
+
+    markFirstLogin();
+  }, [isSignedIn, user, getToken]);
 
   if (!isLoaded) {
     return (
@@ -520,6 +578,11 @@ export default function CatalogusPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Exameninstrumenten</h1>
         </div>
+
+        {/* Welcome Banner */}
+        {!welcomeBannerLoading && showWelcomeBanner && (
+          <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
+        )}
 
         {/* Search Bar */}
         <div className="mb-10">
@@ -562,7 +625,7 @@ export default function CatalogusPage() {
         </div>
 
         {/* Credit Banner */}
-        <CreditBanner onOrderCredits={openModal} />
+        <CreditBanner onOrderCredits={openModal} hideWhenWelcomeBannerShown={showWelcomeBanner} />
         
         {/* Error Messages */}
         {showCreditsError && (

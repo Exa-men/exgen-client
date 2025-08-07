@@ -10,11 +10,13 @@ import { cn } from '../../lib/utils';
 interface CreditBannerProps {
   onOrderCredits: () => void;
   className?: string;
+  hideWhenWelcomeBannerShown?: boolean;
 }
 
 const CreditBanner: React.FC<CreditBannerProps> = ({ 
   onOrderCredits, 
-  className 
+  className,
+  hideWhenWelcomeBannerShown = false
 }) => {
   const { credits, loading } = useCredits();
   const { isLoaded: userLoaded } = useUser();
@@ -34,7 +36,8 @@ const CreditBanner: React.FC<CreditBannerProps> = ({
     return () => clearTimeout(timer);
   }, [userLoaded, loading, credits]);
 
-  if (!showBanner) {
+  // Hide banner if welcome banner is being shown
+  if (!showBanner || hideWhenWelcomeBannerShown) {
     return null;
   }
 
