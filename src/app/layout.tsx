@@ -22,8 +22,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ExGen',
-  description: 'Generate examination instruments for Dutch vocational education',
+  title: 'exa.men',
+  description: 'Examenleverancier voor het MBO',
 };
 
 export default function RootLayout({
