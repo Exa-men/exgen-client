@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
 import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft, RefreshCw } from 'lucide-react';
+import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
 
 export const ForgotPasswordForm: React.FC = () => {
   const { signIn, isLoaded } = useSignIn();
@@ -45,13 +46,13 @@ export const ForgotPasswordForm: React.FC = () => {
     }
   }, []);
 
-  const validateEmail = (): boolean => {
+  const validateEmailForm = (): boolean => {
     if (!email.trim()) {
       setError('E-mail is verplicht');
       return false;
     }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Voer een geldig e-mailadres in');
+    if (!validateEmail(email)) {
+      setError(getEmailValidationErrorMessage());
       return false;
     }
     setError('');
@@ -85,7 +86,7 @@ export const ForgotPasswordForm: React.FC = () => {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateEmail() || !isLoaded) return;
+    if (!validateEmailForm() || !isLoaded) return;
 
     setIsLoading(true);
     setError('');

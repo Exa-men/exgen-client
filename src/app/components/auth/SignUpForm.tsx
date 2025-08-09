@@ -6,7 +6,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
+import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
 
 interface SignUpFormData {
   firstName: string;
@@ -46,8 +47,8 @@ export const SignUpForm: React.FC = () => {
     
     if (!formData.email.trim()) {
       newErrors.email = 'E-mail is verplicht';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Voer een geldig e-mailadres in';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = getEmailValidationErrorMessage();
     }
     
     if (!formData.password) {
