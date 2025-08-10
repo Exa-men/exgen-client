@@ -43,13 +43,13 @@ The following endpoints now require admin access:
 
 ## Frontend Implementation
 
-### Role Management Hook
+### Role Management Context
 
-**File**: `src/hooks/use-role.ts`
+**File**: `src/app/contexts/RoleContext.tsx`
 
-Provides role-based utilities:
+Provides centralized role management through React Context:
 ```typescript
-const { userRole, isLoading, isAdmin, isUser, hasRole } = useRole();
+const { userRole, isLoading, isAdmin, isUser, hasRole } = useRoleContext();
 ```
 
 ### Role Guard Components
@@ -92,7 +92,7 @@ async def list_users(admin_user: User = Depends(require_admin)):
 ### Frontend - Role Checking
 
 ```tsx
-const { isAdmin } = useRole();
+const { isAdmin } = useRoleContext();
 
 if (isAdmin) {
   // Show admin features
