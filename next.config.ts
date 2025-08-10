@@ -11,6 +11,29 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['@clerk/nextjs', 'lucide-react'],
   },
   
+  // Webpack configuration for PDF modules
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Handle PDF.js worker
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+      };
+      
+      // Handle PDF modules
+      config.module.rules.push({
+        test: /pdf\.worker\.(min\.)?js/,
+        type: 'asset/resource',
+        generator: {
+          filename: 'static/worker/[hash][ext][query]',
+        },
+      });
+    }
+    
+    return config;
+  },
+  
   // Enhanced caching and performance
   compress: true,
   generateEtags: true,

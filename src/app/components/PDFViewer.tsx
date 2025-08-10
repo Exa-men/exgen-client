@@ -16,13 +16,6 @@ const Page = dynamic(() => import('react-pdf').then(mod => mod.Page), {
   ssr: false
 });
 
-// Set up PDF.js worker only on client side
-if (typeof window !== 'undefined') {
-  const { pdfjs } = require('react-pdf');
-  // Use the local worker file
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
-}
-
 interface PDFViewerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +35,17 @@ export default function PDFViewer({ isOpen, onClose, pdfUrl, title }: PDFViewerP
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<string | null>(null);
   const [containerWidth, setContainerWidth] = useState(800);
+
+  // Set up PDF.js worker only on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Import pdfjs dynamically to avoid SSR issues
+      import('react-pdf').then(({ pdfjs }) => {
+        // Use the local worker file
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+      }).catch(console.error);
+    }
+  }, []);
 
   // Calculate container width
   const calculateWidth = () => {
