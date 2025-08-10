@@ -100,6 +100,91 @@ export default function CatalogusPage() {
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
 
+  // Add scroll velocity tracking for better performance
+  const [scrollVelocity, setScrollVelocity] = useState(0);
+  const lastScrollTimeRef = useRef<number>(0);
+  const lastScrollTopRef = useRef<number>(0);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Add request cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Add scroll direction detection
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
+  const lastScrollYRef = useRef<number>(0);
+
+  // Add scroll position memory
+  const scrollPositionRef = useRef<number>(0);
+
+  // Dynamic page sizes for optimal performance
+  const INITIAL_PAGE_SIZE = 10;      // Fast initial load
+  const SCROLL_PAGE_SIZE = 25;       // Bigger batches on scroll
+  const FAST_SCROLL_PAGE_SIZE = 40;  // Very fast scrolling
+  const VELOCITY_THRESHOLD = 0.5;    // Threshold for fast scrolling (px/ms)
+  
+  // Get optimal page size based on context and scroll velocity
+  const getOptimalPageSize = useCallback((pageNum: number, velocity: number) => {
+    if (pageNum === 1) {
+      return INITIAL_PAGE_SIZE; // Fast initial load
+    }
+    
+    // Adaptive sizing based on scroll velocity
+    if (velocity > VELOCITY_THRESHOLD) {
+      return FAST_SCROLL_PAGE_SIZE; // Very fast scrolling
+    }
+    
+    return SCROLL_PAGE_SIZE; // Normal scrolling
+  }, []);
+  
+  // Add simple caching system
+  const cacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  
+  // Check if data is cached and fresh
+  const getCachedData = (key: string) => {
+    const cached = cacheRef.current.get(key);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.data;
+    }
+    return null;
+  };
+  
+  // Store data in cache
+  const setCachedData = (key: string, data: any) => {
+    cacheRef.current.set(key, { data, timestamp: Date.now() });
+    
+    // Clean up old cache entries
+    const now = Date.now();
+    for (const [cacheKey, cacheValue] of cacheRef.current.entries()) {
+      if (now - cacheValue.timestamp > CACHE_DURATION) {
+        cacheRef.current.delete(cacheKey);
+      }
+    }
+  };
+  
+  // Generate cache key
+  const getCacheKey = (pageNum: number, searchTerm: string, filter: string) => {
+    return `products_${pageNum}_${searchTerm}_${filter}`;
+  };
+  
+  // Add virtual scrolling hint system
+  const [shouldUseVirtualScrolling, setShouldUseVirtualScrolling] = useState(false);
+  const VIRTUAL_SCROLLING_THRESHOLD = 1000; // Enable for 1000+ items
+  
+  // Performance optimization for large lists
+  const getVisibleProducts = useCallback(() => {
+    if (!shouldUseVirtualScrolling) {
+      return products;
+    }
+    
+    // For large lists, only render visible items + buffer
+    const buffer = 20; // Render 20 items above and below visible area
+    const startIndex = Math.max(0, Math.floor(window.scrollY / 100) - buffer);
+    const endIndex = Math.min(products.length, Math.ceil((window.scrollY + window.innerHeight) / 100) + buffer);
+    
+    return products.slice(startIndex, endIndex);
+  }, [products, shouldUseVirtualScrolling]);
+
   // Validation functions for product publication
   const isProductReadyForPublication = (product: ExamProduct): boolean => {
     // Check if basic product information is complete
@@ -200,58 +285,102 @@ export default function CatalogusPage() {
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-  // Redirect if not signed in
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push('/');
-    }
-  }, [isLoaded, isSignedIn, router]);
+
 
   const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
     if (!isSignedIn) return;
     
+    // Prevent multiple simultaneous requests
+    if (loading && !append) return;
+    if (loadingMore && append) return;
+    
+    // Check cache first (only for non-append requests)
+    if (!append) {
+      const cacheKey = getCacheKey(pageNum, searchTerm, filter);
+      const cachedData = getCachedData(cacheKey);
+      if (cachedData) {
+        setProducts(cachedData.products);
+        setHasMore(cachedData.has_more);
+        setLoading(false);
+        setPage(cachedData.page);
+        return;
+      }
+    }
+    
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+    
     try {
-      if (pageNum === 1) setLoading(true);
       setError(null);
       const token = await getToken();
-      const url = `/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
       
-      const response = await fetch(url, {
+      // Get optimal page size based on context and scroll velocity
+      const optimalPageSize = getOptimalPageSize(pageNum, scrollVelocity);
+      
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        size: optimalPageSize.toString(),
+      });
+      
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+      
+      if (filter) {
+        params.append('filter', filter);
+      }
+      
+      const response = await fetch(`/api/v1/catalog/products?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        signal: abortControllerRef.current.signal,
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
       
-      setProducts(prev => {
-        if (append) {
-          // When appending, filter out any duplicates
-          const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
-          const newProducts = (data.products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
-          return [...prev, ...newProducts];
-        } else {
-          // When replacing, use the new data directly
-          return (data.products || []);
-        }
-      });
-      setHasMore(data.hasMore);
+      // Cache the response (only for non-append requests)
+      if (!append) {
+        const cacheKey = getCacheKey(pageNum, searchTerm, filter);
+        setCachedData(cacheKey, data);
+      }
+      
+      if (append) {
+        setProducts(prev => [...prev, ...data.products]);
+        setHasMore(data.has_more);
+        setLoadingMore(false);
+      } else {
+        setProducts(data.products);
+        setHasMore(data.has_more);
+        setLoading(false);
+      }
+      
       setPage(data.page);
     } catch (err) {
+      // Don't show error if request was cancelled
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       console.error('Error fetching products:', err);
       setError('Failed to load exam products');
-      setProducts([]);
-      setHasMore(false);
-      setPage(1);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
-  }, [isSignedIn, getToken, searchTerm, filter, PAGE_SIZE]);
+  }, [isSignedIn, getToken, searchTerm, filter, loading, loadingMore, getOptimalPageSize, scrollVelocity]);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
@@ -260,16 +389,34 @@ export default function CatalogusPage() {
 
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
-    if (!hasMore || loadingMore || loading) {
+    if (!hasMore || loadingMore || loading || scrollDirection !== 'down') {
       return;
     }
     
     const observer = new window.IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setLoadingMore(true);
-        fetchProducts(page + 1, true);
+      if (entries[0].isIntersecting && !loadingMore && scrollDirection === 'down') {
+        // Clear any existing timeout
+        if (debounceTimeoutRef.current) {
+          clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        // Dynamic debouncing based on scroll velocity
+        const baseDelay = 100; // Base delay in ms
+        const velocityMultiplier = Math.min(scrollVelocity * 1000, 300); // Cap at 300ms
+        const dynamicDelay = baseDelay + velocityMultiplier;
+        
+        debounceTimeoutRef.current = setTimeout(() => {
+          if (!loadingMore && scrollDirection === 'down') {
+            setLoadingMore(true);
+            // Fix race condition by using setPage callback
+            setPage(prevPage => {
+              fetchProducts(prevPage + 1, true);
+              return prevPage + 1;
+            });
+          }
+        }, dynamicDelay);
       }
-    }, { threshold: 1 });
+    }, { threshold: 0.5 }); // Lower threshold for better detection
     
     // Observe both desktop and mobile observer refs
     if (observerRef.current) {
@@ -280,10 +427,70 @@ export default function CatalogusPage() {
     }
     
     return () => {
-      if (observerRef.current) observer.unobserve(observerRef.current);
-      if (mobileObserverRef.current) observer.unobserve(mobileObserverRef.current);
+      observer.disconnect();
+      // Clear any pending timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
     };
-  }, [hasMore, loadingMore, loading, page, fetchProducts]);
+  }, [hasMore, loadingMore, loading, fetchProducts, scrollVelocity, scrollDirection]);
+
+  // Add smart prefetching for smoother infinite scroll
+  const [prefetchedPage, setPrefetchedPage] = useState<number | null>(null);
+  const prefetchTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Prefetch next page when user is getting close to the bottom
+  useEffect(() => {
+    if (!hasMore || loadingMore || loading || prefetchedPage !== null) {
+      return;
+    }
+    
+    const observer = new window.IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !prefetchedPage) {
+        // Prefetch next page with a longer delay
+        prefetchTimeoutRef.current = setTimeout(() => {
+          if (!prefetchedPage && !loadingMore) {
+            setPrefetchedPage(page + 1);
+            // Prefetch with optimal page size based on scroll velocity
+            const nextPageSize = getOptimalPageSize(page + 1, scrollVelocity);
+            const params = new URLSearchParams({
+              page: (page + 1).toString(),
+              size: nextPageSize.toString(),
+            });
+            if (searchTerm) params.append('search', searchTerm);
+            if (filter) params.append('filter', filter);
+            
+            // Silent prefetch - don't update state, just cache
+            getToken().then(token => {
+              fetch(`/api/v1/catalog/products?${params}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+              }).then(res => res.json()).then(data => {
+                const cacheKey = getCacheKey(page + 1, searchTerm, filter);
+                setCachedData(cacheKey, data);
+              }).catch(() => {}); // Silent fail for prefetch
+            });
+            
+            // Reset prefetch flag after a delay
+            setTimeout(() => setPrefetchedPage(null), 1000);
+          }
+        }, 300); // Longer delay for prefetching
+      }
+    }, { threshold: 0.3, rootMargin: '100px' }); // Start prefetching 100px before visible
+    
+    if (observerRef.current) {
+      observer.observe(observerRef.current);
+    }
+    if (mobileObserverRef.current) {
+      observer.observe(mobileObserverRef.current);
+    }
+    
+    return () => {
+      observer.disconnect();
+      if (prefetchTimeoutRef.current) {
+        clearTimeout(prefetchTimeoutRef.current);
+      }
+    };
+  }, [hasMore, loadingMore, loading, prefetchedPage, page, getOptimalPageSize, scrollVelocity, searchTerm, filter, getToken, getCacheKey, setCachedData]);
 
   // Filtered and sorted products (sorting only, filtering is now backend-driven)
   const filteredAndSortedProducts = useMemo(() => {
@@ -570,7 +777,108 @@ export default function CatalogusPage() {
     return null; // Will redirect
   }
 
+  // Add scroll direction detection
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      if (currentScrollY > lastScrollYRef.current) {
+        setScrollDirection('down');
+      } else if (currentScrollY < lastScrollYRef.current) {
+        setScrollDirection('up');
+      }
+      
+      lastScrollYRef.current = currentScrollY;
+    };
 
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Add performance monitoring
+  const [scrollPerformance, setScrollPerformance] = useState({
+    averageVelocity: 0,
+    maxVelocity: 0,
+    totalScrollDistance: 0,
+    scrollEvents: 0
+  });
+  
+  const performanceRef = useRef({
+    velocities: [] as number[],
+    maxVelocity: 0,
+    totalDistance: 0,
+    eventCount: 0
+  });
+  
+  // Update performance metrics
+  useEffect(() => {
+    if (scrollVelocity > 0) {
+      performanceRef.current.velocities.push(scrollVelocity);
+      performanceRef.current.maxVelocity = Math.max(performanceRef.current.maxVelocity, scrollVelocity);
+      performanceRef.current.eventCount++;
+      
+      // Keep only last 50 velocities for average calculation
+      if (performanceRef.current.velocities.length > 50) {
+        performanceRef.current.velocities.shift();
+      }
+      
+      const average = performanceRef.current.velocities.reduce((a, b) => a + b, 0) / performanceRef.current.velocities.length;
+      
+      setScrollPerformance({
+        averageVelocity: average,
+        maxVelocity: performanceRef.current.maxVelocity,
+        totalScrollDistance: performanceRef.current.totalDistance,
+        scrollEvents: performanceRef.current.eventCount
+      });
+    }
+  }, [scrollVelocity]);
+
+  // Save scroll position before navigation
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem('catalogScrollPosition', window.scrollY.toString());
+    };
+    
+    const handleScroll = () => {
+      scrollPositionRef.current = window.scrollY;
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+  
+  // Restore scroll position after data loads
+  useEffect(() => {
+    if (products.length > 0 && !loading) {
+      const savedPosition = sessionStorage.getItem('catalogScrollPosition');
+      if (savedPosition) {
+        const position = parseInt(savedPosition, 10);
+        if (position > 0) {
+          setTimeout(() => {
+            window.scrollTo(0, position);
+            sessionStorage.removeItem('catalogScrollPosition');
+          }, 100);
+        }
+      }
+    }
+  }, [products.length, loading]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -721,9 +1029,9 @@ export default function CatalogusPage() {
                       </TableHead>
                       <TableHead className="font-semibold text-center">Versie</TableHead>
 
-                      {isAdmin && (
-                        <TableHead className="font-semibold text-center">Status</TableHead>
-                      )}
+                                              {isAdmin && (
+                          <TableHead className="font-semibold text-center">Status</TableHead>
+                        )}
                       <TableHead className="font-semibold text-center">Acties</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1229,6 +1537,24 @@ export default function CatalogusPage() {
           title={`Preview: ${selectedProduct.title}`}
         />
       )}
+
+        {/* Performance Debug Panel (Development Only) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg text-xs max-w-xs z-50">
+            <h4 className="font-bold mb-2">Scroll Performance</h4>
+            <div className="space-y-1">
+              <div>Page Sizes: {INITIAL_PAGE_SIZE}/{SCROLL_PAGE_SIZE}/{FAST_SCROLL_PAGE_SIZE}</div>
+              <div>Avg Velocity: {scrollPerformance.averageVelocity.toFixed(2)} px/ms</div>
+              <div>Max Velocity: {scrollPerformance.maxVelocity.toFixed(2)} px/ms</div>
+              <div>Scroll Events: {scrollPerformance.scrollEvents}</div>
+              <div>Direction: {scrollDirection || 'none'}</div>
+              <div>Cache Size: {cacheRef.current.size}</div>
+              <div>Prefetched: {prefetchedPage || 'none'}</div>
+              <div>Virtual Scroll: {shouldUseVirtualScrolling ? 'ON' : 'OFF'}</div>
+              <div>Total Items: {products.length + (hasMore ? SCROLL_PAGE_SIZE : 0)}</div>
+            </div>
+          </div>
+        )}
 
     </div>
   );
