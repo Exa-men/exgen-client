@@ -4,7 +4,7 @@ import React from 'react';
 import { Button } from "./ui/button";
 import { Menu } from "lucide-react";
 import Link from 'next/link';
-import { useUser } from '@clerk/nextjs';
+import { useUser, useClerk } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useRole } from '../../hooks/use-role';
@@ -14,11 +14,30 @@ import CreditDisplay from './CreditDisplay';
 
 const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin } = useRole();
+  const { signOut } = useClerk();
+  const { isAdmin, clearRole, userRole } = useRole();
   const { openModal } = useCreditModal();
   const { openAuthModal } = useAuthModal();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
+
+  // Clear role cache when signing out
+  React.useEffect(() => {
+    if (!isSignedIn && isLoaded) {
+      // Only clear role if we actually have one to clear
+      // This prevents unnecessary re-renders and infinite loops
+      if (userRole.user_id !== null) {
+        // Add a small delay to let Clerk complete its logout process
+        // This prevents interference with Clerk's internal state management
+        const timeoutId = setTimeout(() => {
+          clearRole();
+        }, 100); // 100ms delay
+        
+        // Cleanup timeout if component unmounts
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [isSignedIn, isLoaded, clearRole, userRole.user_id]); // clearRole is now stable with useCallback
 
   // Helper to determine if a path is active
   const isActive = (href: string) => {

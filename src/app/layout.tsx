@@ -9,6 +9,7 @@ import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
 import CreditOrderModal from './components/CreditOrderModal';
 import { AuthModal } from './components/auth/AuthModal';
+import RolePerformanceDebug from './components/RolePerformanceDebug';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -46,6 +47,8 @@ export default function RootLayout({
                 {children}
                 <CreditOrderModal />
                 <AuthModal />
+                {/* Development-only performance monitoring */}
+                {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />}
               </AuthModalProvider>
             </CreditModalProvider>
           </CreditProvider>
