@@ -14,6 +14,13 @@ interface VerificationResponse {
   version?: string;
   generated_at?: string;
   status: string;
+  
+  // Blockchain verification fields
+  blockchain_verified?: boolean;
+  blockchain_network?: string;
+  blockchain_transaction_hash?: string;
+  blockchain_block_number?: number;
+  blockchain_verification_date?: string;
 }
 
 export default function VerificatiePage() {
@@ -203,6 +210,62 @@ export default function VerificatiePage() {
                       <div>
                         <label className="text-sm font-medium text-gray-500">Gegenereerd Op</label>
                         <p className="text-lg font-semibold text-gray-900">{formatDate(result.generated_at)}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Blockchain Verification Status */}
+                {result.is_valid && (
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={`w-3 h-3 rounded-full ${result.blockchain_verified ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                      <h4 className="text-lg font-semibold text-blue-900">
+                        Blockchain Verificatie
+                      </h4>
+                    </div>
+                    
+                    {result.blockchain_verified ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-green-700">
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="font-medium">Geverifieerd op blockchain</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          {result.blockchain_network && (
+                            <div>
+                              <span className="font-medium text-blue-700">Netwerk:</span>
+                              <span className="ml-2 text-blue-900">{result.blockchain_network}</span>
+                            </div>
+                          )}
+                          {result.blockchain_transaction_hash && (
+                            <div>
+                              <span className="font-medium text-blue-700">Transactie:</span>
+                              <span className="ml-2 text-blue-900 font-mono text-xs">
+                                {result.blockchain_transaction_hash.substring(0, 10)}...
+                              </span>
+                            </div>
+                          )}
+                          {result.blockchain_block_number && (
+                            <div>
+                              <span className="font-medium text-blue-700">Blok:</span>
+                              <span className="ml-2 text-blue-900">{result.blockchain_block_number}</span>
+                            </div>
+                          )}
+                          {result.blockchain_verification_date && (
+                            <div>
+                              <span className="font-medium text-blue-700">Geverifieerd:</span>
+                              <span className="ml-2 text-blue-900">{formatDate(result.blockchain_verification_date)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-600">
+                        <p>Dit document is nog niet geverifieerd op de blockchain.</p>
+                        <p className="text-sm mt-1">
+                          Blockchain verificatie biedt extra beveiliging en onveranderlijkheid.
+                        </p>
                       </div>
                     )}
                   </div>
