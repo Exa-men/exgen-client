@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRole } from '../hooks/use-role';
+import { useRoleContext } from '../app/contexts/RoleContext';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
   fallback = null,
   requireAuth = true
 }) => {
-  const { isAdmin, isUser, hasRole } = useRole();
+  const { isAdmin, isUser, hasRole } = useRoleContext();
 
   // If auth is required but user is not signed in, show fallback
   if (requireAuth && !hasRole) {

@@ -21,7 +21,7 @@ import { useCredits } from '../contexts/CreditContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { cn, downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { useRole } from '../../hooks/use-role';
+import { useRoleContext } from '../contexts/RoleContext';
 
 interface Version {
   version: string;
@@ -55,7 +55,7 @@ export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isAdmin } = useRole();
+  const { userRole, isAdmin } = useRoleContext();
   const { refreshCredits } = useCredits();
   const { openModal } = useCreditModal();
   

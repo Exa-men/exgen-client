@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useUser, useClerk } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
-import { useRole } from '../../hooks/use-role';
+import { useRoleContext } from '../contexts/RoleContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { useAuthModal } from '../contexts/AuthModalContext';
 import CreditDisplay from './CreditDisplay';
@@ -15,7 +15,7 @@ import CreditDisplay from './CreditDisplay';
 const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
   const { signOut } = useClerk();
-  const { isAdmin, clearRole, userRole } = useRole();
+  const { isAdmin, clearRole, userRole } = useRoleContext();
   const { openModal } = useCreditModal();
   const { openAuthModal } = useAuthModal();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);

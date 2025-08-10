@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
+import { RoleProvider } from './contexts/RoleContext';
 import { CreditProvider } from './contexts/CreditContext';
 import { CreditModalProvider } from './contexts/CreditModalContext';
 import { AuthModalProvider } from './contexts/AuthModalContext';
@@ -38,20 +39,22 @@ export default function RootLayout({
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
-          <CreditProvider>
-            <CreditModalProvider>
-              <AuthModalProvider>
-                <SmartPrefetcher />
-                <PageTransitionLoader />
-                <UnifiedHeader />
-                {children}
-                <CreditOrderModal />
-                <AuthModal />
-                {/* Development-only performance monitoring */}
-                {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />}
-              </AuthModalProvider>
-            </CreditModalProvider>
-          </CreditProvider>
+          <RoleProvider>
+            <CreditProvider>
+              <CreditModalProvider>
+                <AuthModalProvider>
+                  <SmartPrefetcher />
+                  <PageTransitionLoader />
+                  <UnifiedHeader />
+                  {children}
+                  <CreditOrderModal />
+                  <AuthModal />
+                  {/* Development-only performance monitoring */}
+                  {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />}
+                </AuthModalProvider>
+              </CreditModalProvider>
+            </CreditProvider>
+          </RoleProvider>
         </body>
       </html>
     </ClerkProvider>

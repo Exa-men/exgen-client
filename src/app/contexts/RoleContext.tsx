@@ -1,12 +1,14 @@
+"use client"
+
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
-import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   trackRoleApiCall, 
   trackRoleCacheHit, 
   trackRoleCacheMiss, 
   trackRoleDuplicateRequest, 
   trackRoleResponseTime 
-} from '../lib/role-performance';
+} from '../../lib/role-performance';
 
 export interface UserRole {
   user_id: string | null;
@@ -14,6 +16,26 @@ export interface UserRole {
   first_name: string | null;
   last_name: string | null;
 }
+
+interface RoleContextType {
+  userRole: UserRole;
+  isAdmin: boolean;
+  isUser: boolean;
+  hasRole: boolean;
+  isLoading: boolean;
+  refreshRole: () => Promise<void>;
+  clearRole: () => void;
+}
+
+const RoleContext = createContext<RoleContextType | undefined>(undefined);
+
+export const useRoleContext = () => {
+  const context = useContext(RoleContext);
+  if (context === undefined) {
+    throw new Error('useRoleContext must be used within a RoleProvider');
+  }
+  return context;
+};
 
 // Cache configuration
 const ROLE_CACHE_KEY = 'exgen_user_role_cache';
@@ -85,7 +107,11 @@ const clearCachedRole = (): void => {
   }
 };
 
-export const useRole = () => {
+interface RoleProviderProps {
+  children: ReactNode;
+}
+
+export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const [userRole, setUserRole] = useState<UserRole>(() => {
@@ -229,6 +255,9 @@ export const useRole = () => {
       }
       activeRequest = null;
       setIsLoading(false);
+      
+      // Clear cached role data to prevent role escalation between users
+      clearCachedRole();
     }
   }, [isLoaded, isSignedIn]);
 
@@ -259,7 +288,7 @@ export const useRole = () => {
     setIsLoading(false);
   }, []);
 
-  return {
+  const value: RoleContextType = {
     userRole,
     isAdmin: userRole.role === 'admin',
     isUser: userRole.role === 'user',
@@ -268,4 +297,10 @@ export const useRole = () => {
     refreshRole,
     clearRole,
   };
-}; 
+
+  return (
+    <RoleContext.Provider value={value}>
+      {children}
+    </RoleContext.Provider>
+  );
+};

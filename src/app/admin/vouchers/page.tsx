@@ -28,7 +28,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 
-import { useRole } from '../../../hooks/use-role';
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
 

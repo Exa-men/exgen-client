@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { useRole } from '../../hooks/use-role';
+import { useRoleContext } from '../contexts/RoleContext';
 
 /**
  * SmartPrefetcher component that prefetches pages based on user authentication and role
@@ -12,7 +12,7 @@ import { useRole } from '../../hooks/use-role';
 const SmartPrefetcher: React.FC = () => {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
-  const { isAdmin } = useRole();
+  const { isAdmin } = useRoleContext();
 
   useEffect(() => {
     // Only start prefetching when user is loaded and signed in
