@@ -65,7 +65,7 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
 
     try {
       const token = await getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/activate`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/credits/welcome-voucher/mark-first-login`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

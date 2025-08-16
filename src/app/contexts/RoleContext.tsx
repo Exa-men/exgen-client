@@ -186,7 +186,8 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         trackRoleApiCall();
         
         // Create the request promise
-        const requestPromise = fetch('/api/v1/user/role', {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const requestPromise = fetch(`${API_BASE_URL}/api/v1/user/role`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
