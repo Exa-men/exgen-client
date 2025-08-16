@@ -34,7 +34,7 @@ export default function VerificatiePage() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/catalog/verify-hash', {
+      const response = await fetch('/api/v1/catalog/verify-hash', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

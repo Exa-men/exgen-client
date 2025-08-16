@@ -1147,7 +1147,7 @@ export default function EditExamPage() {
     try {
       setSaving(true);
       const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}`, {
+      const response = await fetch(`/api/v1/catalog/products/${productId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1996,7 +1996,7 @@ export default function EditExamPage() {
     try {
       setDeleting(true);
       const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}`, {
+      const response = await fetch(`/api/v1/catalog/products/${productId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -60,7 +60,7 @@ export default function ReviewPage() {
         setError(null);
         
         const token = await getToken();
-        const response = await fetch(`/api/catalog/products/${productId}`, {
+        const response = await fetch(`/api/v1/catalog/products/${productId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -111,7 +111,7 @@ export default function ReviewPage() {
     setPurchasing(true);
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/purchase`, {
+      const response = await fetch(`/api/v1/catalog/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

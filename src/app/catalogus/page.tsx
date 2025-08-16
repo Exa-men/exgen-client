@@ -155,7 +155,7 @@ export default function CatalogusPage() {
     setError(null);
     try {
       const token = await getToken();
-      const response = await fetch('/api/catalog/products', {
+      const response = await fetch('/api/v1/catalog/products', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -214,7 +214,7 @@ export default function CatalogusPage() {
       if (pageNum === 1) setLoading(true);
       setError(null);
       const token = await getToken();
-      const url = `/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
+      const url = `/api/v1/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
       
       const response = await fetch(url, {
         headers: {
@@ -323,7 +323,7 @@ export default function CatalogusPage() {
     setError(null);
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/purchase`, {
+      const response = await fetch(`/api/v1/catalog/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -393,7 +393,7 @@ export default function CatalogusPage() {
   const handleSubmitFeedback = async (feedback: any) => {
     try {
       const token = await getToken();
-      const response = await fetch('/api/catalog/feedback', {
+      const response = await fetch('/api/v1/catalog/feedback', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -423,7 +423,7 @@ export default function CatalogusPage() {
     setDeleting(true);
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${deleteProductId}`, {
+      const response = await fetch(`/api/v1/catalog/products/${deleteProductId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -459,7 +459,7 @@ export default function CatalogusPage() {
     setUpdatingStatus(productId);
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}/status`, {
+      const response = await fetch(`/api/v1/catalog/products/${productId}/status`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1225,7 +1225,7 @@ export default function CatalogusPage() {
             setPdfViewerOpen(false);
             setSelectedProduct(null);
           }}
-          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/catalog/preview/${selectedProduct.id}`}
+          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}`}
           title={`Preview: ${selectedProduct.title}`}
         />
       )}

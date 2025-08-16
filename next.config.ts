@@ -26,8 +26,8 @@ const nextConfig: NextConfig = {
     
     return [
       {
-        source: '/api/catalog/:path*',
-        destination: `${backendUrl}/api/catalog/:path*`,
+              source: '/api/v1/catalog/:path*',
+      destination: `${backendUrl}/api/v1/catalog/:path*`,
       },
       {
         source: '/api/v1/:path*',

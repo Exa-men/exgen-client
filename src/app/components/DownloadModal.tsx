@@ -111,7 +111,7 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
   const initiateDownload = async () => {
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/download/${product.id}/initiate${versionId ? `?version_id=${versionId}` : ''}`, {
+      const response = await fetch(`/api/v1/catalog/download/${product.id}/initiate${versionId ? `?version_id=${versionId}` : ''}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -166,7 +166,7 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
       }, 100);
 
       const token = await getToken();
-      const response = await fetch(`/api/catalog/download/${product.id}/package/${dataToUse.download_id}${versionId ? `?version_id=${versionId}` : ''}`, {
+      const response = await fetch(`/api/v1/catalog/download/${product.id}/package/${dataToUse.download_id}${versionId ? `?version_id=${versionId}` : ''}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

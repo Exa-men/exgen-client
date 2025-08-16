@@ -71,7 +71,7 @@ export function useApi() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_BASE_URL}/api/catalog/versions/${versionId}/documents`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/catalog/versions/${versionId}/documents`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -102,78 +102,78 @@ export function useApi() {
 
   return {
     // Product operations
-    getProduct: (id: string) => makeAuthenticatedRequest(`/api/catalog/products/${id}/edit`),
-    updateProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/catalog/products/${id}`, {
+    getProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/edit`),
+    updateProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    saveProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/catalog/products/${id}/save`, {
+    saveProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/save`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    deleteProduct: (id: string) => makeAuthenticatedRequest(`/api/catalog/products/${id}`, {
+    deleteProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
       method: 'DELETE',
     }),
     
     // Version operations
-    createVersion: (productId: string, data: any) => makeAuthenticatedRequest(`/api/catalog/products/${productId}/versions`, {
+    createVersion: (productId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateVersion: (id: string, data: any) => makeAuthenticatedRequest(`/api/catalog/versions/${id}`, {
+    updateVersion: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteVersion: (id: string) => makeAuthenticatedRequest(`/api/catalog/versions/${id}`, {
+    deleteVersion: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}`, {
       method: 'DELETE',
     }),
-    toggleVersionStatus: (id: string, enabled: boolean) => makeAuthenticatedRequest(`/api/catalog/versions/${id}/status`, {
+    toggleVersionStatus: (id: string, enabled: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ is_enabled: enabled }),
     }),
     
     
     // Component operations
-    createComponent: (versionId: string, data: any) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/components`, {
+    createComponent: (versionId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/components`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateComponent: (id: string, data: any) => makeAuthenticatedRequest(`/api/catalog/components/${id}`, {
+    updateComponent: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/components/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteComponent: (id: string) => makeAuthenticatedRequest(`/api/catalog/components/${id}`, {
+    deleteComponent: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/components/${id}`, {
       method: 'DELETE',
     }),
     
     // Criteria operations
-    createCriteria: (componentId: string, data: any) => makeAuthenticatedRequest(`/api/catalog/components/${componentId}/criteria`, {
+    createCriteria: (componentId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/components/${componentId}/criteria`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateCriteria: (id: string, data: any) => makeAuthenticatedRequest(`/api/catalog/criteria/${id}`, {
+    updateCriteria: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteCriteria: (id: string) => makeAuthenticatedRequest(`/api/catalog/criteria/${id}`, {
+    deleteCriteria: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${id}`, {
       method: 'DELETE',
     }),
-    updateLevel: (criteriaId: string, levelId: string, data: any) => makeAuthenticatedRequest(`/api/catalog/criteria/${criteriaId}/levels/${levelId}`, {
+    updateLevel: (criteriaId: string, levelId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${criteriaId}/levels/${levelId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
     
     // File operations
     uploadDocument: uploadFile,
-    deleteDocument: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}`, {
+    deleteDocument: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}`, {
       method: 'DELETE',
     }),
-    setPreviewDocument: (id: string, isPreview: boolean) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/preview`, {
+    setPreviewDocument: (id: string, isPreview: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/preview`, {
       method: 'PATCH',
       body: JSON.stringify({ is_preview: isPreview }),
     }),
-    getDocumentDownloadUrl: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/download`),
-    copyDocuments: (versionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/copy-documents?source_version_id=${sourceVersionId}`, {
+    getDocumentDownloadUrl: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/download`),
+    copyDocuments: (versionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/copy-documents?source_version_id=${sourceVersionId}`, {
       method: 'POST',
     }),
     
@@ -185,15 +185,15 @@ export function useApi() {
         filter,
       });
       if (search) params.append('search', search);
-      return makeAuthenticatedRequest(`/api/catalog/products?${params}`);
+      return makeAuthenticatedRequest(`/api/v1/catalog/products?${params}`);
     },
-    listDocuments: (versionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/documents`),
+    listDocuments: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/documents`),
     
     // S3 Verification operations
-    verifyDocumentS3: (id: string) => makeAuthenticatedRequest(`/api/catalog/documents/${id}/verify-s3`),
-    verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/catalog/versions/${versionId}/documents/verify-all`),
+    verifyDocumentS3: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/verify-s3`),
+    verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/documents/verify-all`),
     
     // Database verification operations
-    verifyDatabase: (productId: string) => makeAuthenticatedRequest(`/api/catalog/products/${productId}/verify-database`),
+    verifyDatabase: (productId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/verify-database`),
   };
 } 
