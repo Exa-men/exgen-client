@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
+import { useApi } from '@/hooks/use-api';
 import { 
   trackRoleApiCall, 
   trackRoleCacheHit, 
@@ -114,6 +115,7 @@ interface RoleProviderProps {
 export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const [userRole, setUserRole] = useState<UserRole>(() => {
     // Initialize with cached data if available
     const cachedRole = getCachedRole();
@@ -132,6 +134,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
   
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequest = useRef<Promise<any> | null>(null);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -155,10 +158,10 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       }
 
       // Prevent duplicate requests
-      if (activeRequest) {
+      if (activeRequest.current) {
         trackRoleDuplicateRequest();
         try {
-          const result = await activeRequest;
+          const result = await activeRequest.current;
           setUserRole(result);
           return;
         } catch (error) {
@@ -173,40 +176,20 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       
       const startTime = Date.now();
       try {
-        const token = await getToken();
-        
-        // Additional safety check: ensure token is valid
-        if (!token) {
-          console.warn('No valid token available, skipping role fetch');
-          setIsLoading(false);
-          return;
-        }
-        
         // Track API call
         trackRoleApiCall();
         
-        // Create the request promise
-        const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-        const requestPromise = fetch(`${API_BASE_URL}/api/v1/user/role`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          signal: abortControllerRef.current.signal,
-        }).then(async (response) => {
-          if (response.ok) {
-            const data = await response.json();
-            // Cache the successful response
-            setCachedRole(data);
-            return data;
-          } else {
-            console.error('Failed to fetch user role:', response.status);
-            throw new Error(`HTTP ${response.status}`);
+        // Create the request promise using centralized API
+        const requestPromise = api.getUserRole().then(async (response: any) => {
+          if (response.error) {
+            console.error('Failed to fetch user role:', response.error);
+            throw new Error(`HTTP ${response.error.status || 'Unknown'}`);
           }
+          return response.data;
         });
 
         // Store the active request
-        activeRequest = requestPromise;
+        activeRequest.current = requestPromise;
         
         const data = await requestPromise;
         setUserRole(data);
@@ -216,8 +199,9 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         trackRoleResponseTime(responseTime);
         
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          // Request was aborted, don't update state
+        if (error instanceof Error &&
+            error.name === 'AbortError') {
+          console.log('Role fetch was aborted');
           return;
         }
         
@@ -230,9 +214,8 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
           setUserRole({ user_id: null, role: 'user', first_name: null, last_name: null });
         }
       } finally {
-        // Clear the active request
-        activeRequest = null;
         setIsLoading(false);
+        activeRequest.current = null;
       }
     };
 
@@ -244,7 +227,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         abortControllerRef.current.abort();
       }
     };
-  }, [isLoaded, isSignedIn, getToken, user?.id]);
+  }, [isLoaded, isSignedIn, user?.id]);
 
   // Cleanup effect for logout
   useEffect(() => {
@@ -254,7 +237,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      activeRequest = null;
+      activeRequest.current = null;
       setIsLoading(false);
       
       // Clear cached role data to prevent role escalation between users
@@ -281,7 +264,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
     }
     
     // Clear the global active request
-    activeRequest = null;
+    activeRequest.current = null;
     
     // Clear cache and reset state
     clearCachedRole();

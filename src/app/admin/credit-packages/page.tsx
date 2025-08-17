@@ -22,8 +22,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Switch } from '../../components/ui/switch';
+import { toast } from 'sonner';
 
 import { cn } from '../../../lib/utils';
+import { useApi } from '@/hooks/use-api';
 
 interface CreditPackage {
   id: string;
@@ -45,8 +47,9 @@ interface CreditPackageForm {
 }
 
 export default function CreditPackagesPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
   // Removed useRole hook - letting backend handle admin checks
   
@@ -86,25 +89,22 @@ export default function CreditPackagesPage() {
   const fetchPackages = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/credits/packages', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getAdminCreditPackages();
       
-      if (response.ok) {
-        const data = await response.json();
-        setPackages(data.packages);
-      } else if (response.status === 403) {
-        console.error('Access denied: Admin privileges required');
-        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
-        router.push('/');
-      } else {
-        setError('Failed to fetch credit packages');
+      if (error) {
+        if (error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch packages:', error);
+        return;
       }
+
+      setPackages((data as any).packages || []);
     } catch (error) {
       console.error('Error fetching packages:', error);
-      setError('Failed to fetch credit packages');
     } finally {
       setLoading(false);
     }
@@ -134,34 +134,26 @@ export default function CreditPackagesPage() {
     setDialogOpen(true);
   };
 
-  const handleDeletePackage = (pkg: CreditPackage) => {
-    setPackageToDelete(pkg);
-    setDeleteConfirmOpen(true);
-  };
+  const handleDeletePackage = async (packageToDelete: CreditPackage) => {
+    if (!confirm('Weet je zeker dat je dit pakket wilt verwijderen?')) {
+      return;
+    }
 
-  const confirmDelete = async () => {
-    if (!packageToDelete) return;
-    
-    setDeleting(packageToDelete.id);
     try {
-      const response = await fetch(`/api/v1/admin/credits/packages/${packageToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
-      
-      if (response.ok) {
-        await fetchPackages();
-        setDeleteConfirmOpen(false);
-        setPackageToDelete(null);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to delete package');
+      setDeleting(packageToDelete.id);
+      const { error } = await api.deleteAdminCreditPackage(packageToDelete.id);
+
+      if (error) {
+        throw new Error(error.detail || 'Failed to delete package');
       }
+
+      // Remove from local state
+      setPackages(prev => prev.filter(p => p.id !== packageToDelete.id));
+      
+      toast.success('Package deleted successfully');
     } catch (error) {
       console.error('Error deleting package:', error);
-      setError('Failed to delete package');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete package');
     } finally {
       setDeleting(null);
     }
@@ -181,7 +173,7 @@ export default function CreditPackagesPage() {
         ? `/api/v1/admin/credits/packages/${editingPackage.id}`
         : '/api/v1/admin/credits/packages';
       
-      const method = editingPackage ? 'PATCH' : 'POST';
+      const method = editingPackage ? 'PUT' : 'POST';
       
       const response = await fetch(url, {
         method,
@@ -455,7 +447,7 @@ export default function CreditPackagesPage() {
               </Button>
               <Button 
                 variant="destructive" 
-                onClick={confirmDelete}
+                onClick={() => handleDeletePackage(packageToDelete!)}
                 disabled={deleting === packageToDelete?.id}
               >
                 {deleting === packageToDelete?.id ? (

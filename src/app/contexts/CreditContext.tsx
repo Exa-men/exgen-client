@@ -1,7 +1,8 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useUser, useAuth } from '@clerk/nextjs';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useUser } from '@clerk/nextjs';
+import { useApi } from '@/hooks/use-api';
 
 interface CreditContextType {
   credits: number;
@@ -25,11 +26,11 @@ interface CreditProviderProps {
 
 export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   const { user, isLoaded: userLoaded } = useUser();
-  const { getToken } = useAuth();
+  const api = useApi();
   const [credits, setCredits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchCredits = async () => {
+  const fetchCredits = useCallback(async () => {
     // Don't fetch if user is not loaded yet
     if (!userLoaded) {
       return;
@@ -43,19 +44,14 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     }
 
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_BASE_URL}/api/v1/credits/balance`, {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getCreditBalance();
       
-      if (response.ok) {
-        const data = await response.json();
-        setCredits(data.credits);
-      } else {
+      if (error) {
+        console.error('Error fetching credits:', error);
         // Fallback to Clerk metadata if API fails
         setCredits(user?.publicMetadata?.credits as number || 0);
+      } else {
+        setCredits(data.credits);
       }
     } catch (error) {
       console.error('Error fetching credits:', error);
@@ -64,15 +60,15 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, userLoaded]);
 
-  const refreshCredits = async () => {
+  const refreshCredits = useCallback(async () => {
     await fetchCredits();
-  };
+  }, [fetchCredits]);
 
   useEffect(() => {
     fetchCredits();
-  }, [user, userLoaded, getToken]);
+  }, [user, userLoaded]);
 
   const value = {
     credits,

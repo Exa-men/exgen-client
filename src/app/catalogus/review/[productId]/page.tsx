@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { useCreditModal } from '../../../contexts/CreditModalContext';
+import { useApi } from '@/hooks/use-api';
 
 interface ExamProduct {
   id: string;
@@ -28,7 +29,7 @@ interface ExamProduct {
 }
 
 export default function ReviewPage() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
   const params = useParams();
@@ -40,6 +41,7 @@ export default function ReviewPage() {
   const [showCreditsError, setShowCreditsError] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const { openModal } = useCreditModal();
+  const api = useApi();
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -53,25 +55,19 @@ export default function ReviewPage() {
   // Fetch product details
   useEffect(() => {
     const fetchProduct = async () => {
-      if (!isSignedIn || !productId) return;
+      if (!isSignedIn) return;
       
       try {
         setLoading(true);
         setError(null);
         
-        const token = await getToken();
-        const response = await fetch(`/api/v1/catalog/products/${productId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch product: ${response.status}`);
+        const { data, error } = await api.getProductById(productId);
+        
+        if (error) {
+          throw new Error(`Failed to fetch product: ${error.detail}`);
         }
-
-        const data = await response.json();
-        setProduct(data.product);
+        
+        setProduct(data as any);
       } catch (err) {
         console.error('Error fetching product:', err);
         setError('Failed to load product details');
@@ -103,34 +99,33 @@ export default function ReviewPage() {
     };
 
     fetchProduct();
-  }, [isSignedIn, getToken, backendUrl, productId]);
+  }, [isSignedIn, getToken, backendUrl, productId, api]);
 
   const handlePurchase = async () => {
+    if (!isSignedIn) {
+      openModal();
+      return;
+    }
+
     if (!product) return;
     
     setPurchasing(true);
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/v1/catalog/purchase`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ productId: product.id }),
+      const { data, error } = await api.purchaseProduct({
+        product_id: product.id,
+        version_id: product.version,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
+      if (error) {
+        if (error.detail && error.detail.toLowerCase().includes('insufficient credits')) {
           setShowCreditsError(true);
           setError(null);
           return;
         }
-        throw new Error(errorData.error || 'Purchase failed');
+        throw new Error(error.detail || 'Purchase failed');
       }
 
-      const result = await response.json();
+      const result = data as any;
       
       // Update the product to show as purchased
       setProduct(prev => prev ? { ...prev, isPurchased: true, downloadUrl: result.downloadUrl } : null);

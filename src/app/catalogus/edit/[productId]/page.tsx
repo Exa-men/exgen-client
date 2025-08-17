@@ -911,197 +911,22 @@ export default function EditExamPage() {
 
   // Fetch product data
   const fetchProduct = async () => {
-    console.log('fetchProduct called:', { isSignedIn, productId, retryCount });
-    
-    if (!productId) {
-      console.log('fetchProduct early return: no productId');
-      return;
-    }
+    if (!isSignedIn) return;
     
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Making API call to getProduct...');
-      const result = await api.getProduct(productId);
-      console.log('API result:', result);
+      const { data, error } = await api.getProductById(params.productId as string);
       
-      if (result.error) {
-        throw new Error(result.error.detail);
+      if (error) {
+        throw new Error(`Failed to fetch product: ${error.detail}`);
       }
-
-      if (!result.data) {
-        throw new Error('No product data received');
-      }
-
-      // Transform backend data to frontend format
-      const backendProduct = result.data as BackendProduct;
-      console.log('Received backend product data:', backendProduct);
-      console.log('Assessment components from backend:', backendProduct.versions?.[0]?.assessment_components);
       
-      const transformedProduct: ExamProduct = {
-        id: backendProduct.id,
-        code: backendProduct.code,
-        title: backendProduct.title,
-        description: backendProduct.description,
-        credits: backendProduct.credits,
-        cohort: backendProduct.cohort,
-        version: backendProduct.version,
-        cost: backendProduct.credits,  // Use credits as the cost
-
-        status: backendProduct.status || 'draft',
-        versions: backendProduct.versions?.map(version => ({
-          id: version.id,
-          version: version.version,
-          releaseDate: version.release_date,
-          isLatest: version.is_latest,
-          isEnabled: version.is_enabled,
-
-          rubricLevels: version.rubric_levels,
-          documents: version.documents?.map(doc => ({
-            id: doc.id,
-            name: doc.name,
-            url: doc.download_url,
-            uploadedAt: doc.uploaded_at,
-            isPreview: doc.is_preview
-          })) || [],
-          assessmentOnderdelen: version.assessment_components?.map(component => ({
-            id: component.id,
-            onderdeel: component.component,  // Fixed: use component.component instead of component.name
-            criteria: component.criteria?.map(criteria => ({
-              id: criteria.id,
-              criteria: criteria.criteria,
-              levels: criteria.levels?.map(level => ({
-                id: level.id,
-                label: level.label,
-                value: level.value
-              })) || []
-            })) || []
-          })) || []
-        })) || []
-      };
-
-      console.log('Transformed product data:', transformedProduct);
-      console.log('Transformed assessment onderdelen:', transformedProduct.versions?.[0]?.assessmentOnderdelen);
-      setProduct(transformedProduct);
-      setLastSavedData(JSON.stringify(transformedProduct)); // Initialize as saved
-      
-      // Reset all save statuses when fresh data is loaded
-      setSaveStatus('saved');
-      setCriteriaSaveStatus('saved');
-      setIsEditing(false);
-      setIsCriteriaEditing(false);
-      setCriteriaEditValues(null);
-      
-      // Set publication status based on product status
-
-      
-      // Initialize edit values
-      setEditValues({
-        code: transformedProduct.code,
-        title: transformedProduct.title,
-        description: transformedProduct.description,
-        credits: transformedProduct.credits?.toString() || '',
-        cohort: transformedProduct.cohort || ''
-      });
+      setProduct(data as any);
     } catch (err) {
       console.error('Error fetching product:', err);
       setError('Failed to load product details');
-      
-      // Only use mock data in development environment
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Using mock data for development');
-        const mockProduct: ExamProduct = {
-          id: productId,
-          code: 'EX001',
-          title: 'Basis Examen Nederlands',
-          description: 'Fundamentele Nederlandse taalvaardigheid voor MBO niveau 2',
-          credits: 5,
-          cohort: '2024-25',
-          version: '2.1',
-          cost: 25.00,
-
-          versions: [
-            {
-              id: 'v1',
-              version: '2.1',
-              releaseDate: '2024-01-15',
-              isLatest: true,
-              isEnabled: true,
-              rubricLevels: 3,
-              assessmentOnderdelen: [
-                {
-                  id: 'onderdeel1',
-                  onderdeel: 'Grammatica',
-                  criteria: [
-                    {
-                      id: 'criteria1',
-                      criteria: 'Correct gebruik van werkwoorden',
-                      levels: [
-                        { id: 'level1', label: 'Onvoldoende', value: 'Veel fouten in werkwoordvervoeging' },
-                        { id: 'level2', label: 'Voldoende', value: 'Enkele fouten in werkwoordvervoeging' },
-                        { id: 'level3', label: 'Goed', value: 'Correcte werkwoordvervoeging' }
-                      ]
-                    }
-                  ]
-                }
-              ],
-              documents: [
-                {
-                  id: 'doc1',
-                  name: 'Beoordelingscriteria.pdf',
-                  url: '/documents/criteria.pdf',
-                  uploadedAt: '2024-01-15',
-                  isPreview: false
-                },
-                {
-                  id: 'doc2',
-                  name: 'Instructies.pdf',
-                  url: '/documents/instructions.pdf',
-                  uploadedAt: '2024-01-15',
-                  isPreview: false
-                },
-                {
-                  id: 'doc3',
-                  name: 'Voorbeelden.pdf',
-                  url: '/documents/examples.pdf',
-                  uploadedAt: '2024-01-15',
-                  isPreview: false
-                }
-              ]
-            },
-            {
-              id: 'v2',
-              version: '2.2',
-              releaseDate: '2024-01-20',
-              isLatest: false,
-              isEnabled: false,
-              rubricLevels: 3,
-              assessmentOnderdelen: [],
-              documents: []
-            }
-          ]
-        };
-        setProduct(mockProduct);
-        setLastSavedData(JSON.stringify(mockProduct)); // Initialize as saved
-        
-        // Reset all save statuses when mock data is loaded
-        setSaveStatus('saved');
-        setCriteriaSaveStatus('saved');
-        setIsEditing(false);
-        setIsCriteriaEditing(false);
-        setCriteriaEditValues(null);
-        setEditValues({
-          code: mockProduct.code,
-          title: mockProduct.title,
-          description: mockProduct.description,
-          credits: mockProduct.credits.toString(),
-          cohort: mockProduct.cohort
-        });
-      } else {
-        // In production, don't set mock data, let the error state handle it
-        setProduct(null);
-      }
     } finally {
       setLoading(false);
     }

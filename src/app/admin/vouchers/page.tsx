@@ -30,6 +30,8 @@ import { Textarea } from '../../components/ui/textarea';
 
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface Voucher {
   id: string;
@@ -46,8 +48,9 @@ interface Voucher {
 }
 
 export default function VouchersPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
   // Removed useRole hook - letting backend handle admin checks
   
@@ -93,22 +96,20 @@ export default function VouchersPage() {
   const fetchVouchers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/vouchers', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getAdminVouchers();
       
-      if (response.ok) {
-        const data = await response.json();
-        setVouchers(data.vouchers);
-      } else if (response.status === 403) {
-        console.error('Access denied: Admin privileges required');
-        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
-        router.push('/');
-      } else {
-        console.error('Failed to fetch vouchers');
+      if (error) {
+        if (error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch vouchers:', error);
+        return;
       }
+
+      setVouchers((data as any).vouchers || []);
     } catch (error) {
       console.error('Error fetching vouchers:', error);
     } finally {
@@ -117,34 +118,36 @@ export default function VouchersPage() {
   };
 
   const handleCreateVoucher = async () => {
+    if (!newVoucherCredits) {
+      alert('Vul alle verplichte velden in');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/v1/admin/vouchers', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credits: newVoucherCredits,
-          expires_at: new Date(newVoucherExpiresAt).toISOString()
-        })
+      const { data, error } = await api.createAdminVoucher({
+        credits: newVoucherCredits,
+        expires_at: new Date(newVoucherExpiresAt).toISOString(),
       });
 
-      if (response.ok) {
-        const newVoucher = await response.json();
-        setVouchers(prev => [newVoucher, ...prev]);
-        setCreateDialogOpen(false);
-        setNewVoucherCredits(10);
-        const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 10);
-        setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het aanmaken van voucher: ${error.detail}`);
+      if (error) {
+        throw new Error(error.detail || 'Failed to create voucher');
       }
+
+      // Add to local state
+      setVouchers(prev => [(data as any), ...prev]);
+      
+      // Reset form
+      setNewVoucherCredits(10);
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 10);
+      setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
+      
+      toast.success('Voucher created successfully');
     } catch (error) {
       console.error('Error creating voucher:', error);
-      alert('Er is een fout opgetreden bij het aanmaken van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to create voucher');
+    } finally {
+      // setCreatingVoucher(false); // This state variable was removed
     }
   };
 
@@ -153,54 +156,49 @@ export default function VouchersPage() {
     
     setUpdatingVoucher(selectedVoucher.id);
     try {
-      const response = await fetch(`/api/v1/admin/vouchers/${selectedVoucher.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credits: editVoucherCredits,
-          expires_at: new Date(editVoucherExpiresAt).toISOString()
-        })
+      const { error } = await api.updateAdminVoucher(selectedVoucher.id, {
+        credits: editVoucherCredits,
+        expires_at: new Date(editVoucherExpiresAt).toISOString(),
       });
 
-      if (response.ok) {
-        const updatedVoucher = await response.json();
-        setVouchers(prev => prev.map(v => v.id === selectedVoucher.id ? updatedVoucher : v));
-        setEditDialogOpen(false);
-        setSelectedVoucher(null);
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het bijwerken van voucher: ${error.detail}`);
+      if (error) {
+        throw new Error(error.detail || 'Failed to update voucher');
       }
+
+      // Update local state
+      setVouchers(prev => prev.map(v => 
+        v.id === selectedVoucher.id ? { ...v, credits: editVoucherCredits, expires_at: new Date(editVoucherExpiresAt).toISOString() } : v
+      ));
+      
+      toast.success('Voucher updated successfully');
     } catch (error) {
       console.error('Error updating voucher:', error);
-      alert('Er is een fout opgetreden bij het bijwerken van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to update voucher');
     } finally {
       setUpdatingVoucher(null);
     }
   };
 
   const handleDeleteVoucher = async (voucherId: string) => {
-    setDeletingVoucher(voucherId);
-    try {
-      const response = await fetch(`/api/v1/admin/vouchers/${voucherId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+    if (!confirm('Weet je zeker dat je deze voucher wilt verwijderen?')) {
+      return;
+    }
 
-      if (response.ok) {
-        setVouchers(prev => prev.filter(v => v.id !== voucherId));
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het verwijderen van voucher: ${error.detail}`);
+    try {
+      setDeletingVoucher(voucherId);
+      const { error } = await api.deleteAdminVoucher(voucherId);
+
+      if (error) {
+        throw new Error(error.detail || 'Failed to delete voucher');
       }
+
+      // Remove from local state
+      setVouchers(prev => prev.filter(v => v.id !== voucherId));
+      
+      toast.success('Voucher deleted successfully');
     } catch (error) {
       console.error('Error deleting voucher:', error);
-      alert('Er is een fout opgetreden bij het verwijderen van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to delete voucher');
     } finally {
       setDeletingVoucher(null);
     }

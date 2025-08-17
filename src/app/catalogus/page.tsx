@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
@@ -22,6 +22,8 @@ import { useCreditModal } from '../contexts/CreditModalContext';
 import { cn, downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { useRoleContext } from '../contexts/RoleContext';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface Version {
   version: string;
@@ -154,40 +156,30 @@ export default function CatalogusPage() {
     setSavingNewProduct(true);
     setError(null);
     try {
-      const token = await getToken();
-      const response = await fetch('/api/v1/catalog/products', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: newProduct.code,
-          title: newProduct.title,
-          description: newProduct.description,
-          cost: Number(newProduct.credits),
-          credits: Number(newProduct.credits),
-          cohort: newProduct.cohort,
-
-          status: newProduct.status,
-        }),
+      const { data: created, error } = await api.createProduct({
+        code: newProduct.code,
+        title: newProduct.title,
+        description: newProduct.description,
+        cost: Number(newProduct.credits),
+        credits: Number(newProduct.credits),
+        cohort: newProduct.cohort,
+        status: newProduct.status,
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 409 && errorData.detail === "Product code already exists") {
+
+      if (error) {
+        if (error.status === 409 && error.detail === "Product code already exists") {
           throw new Error(`Product code "${newProduct.code}" bestaat al. Gebruik een unieke code.`);
         }
-        throw new Error(errorData.detail || errorData.error || 'Failed to add product');
+        throw new Error(error.detail || 'Failed to add product');
       }
-      const created = await response.json();
       
       // Check if product already exists to prevent duplicates
       setProducts((prev) => {
-        const exists = prev.some(product => product.id === created.id);
+        const exists = prev.some(product => product.id === (created as any).id);
         if (exists) {
           return prev; // Don't add if already exists
         }
-        return [created, ...prev];
+        return [(created as any), ...prev];
       });
       
       handleClearNewProduct();
@@ -198,7 +190,7 @@ export default function CatalogusPage() {
     }
   };
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const api = useApi();
 
   // Redirect if not signed in
   useEffect(() => {
@@ -213,34 +205,26 @@ export default function CatalogusPage() {
     try {
       if (pageNum === 1) setLoading(true);
       setError(null);
-      const token = await getToken();
-      const url = `/api/v1/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
       
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { data, error: fetchError } = await api.listProducts(pageNum, PAGE_SIZE, searchTerm, filter);
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status}`);
+      if (fetchError) {
+        throw new Error(`Failed to fetch products: ${fetchError.detail}`);
       }
-      
-      const data = await response.json();
       
       setProducts(prev => {
         if (append) {
           // When appending, filter out any duplicates
           const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
-          const newProducts = (data.products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
+          const newProducts = ((data as any).products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
           return [...prev, ...newProducts];
         } else {
           // When replacing, use the new data directly
-          return (data.products || []);
+          return ((data as any).products || []);
         }
       });
-      setHasMore(data.hasMore);
-      setPage(data.page);
+      setHasMore((data as any).hasMore);
+      setPage((data as any).page);
     } catch (err) {
       console.error('Error fetching products:', err);
       setError('Failed to load exam products');
@@ -251,7 +235,7 @@ export default function CatalogusPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [isSignedIn, getToken, searchTerm, filter, PAGE_SIZE]);
+  }, [isSignedIn, api, searchTerm, filter, PAGE_SIZE]);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
@@ -417,29 +401,22 @@ export default function CatalogusPage() {
   };
 
   // Handler for delete
-  const handleDeleteProduct = async () => {
-    if (!deleteProductId) return;
-    
+  const handleDeleteProduct = async (productId: string) => {
     setDeleting(true);
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/v1/catalog/products/${deleteProductId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const { error } = await api.deleteProduct(productId);
 
-      if (response.ok) {
-        setProducts(products.filter(p => p.id !== deleteProductId));
-        setDeleteProductId(null);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Fout bij het verwijderen van het product');
+      if (error) {
+        throw new Error(error.detail || 'Failed to delete product');
       }
+
+      // Remove from local state
+      setProducts(products.filter(p => p.id !== productId));
+      setDeleteProductId(null);
+      toast.success('Product successfully deleted');
     } catch (error) {
-      setError('Fout bij het verwijderen van het product');
+      console.error('Error deleting product:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete product');
     } finally {
       setDeleting(false);
     }
@@ -458,26 +435,17 @@ export default function CatalogusPage() {
 
     setUpdatingStatus(productId);
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/v1/catalog/products/${productId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const { error } = await api.updateProductStatus(productId, newStatus);
 
-      if (response.ok) {
-        setProducts(products.map(p => 
-          p.id === productId ? { ...p, status: newStatus } : p
-        ));
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Fout bij het bijwerken van de status');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update product status');
       }
+
+      setProducts(products.map(p => 
+        p.id === productId ? { ...p, status: newStatus } : p
+      ));
     } catch (error) {
-      setError('Fout bij het bijwerken van de status');
+      setError(error instanceof Error ? error.message : 'Failed to update product status');
     } finally {
       setUpdatingStatus(null);
     }
@@ -513,17 +481,14 @@ export default function CatalogusPage() {
       if (!isSignedIn || !user) return;
       
       try {
-        const token = await getToken();
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/status`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const { data, error } = await api.getWelcomeVoucherStatus();
 
-        if (response.ok) {
-          const data = await response.json();
-          setShowWelcomeBanner(data.should_show_banner);
+        if (error) {
+          console.error('Error checking welcome banner status:', error);
+          return;
         }
+
+        setShowWelcomeBanner((data as any).should_show_banner);
       } catch (error) {
         console.error('Error checking welcome banner status:', error);
       } finally {
@@ -532,7 +497,7 @@ export default function CatalogusPage() {
     };
 
     checkWelcomeBanner();
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user, api]);
 
   // Mark first login
   useEffect(() => {
@@ -540,20 +505,18 @@ export default function CatalogusPage() {
       if (!isSignedIn || !user) return;
       
       try {
-        const token = await getToken();
-        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/mark-first-login`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const { error } = await api.markFirstLogin();
+        
+        if (error) {
+          console.error('Error marking first login:', error);
+        }
       } catch (error) {
         console.error('Error marking first login:', error);
       }
     };
 
     markFirstLogin();
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user, api]);
 
   if (!isLoaded) {
     return (
@@ -721,9 +684,9 @@ export default function CatalogusPage() {
                       </TableHead>
                       <TableHead className="font-semibold text-center">Versie</TableHead>
 
-                      {isAdmin && (
-                        <TableHead className="font-semibold text-center">Status</TableHead>
-                      )}
+                                              {isAdmin && (
+                          <TableHead className="font-semibold text-center">Status</TableHead>
+                        )}
                       <TableHead className="font-semibold text-center">Acties</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1160,7 +1123,7 @@ export default function CatalogusPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleDeleteProduct}
+              onClick={() => handleDeleteProduct(deleteProductId!)}
               disabled={deleting}
               className="transition-colors hover:bg-red-100 hover:text-red-700"
             >

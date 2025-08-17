@@ -4,17 +4,23 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { CheckCircle, Gift, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
+import { useUser } from '@clerk/nextjs';
+import { toast } from 'sonner';
+import { useApi } from '@/hooks/use-api';
 
 interface WelcomeBannerProps {
   onVoucherActivated: (newBalance: number) => void;
 }
 
 export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps) {
+  const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const [isActivating, setIsActivating] = useState(false);
   const [isCelebrating, setIsCelebrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(true);
+  const [voucherActivated, setVoucherActivated] = useState(false);
 
   const triggerConfetti = () => {
     try {
@@ -60,25 +66,29 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
   };
 
   const handleActivateVoucher = async () => {
+    if (!isSignedIn || !user) return;
+
     setIsActivating(true);
     setError(null);
 
     try {
-      const token = await getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/credits/welcome-voucher/mark-first-login`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const { error } = await api.markFirstLogin();
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to activate voucher');
+      if (error) {
+        console.error('Error activating welcome voucher:', error);
+        setError('Failed to activate welcome voucher');
+        return;
       }
 
-      const result = await response.json();
+      // Update local state
+      setVoucherActivated(true);
+      
+      // Notify parent component
+      if (onVoucherActivated) {
+        onVoucherActivated(10); // Welcome voucher gives 10 credits
+      }
+      
+      toast.success('Welcome voucher activated successfully! You received 10 credits.');
       
       // Switch to celebration mode
       setIsActivating(false);
@@ -90,12 +100,13 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
       // Wait a bit for confetti to show, then hide banner
       setTimeout(() => {
         setIsVisible(false);
-        onVoucherActivated(result.new_balance);
       }, 2000);
 
     } catch (error) {
-      console.error('Voucher activation error:', error);
+      console.error('Error activating welcome voucher:', error);
       setError(error instanceof Error ? error.message : 'Niet gelukt om de voucher te activeren, neem contact via support@exa.men');
+      setIsActivating(false);
+    } finally {
       setIsActivating(false);
     }
   };

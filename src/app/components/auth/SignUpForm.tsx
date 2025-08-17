@@ -187,6 +187,11 @@ export const SignUpForm: React.FC = () => {
       }
       
       console.log('=== SWITCHING TO VERIFICATION SENT ===');
+      
+      // Note: User will be automatically created in backend when they first access a protected endpoint
+      // This ensures proper session token handling and avoids timing issues
+      console.log('User will be created in backend on first protected endpoint access');
+      
       // Clerk handles email verification automatically
       switchModalMode('verification-sent');
       console.log('Modal mode switched to verification-sent');

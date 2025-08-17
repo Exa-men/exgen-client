@@ -16,6 +16,8 @@ import { useCreditModal } from '../contexts/CreditModalContext';
 import { useRoleContext } from '../contexts/RoleContext';
 import { downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface CreditPackage {
   id: string;
@@ -38,6 +40,7 @@ interface CreditOrderForm {
   country: string;
   comments?: string;
   terms_accepted: boolean;
+  quantity: number;
 }
 
 interface FieldValidation {
@@ -53,6 +56,7 @@ const CreditOrderModal: React.FC = () => {
   const { user } = useUser();
   const { getToken } = useAuth();
   const { isOpen, closeModal } = useCreditModal();
+  const api = useApi();
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -68,7 +72,8 @@ const CreditOrderModal: React.FC = () => {
     city: '',
     postal_code: '',
     country: 'Netherlands',
-    terms_accepted: false
+    terms_accepted: false,
+    quantity: 1
   });
 
   // Voucher redemption state
@@ -113,20 +118,17 @@ const CreditOrderModal: React.FC = () => {
   const fetchPackages = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/credits/packages', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getCreditPackages();
       
-      if (response.ok) {
-        const data = await response.json();
-        setPackages(data.packages);
+      if (error) {
+        toast.error(`Failed to fetch packages: ${error.detail}`);
+        setPackages([]); // Set empty array on error
       } else {
-        console.error('Failed to fetch packages');
+        setPackages(data as CreditPackage[]);
       }
     } catch (error) {
       console.error('Error fetching packages:', error);
+      setPackages([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -188,22 +190,15 @@ const CreditOrderModal: React.FC = () => {
 
     setOrderLoading(true);
     try {
-      const response = await fetch('/api/v1/credits/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(orderForm)
-      });
-
-      if (response.ok) {
-        setStep('success');
-        await refreshCredits();
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.createCreditOrder(orderForm);
+      
+      if (error) {
         alert(`Fout bij het plaatsen van de bestelling: ${error.detail}`);
+        return;
       }
+      
+      setStep('success');
+      await refreshCredits();
     } catch (error) {
       console.error('Error submitting order:', error);
       alert('Er is een fout opgetreden bij het plaatsen van de bestelling.');
@@ -229,7 +224,8 @@ const CreditOrderModal: React.FC = () => {
       city: '',
       postal_code: '',
       country: 'Netherlands',
-      terms_accepted: false
+      terms_accepted: false,
+      quantity: 1
     });
     // Reset voucher state
     setVoucherCode('');
@@ -251,38 +247,28 @@ const CreditOrderModal: React.FC = () => {
     setRedeemResult(null);
 
     try {
-      const response = await fetch('/api/v1/vouchers/redeem', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: voucherCode.trim().toUpperCase()
-        })
-      });
+      const { data, error } = await api.redeemVoucher({ code: voucherCode.trim().toUpperCase() });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setRedeemResult({
-          success: true,
-          message: data.message,
-          creditsAdded: data.credits_added
-        });
-        setVoucherCode('');
-        // Refresh user credits
-        await refreshCredits();
-        // Close modal after successful redemption
-        setTimeout(() => {
-          handleClose();
-        }, 2000);
-      } else {
+      if (error) {
         setRedeemResult({
           success: false,
-          message: data.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
+          message: error.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
         });
+        return;
       }
+
+      setRedeemResult({
+        success: true,
+        message: (data as any).message,
+        creditsAdded: (data as any).credits_added
+      });
+      setVoucherCode('');
+      // Refresh user credits
+      await refreshCredits();
+      // Close modal after successful redemption
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
     } catch (error) {
       console.error('Error redeeming voucher:', error);
       setRedeemResult({
@@ -316,21 +302,13 @@ const CreditOrderModal: React.FC = () => {
     }
     try {
       setCrudError(null);
-      const response = await fetch(`/api/v1/admin/credits/packages/${editingId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(editData)
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setEditingId(null);
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.updateAdminCreditPackage(editingId!, editData);
+      if (error) {
         setCrudError(error.detail || 'Fout bij opslaan');
+        return;
       }
+      await fetchPackages();
+      setEditingId(null);
     } catch (e) {
       setCrudError('Fout bij opslaan');
     }
@@ -349,19 +327,13 @@ const CreditOrderModal: React.FC = () => {
     setDeleteLoading(true);
     setCrudError(null);
     try {
-      const response = await fetch(`/api/v1/admin/credits/packages/${deleteId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setDeleteId(null);
-      } else {
-        const error = await response.json();
+      const { error } = await api.deleteAdminCreditPackage(deleteId);
+      if (error) {
         setCrudError(error.detail || 'Fout bij verwijderen');
+        return;
       }
+      await fetchPackages();
+      setDeleteId(null);
     } catch (e) {
       setCrudError('Fout bij verwijderen');
     } finally {
@@ -384,21 +356,13 @@ const CreditOrderModal: React.FC = () => {
     }
     try {
       setCrudError(null);
-      const response = await fetch('/api/v1/admin/credits/packages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(createData)
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setCreating(false);
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.createAdminCreditPackage(createData);
+      if (error) {
         setCrudError(error.detail || 'Fout bij aanmaken');
+        return;
       }
+      await fetchPackages();
+      setCreating(false);
     } catch (e) {
       setCrudError('Fout bij aanmaken');
     }
@@ -445,7 +409,7 @@ const CreditOrderModal: React.FC = () => {
               ) : (
                 <>
                   <div className="grid gap-4">
-                    {packages.map((pkg) => (
+                    {(packages || []).map((pkg) => (
                       <Card
                         key={pkg.id}
                         className={cn(

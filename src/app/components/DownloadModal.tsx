@@ -15,6 +15,8 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface Version {
   version: string;
@@ -48,7 +50,8 @@ interface DownloadInfo {
 type ModalState = 'processing' | 'complete' | 'error';
 
 export default function DownloadModal({ open, onClose, product, versionId }: DownloadModalProps) {
-  const { getToken } = useAuth();
+  const { isSignedIn } = useAuth();
+  const api = useApi();
   const [state, setState] = useState<ModalState>('processing');
   const [downloadInfo, setDownloadInfo] = useState<DownloadInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +60,7 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
   const [processingPhase, setProcessingPhase] = useState(1);
   const [processingMessage, setProcessingMessage] = useState('Download wordt voorbereid...');
   const [downloadCompleted, setDownloadCompleted] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -110,28 +114,46 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
 
   const initiateDownload = async () => {
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/v1/catalog/download/${product.id}/initiate${versionId ? `?version_id=${versionId}` : ''}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      setDownloading(true);
+      setError(null);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Er is een fout opgetreden bij het voorbereiden van de download.');
+      // Step 1: Initiate download
+      const { data: initiateData, error: initiateError } = await api.initiateDownload(product.id, versionId);
+
+      if (initiateError) {
+        throw new Error(initiateError.detail || 'Failed to initiate download');
       }
 
-      const data: DownloadInfo = await response.json();
-      setDownloadInfo(data);
-      // Continue with the download process
-      await handleDownload(data);
-    } catch (err) {
-      console.error('Download initiation failed:', err);
-      setError(err instanceof Error ? err.message : 'Er is een fout opgetreden bij het voorbereiden van de download.');
-      setState('error');
+      const downloadId = (initiateData as any).download_id;
+      
+      // Step 2: Get download package
+      const { data: packageData, error: packageError } = await api.getDownloadPackage(product.id, downloadId, versionId);
+
+      if (packageError) {
+        throw new Error(packageError.detail || 'Failed to get download package');
+      }
+
+      // Handle successful download
+      if ((packageData as any).download_url) {
+        // Create a temporary link and click it
+        const link = document.createElement('a');
+        link.href = (packageData as any).download_url;
+        link.download = (packageData as any).filename || `${product.code}-${product.title}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('Download started successfully!');
+        onClose();
+      } else {
+        throw new Error('No download URL received');
+      }
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      setError(error instanceof Error ? error.message : 'Download failed');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -147,61 +169,7 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
     }
   };
 
-  const handleDownload = async (downloadData?: DownloadInfo) => {
-    const dataToUse = downloadData || downloadInfo;
-    if (!dataToUse) return;
 
-    try {
-      // Start progress from current position (50% from phase 3)
-      let currentProgress = 50;
-      
-      // Simulate progress during download
-      const progressInterval = setInterval(() => {
-        currentProgress = Math.min(currentProgress + 5, 90);
-        setProgress(currentProgress);
-        
-        if (currentProgress >= 90) {
-          clearInterval(progressInterval);
-        }
-      }, 100);
-
-      const token = await getToken();
-      const response = await fetch(`/api/v1/catalog/download/${product.id}/package/${dataToUse.download_id}${versionId ? `?version_id=${versionId}` : ''}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Download mislukt');
-      }
-
-      // Get the blob and create download link
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${product.code} - ${product.title} ${dataToUse.version}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      clearInterval(progressInterval);
-      setDownloadCompleted(true);
-      
-      // Ensure we reach 100% completion
-      setTimeout(() => {
-        setProgress(100);
-        setState('complete');
-      }, 200);
-
-    } catch (err) {
-      console.error('Download failed:', err);
-      setError('Er is een fout opgetreden bij het downloaden van het bestand.');
-      setState('error');
-    }
-  };
 
   const openVerificationPage = () => {
     window.open('/verificatie', '_blank');

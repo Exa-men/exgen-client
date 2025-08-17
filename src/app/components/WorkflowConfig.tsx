@@ -95,6 +95,13 @@ export default function WorkflowConfig({
   if (!availableModels) {
     return null;
   }
+
+  // Additional guard: ensure availableModels.available_models exists
+  if (!availableModels.available_models) {
+    console.warn('WorkflowConfig: availableModels.available_models is undefined', availableModels);
+    return null;
+  }
+
   // 3. Remove all useAuth, useEffect for fetching, and API calls. Replace with props usage and callback invocations.
   // 4. Replace setWorkflowConfig, setPrompts, setAvailableModels, etc. with onConfigChange, onPromptChange, etc.
   // 5. Remove backendUrl and all references to it.

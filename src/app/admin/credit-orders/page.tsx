@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 // Removed useRole import - letting backend handle admin checks
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
+import { useApi } from '@/hooks/use-api';
 
 interface CreditOrder {
   id: string;
@@ -61,8 +62,9 @@ interface CreditPackage {
 }
 
 export default function CreditOrdersPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
   // Removed useRole hook - letting backend handle admin checks
   const { refreshCredits } = useCredits();
@@ -96,22 +98,20 @@ export default function CreditOrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/credits/orders', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getAdminCreditOrders();
       
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data.orders);
-      } else if (response.status === 403) {
-        console.error('Access denied: Admin privileges required');
-        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
-        router.push('/');
-      } else {
-        console.error('Failed to fetch orders:', response.status);
+      if (error) {
+        if (error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch orders:', error);
+        return;
       }
+
+      setOrders(data.orders);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -121,43 +121,38 @@ export default function CreditOrdersPage() {
 
   const fetchPackages = async () => {
     try {
-      const response = await fetch('/api/v1/credits/packages', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getCreditPackages();
       
-      if (response.ok) {
-        const data = await response.json();
-        setPackages(data.packages);
+      if (error) {
+        console.error('Error fetching packages:', error);
+        setPackages([]);
+        return;
       }
+
+      // Backend returns packages directly as an array, not wrapped in an object
+      setPackages(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching packages:', error);
+      setPackages([]); // Set empty array on error to prevent undefined
     }
   };
 
   const handleFulfillOrder = async (orderId: string) => {
     setFulfillingOrder(orderId);
     try {
-      const response = await fetch(`/api/v1/admin/credits/orders/${orderId}/fulfill`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          fulfilled_by: user?.id || '' 
-        })
+      const { error } = await api.fulfillCreditOrder(orderId, { 
+        fulfilled_by: user?.id || '' 
       });
 
-      if (response.ok) {
-        // Refresh orders and credits
-        fetchOrders();
-        await refreshCredits();
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het vervullen van de bestelling: ${error.detail}`);
+      if (error) {
+        const errorMessage = error.detail || 'Failed to fulfill order';
+        alert(`Fout bij het vervullen van de bestelling: ${errorMessage}`);
+        return;
       }
+
+      // Refresh orders and credits
+      fetchOrders();
+      await refreshCredits();
     } catch (error) {
       console.error('Error fulfilling order:', error);
       alert('Er is een fout opgetreden bij het vervullen van de bestelling.');
@@ -172,21 +167,15 @@ export default function CreditOrdersPage() {
     }
 
     try {
-      const response = await fetch(`/api/v1/admin/credits/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: 'cancelled' })
-      });
+      const { error } = await api.updateOrderStatus(orderId, 'cancelled');
 
-      if (response.ok) {
-        fetchOrders();
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het annuleren van de bestelling: ${error.detail}`);
+      if (error) {
+        const errorMessage = error.detail || 'Failed to cancel order';
+        alert(`Fout bij het annuleren van de bestelling: ${errorMessage}`);
+        return;
       }
+
+      fetchOrders();
     } catch (error) {
       console.error('Error cancelling order:', error);
       alert('Er is een fout opgetreden bij het annuleren van de bestelling.');

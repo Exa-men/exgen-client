@@ -9,9 +9,11 @@ import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { toast } from 'sonner';
 
 import { AdminOnly } from '../../components/RoleGuard';
 import { cn } from '../../lib/utils';
+import { useApi } from '@/hooks/use-api';
 
 interface UserData {
   id: string;
@@ -34,8 +36,9 @@ type SortField = 'first_name' | 'last_name' | 'email' | 'role' | 'credits' | 'sc
 type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
   
   const [users, setUsers] = useState<UserData[]>([]);
@@ -46,6 +49,10 @@ export default function UsersPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [updatingCredits, setUpdatingCredits] = useState<string | null>(null);
+  const [updatingEmail, setUpdatingEmail] = useState<string | null>(null);
+  const [updatingSchool, setUpdatingSchool] = useState<string | null>(null);
   const [welcomeVoucherStats, setWelcomeVoucherStats] = useState({
     total_users: 0,
     activated_welcome_vouchers: 0,
@@ -68,193 +75,153 @@ export default function UsersPage() {
   }, [isSignedIn]);
 
   const fetchUsers = async () => {
-    if (!isSignedIn) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      const response = await fetch('/api/v1/admin/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const { data, error } = await api.getAdminUsers();
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch users: ${response.status}`);
+      if (error) {
+        if (error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch users:', error);
+        return;
       }
-      
-      const data: UserListResponse = await response.json();
-      setUsers(data.users);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      setError('Failed to load users');
-      setUsers([]);
+
+      setUsers((data as any).users || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchWelcomeVoucherStats = async () => {
-    if (!isSignedIn) return;
     try {
-      const token = await getToken();
-      const response = await fetch('/api/v1/admin/welcome-voucher/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const { data, error } = await api.getWelcomeVoucherStats();
       
-      if (response.ok) {
-        const data = await response.json();
-        setWelcomeVoucherStats(data);
+      if (error) {
+        console.error('Error fetching welcome voucher stats:', error);
+        return;
       }
-    } catch (err) {
-      console.error('Error fetching welcome voucher stats:', err);
+
+      setWelcomeVoucherStats(data as any);
+    } catch (error) {
+      console.error('Error fetching welcome voucher stats:', error);
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: 'user' | 'admin') => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/role`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ role: newRole }),
-      });
+      setUpdatingRole(userId);
+      const { error } = await api.updateUserRole(userId, newRole);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user role');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update user role');
       }
 
-      // Update the user in the local state
+      // Update local state
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
+        user.id === userId ? { ...user, role: newRole as 'user' | 'admin' } : user
       ));
-    } catch (err) {
-      console.error('Error updating user role:', err);
-      setError('Failed to update user role');
+      
+      toast.success('User role updated successfully');
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user role');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingRole(null);
     }
   };
 
-  const updateUserCredits = async (userId: string, credits: number) => {
+  const handleCreditsChange = async (userId: string, newCredits: number) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/credits`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ credits }),
-      });
+      setUpdatingCredits(userId);
+      const { error } = await api.updateUserCredits(userId, newCredits);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user credits');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update user credits');
       }
 
-      // Update the user in the local state
+      // Update local state
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, credits } : user
+        user.id === userId ? { ...user, credits: newCredits } : user
       ));
-    } catch (err) {
-      console.error('Error updating user credits:', err);
-      setError('Failed to update user credits');
+      
+      toast.success('User credits updated successfully');
+    } catch (error) {
+      console.error('Error updating user credits:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user credits');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingCredits(null);
     }
   };
 
-  const updateUserEmail = async (userId: string, email: string) => {
+  const handleEmailChange = async (userId: string, newEmail: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/email`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
+      setUpdatingEmail(userId);
+      const { error } = await api.updateUserEmail(userId, newEmail);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user email');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update user email');
       }
 
-      // Update the user in the local state
+      // Update local state
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, email } : user
+        user.id === userId ? { ...user, email: newEmail } : user
       ));
-    } catch (err) {
-      console.error('Error updating user email:', err);
-      setError('Failed to update user email');
+      
+      toast.success('User email updated successfully');
+    } catch (error) {
+      console.error('Error updating user email:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user email');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingEmail(null);
     }
   };
 
-  const updateUserSchool = async (userId: string, schoolName: string) => {
+  const handleSchoolChange = async (userId: string, newSchool: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ school_name: schoolName }),
-      });
+      setUpdatingSchool(userId);
+      const { error } = await api.updateUserSchool(userId, newSchool);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user school');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update user school');
       }
 
-      // Update the user in the local state
+      // Update local state
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, school_name: schoolName } : user
+        user.id === userId ? { ...user, school_name: newSchool } : user
       ));
-    } catch (err) {
-      console.error('Error updating user school:', err);
-      setError('Failed to update user school');
+      
+      toast.success('User school updated successfully');
+    } catch (error) {
+      console.error('Error updating user school:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user school');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingSchool(null);
     }
   };
 
   const updateUserDepartment = async (userId: string, department: string) => {
     try {
       setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ department }),
-      });
+      const { error } = await api.updateUserDepartment(userId, department);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user department');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update user department');
       }
 
       // Update the user in the local state
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, department } : user
       ));
+      toast.success('User department updated successfully');
     } catch (err) {
       console.error('Error updating user department:', err);
-      setError('Failed to update user department');
+      toast.error(err instanceof Error ? err.message : 'Failed to update user department');
     } finally {
       setUpdatingUser(null);
     }
@@ -268,11 +235,12 @@ export default function UsersPage() {
   // Filtered and sorted users
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = users.filter(user => {
-      const matchesSearch = user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (user.school_name && user.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                           (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesSearch = 
+        (user.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.last_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.school_name && user.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
       return matchesSearch && matchesRole;
     });
@@ -289,8 +257,8 @@ export default function UsersPage() {
       }
       
       if (sortField === 'credits') {
-        aValue = Number(aValue);
-        bValue = Number(bValue);
+        aValue = Number(aValue || 0);
+        bValue = Number(bValue || 0);
       }
       
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -632,10 +600,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newEmail = prompt(`Enter new email for ${userData.first_name} ${userData.last_name}:`, userData.email);
                                     if (newEmail && newEmail.includes('@')) {
-                                      updateUserEmail(userData.id, newEmail);
+                                      handleEmailChange(userData.id, newEmail);
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingEmail === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>
@@ -645,8 +613,8 @@ export default function UsersPage() {
                               <div className="flex items-center space-x-2">
                                 <Select
                                   value={userData.role}
-                                  onValueChange={(value: 'user' | 'admin') => updateUserRole(userData.id, value)}
-                                  disabled={updatingUser === userData.id}
+                                  onValueChange={(value: 'user' | 'admin') => handleRoleChange(userData.id, value)}
+                                  disabled={updatingRole === userData.id}
                                 >
                                   <SelectTrigger className="w-32">
                                     <SelectValue />
@@ -677,10 +645,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newCredits = prompt(`Enter new credits for ${userData.first_name} ${userData.last_name}:`, userData.credits.toString());
                                     if (newCredits && !isNaN(Number(newCredits))) {
-                                      updateUserCredits(userData.id, Number(newCredits));
+                                      handleCreditsChange(userData.id, Number(newCredits));
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingCredits === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>
@@ -697,10 +665,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newSchool = prompt(`Enter school name for ${userData.first_name} ${userData.last_name}:`, userData.school_name || '');
                                     if (newSchool !== null) {
-                                      updateUserSchool(userData.id, newSchool);
+                                      handleSchoolChange(userData.id, newSchool);
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingSchool === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>

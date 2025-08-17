@@ -6,6 +6,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@clerk/nextjs';
 
 interface VerificationResponse {
   is_valid: boolean;
@@ -17,6 +19,8 @@ interface VerificationResponse {
 }
 
 export default function VerificatiePage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const api = useApi();
   const [hash, setHash] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerificationResponse | null>(null);
@@ -34,23 +38,21 @@ export default function VerificatiePage() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/v1/catalog/verify-hash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hash: hash.trim() }),
+      const { data, error } = await api.verifyHash({
+        file_hash: hash.trim(),
+        file_name: 'unknown', // Placeholder, actual file name would be needed
+        file_size: 0, // Placeholder, actual file size would be needed
       });
 
-      const data: VerificationResponse = await response.json();
-
-      if (response.ok) {
-        setResult(data);
-      } else {
-        setError(data.status || 'Er is een fout opgetreden bij de verificatie');
+      if (error) {
+        throw new Error(error.detail || 'Failed to verify hash');
       }
-    } catch (err) {
-      setError('Er is een fout opgetreden bij de verificatie');
+
+      setResult(data);
+      
+    } catch (error) {
+      console.error('Verification error:', error);
+      setError(error instanceof Error ? error.message : 'Hash verification failed');
     } finally {
       setVerifying(false);
     }

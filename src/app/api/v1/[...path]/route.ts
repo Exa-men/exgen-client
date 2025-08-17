@@ -72,13 +72,22 @@ async function handleRequest(
       body,
     });
 
-    // Forward the response
+    // Forward the response - handle headers more carefully
     const responseBody = await response.text();
+    
+    // Create a new response with only safe headers
+    const safeHeaders = new Headers();
+    for (const [key, value] of response.headers.entries()) {
+      // Only include safe headers that NextResponse can handle
+      if (['content-type', 'content-length', 'cache-control'].includes(key.toLowerCase())) {
+        safeHeaders.set(key, value);
+      }
+    }
     
     return new NextResponse(responseBody, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers: safeHeaders,
     });
   } catch (error) {
     console.error('Proxy error:', error);
