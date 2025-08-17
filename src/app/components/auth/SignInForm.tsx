@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSignIn } from '@clerk/nextjs';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
 import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
 import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
+import { useRouter } from 'next/navigation';
 
 interface SignInFormData {
   email: string;
@@ -17,6 +18,7 @@ interface SignInFormData {
 export const SignInForm: React.FC = () => {
   const { signIn, isLoaded, setActive } = useSignIn();
   const { switchModalMode, closeAuthModal } = useAuthModal();
+  const router = useRouter();
   
   const [formData, setFormData] = useState<SignInFormData>({
     email: '',
@@ -162,7 +164,8 @@ export const SignInForm: React.FC = () => {
         }
         
         closeAuthModal();
-        window.location.href = '/catalogus';
+        // Use Next.js router instead of window.location.href to prevent page reload
+        router.push('/catalogus');
       } else if (result.status === 'needs_first_factor') {
         // Handle first factor requirement (if needed in the future)
         console.log('First factor required');
@@ -191,7 +194,8 @@ export const SignInForm: React.FC = () => {
           if (errorResult.action === 'redirect') {
             setTimeout(() => {
               closeAuthModal();
-              window.location.reload();
+              // Use Next.js router instead of window.location.reload to prevent page reload
+              router.refresh();
             }, 2000);
           }
           break;

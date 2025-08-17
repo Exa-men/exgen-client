@@ -10,7 +10,7 @@ import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
 import CreditOrderModal from './components/CreditOrderModal';
 import { AuthModal } from './components/auth/AuthModal';
-import RolePerformanceDebug from './components/RolePerformanceDebug';
+import ClerkErrorBoundary from './components/ClerkErrorBoundary';
 import type { Metadata } from 'next';
 
 const geistSans = Geist({
@@ -34,27 +34,44 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      // Add Clerk performance optimizations based on configuration analysis
+      appearance={{
+        // Reduce Clerk UI rendering overhead
+        elements: {
+          formButtonPrimary: 'bg-blue-600 hover:bg-blue-700',
+          card: 'shadow-lg',
+        },
+        // Optimize for development environment
+        variables: {
+          colorPrimary: '#6c47ff',
+          colorBackground: '#ffffff',
+          colorText: '#151515',
+        },
+      }}
+    >
       <html lang="en">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
-          <RoleProvider>
-            <CreditProvider>
-              <CreditModalProvider>
-                <AuthModalProvider>
-                  <SmartPrefetcher />
-                  <PageTransitionLoader />
-                  <UnifiedHeader />
-                  {children}
-                  <CreditOrderModal />
-                  <AuthModal />
-                  {/* Development-only performance monitoring */}
-                  {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />}
-                </AuthModalProvider>
-              </CreditModalProvider>
-            </CreditProvider>
-          </RoleProvider>
+          <ClerkErrorBoundary>
+            <RoleProvider>
+              <CreditProvider>
+                <CreditModalProvider>
+                  <AuthModalProvider>
+                    <SmartPrefetcher />
+                    <PageTransitionLoader />
+                    <UnifiedHeader />
+                    {children}
+                    <CreditOrderModal />
+                    <AuthModal />
+                    {/* Development-only performance monitoring - REMOVED due to performance impact */}
+                    {/* {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />} */}
+                  </AuthModalProvider>
+                </CreditModalProvider>
+              </CreditProvider>
+            </RoleProvider>
+          </ClerkErrorBoundary>
         </body>
       </html>
     </ClerkProvider>

@@ -37,13 +37,13 @@ interface Voucher {
   id: string;
   code: string;
   credits: number;
-  expires_at: string;
+  expires_at: string | null;
   is_used: boolean;
-  used_by?: string;
-  used_at?: string;
+  used_by?: string | null;
+  used_at?: string | null;
   created_by: string;
-  created_at: string;
-  user_who_used_name?: string;
+  created_at: string | null;
+  user_who_used_name?: string | null;
   admin_who_created_name: string;
 }
 
@@ -52,6 +52,7 @@ export default function VouchersPage() {
   const { getToken } = useAuth();
   const api = useApi();
   const router = useRouter();
+  const { registerVoucherRefresh } = useCredits();
   // Removed useRole hook - letting backend handle admin checks
   
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -93,6 +94,14 @@ export default function VouchersPage() {
     }
   }, [isSignedIn]);
 
+  // Register voucher refresh callback
+  useEffect(() => {
+    if (isSignedIn) {
+      const unregister = registerVoucherRefresh(fetchVouchers);
+      return unregister;
+    }
+  }, [isSignedIn, registerVoucherRefresh]);
+
   const fetchVouchers = async () => {
     setLoading(true);
     try {
@@ -126,7 +135,7 @@ export default function VouchersPage() {
     try {
       const { data, error } = await api.createAdminVoucher({
         credits: newVoucherCredits,
-        expires_at: new Date(newVoucherExpiresAt).toISOString(),
+        expires_at: newVoucherExpiresAt, // Send as YYYY-MM-DD format
       });
 
       if (error) {
@@ -142,12 +151,13 @@ export default function VouchersPage() {
       defaultDate.setDate(defaultDate.getDate() + 10);
       setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
       
+      // Close the modal
+      setCreateDialogOpen(false);
+      
       toast.success('Voucher created successfully');
     } catch (error) {
       console.error('Error creating voucher:', error);
       alert(error instanceof Error ? error.message : 'Failed to create voucher');
-    } finally {
-      // setCreatingVoucher(false); // This state variable was removed
     }
   };
 
@@ -158,7 +168,7 @@ export default function VouchersPage() {
     try {
       const { error } = await api.updateAdminVoucher(selectedVoucher.id, {
         credits: editVoucherCredits,
-        expires_at: new Date(editVoucherExpiresAt).toISOString(),
+        expires_at: editVoucherExpiresAt, // Send as YYYY-MM-DD format
       });
 
       if (error) {
@@ -167,8 +177,11 @@ export default function VouchersPage() {
 
       // Update local state
       setVouchers(prev => prev.map(v => 
-        v.id === selectedVoucher.id ? { ...v, credits: editVoucherCredits, expires_at: new Date(editVoucherExpiresAt).toISOString() } : v
+        v.id === selectedVoucher.id ? { ...v, credits: editVoucherCredits, expires_at: editVoucherExpiresAt } : v
       ));
+      
+      // Close the modal
+      setEditDialogOpen(false);
       
       toast.success('Voucher updated successfully');
     } catch (error) {
@@ -217,31 +230,54 @@ export default function VouchersPage() {
   const openEditDialog = (voucher: Voucher) => {
     setSelectedVoucher(voucher);
     setEditVoucherCredits(voucher.credits);
-    setEditVoucherExpiresAt(voucher.expires_at.split('T')[0]);
+    setEditVoucherExpiresAt(voucher.expires_at ? voucher.expires_at.split('T')[0] : '');
     setEditDialogOpen(true);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('nl-NL', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) {
+      return '-';
+    }
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return '-';
+      }
+      
+      return date.toLocaleDateString('nl-NL', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return '-';
+    }
   };
 
-  const getStatusBadge = (isUsed: boolean, expiresAt: string) => {
+  const getStatusBadge = (isUsed: boolean, expiresAt: string | null | undefined) => {
     if (isUsed) {
       return <Badge variant="secondary">Gebruikt</Badge>;
     }
     
-    const isExpired = new Date(expiresAt) < new Date();
-    if (isExpired) {
-      return <Badge variant="destructive">Verlopen</Badge>;
+    if (!expiresAt) {
+      return <Badge variant="destructive">Geen vervaldatum</Badge>;
     }
     
-    return <Badge variant="default">Beschikbaar</Badge>;
+    try {
+      const isExpired = new Date(expiresAt) < new Date();
+      if (isExpired) {
+        return <Badge variant="destructive">Verlopen</Badge>;
+      }
+      
+      return <Badge variant="default">Beschikbaar</Badge>;
+    } catch (error) {
+      console.error('Error checking expiration:', expiresAt, error);
+      return <Badge variant="destructive">Ongeldige datum</Badge>;
+    }
   };
 
   const filteredVouchers = vouchers.filter(voucher => {
@@ -372,7 +408,7 @@ export default function VouchersPage() {
                             <User className="h-4 w-4 text-green-600" />
                             {voucher.user_who_used_name}
                             <span className="text-xs text-gray-500">
-                              {formatDate(voucher.used_at!)}
+                              {formatDate(voucher.used_at)}
                             </span>
                           </div>
                         ) : (

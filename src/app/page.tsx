@@ -35,7 +35,8 @@ function HomeContent() {
   }, [isLoaded, isSignedIn, router, searchParams.get('show')]);
 
   // Show loading state while checking authentication
-  if (!isLoaded) {
+  // For unauthenticated users, show content immediately to avoid loading screen
+  if (!isLoaded && isSignedIn !== false) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

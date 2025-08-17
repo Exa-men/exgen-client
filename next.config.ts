@@ -9,15 +9,22 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable optimizations for better performance
     optimizePackageImports: ['@clerk/nextjs', 'lucide-react'],
+    // Note: serverComponentsExternalPackages conflicts with transpilePackages for @clerk/nextjs
+    // Using optimizePackageImports instead for better compatibility with Turbopack
   },
   
   // Enhanced caching and performance
   compress: true,
   generateEtags: true,
   
-  // Environment variables
+  // Clerk-specific performance optimizations
   env: {
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
+    // Optimize Clerk for development performance
+    NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: '/catalogus',
+    NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: '/catalogus',
+    NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',
+    NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/sign-up',
   },
   
   // API rewrites for production

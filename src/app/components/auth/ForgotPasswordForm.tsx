@@ -8,10 +8,12 @@ import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
 import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
+import { useRouter } from 'next/navigation';
 
 export const ForgotPasswordForm: React.FC = () => {
   const { signIn, isLoaded } = useSignIn();
   const { switchModalMode } = useAuthModal();
+  const router = useRouter();
   
   // Form states
   const [email, setEmail] = useState('');
@@ -107,7 +109,8 @@ export const ForgotPasswordForm: React.FC = () => {
       if (error.code === 'session_exists') {
         setError('Je bent al ingelogd. Ververs de pagina.');
         setTimeout(() => {
-          window.location.reload();
+          // Use Next.js router instead of window.location.reload to prevent page reload
+          router.refresh();
         }, 2000);
         return;
       }
@@ -124,7 +127,8 @@ export const ForgotPasswordForm: React.FC = () => {
         case 'session_exists':
           setError('Je bent al ingelogd. Ververs de pagina.');
           setTimeout(() => {
-            window.location.reload();
+            // Use Next.js router instead of window.location.reload to prevent page reload
+            router.refresh();
           }, 2000);
           break;
         default:
@@ -160,7 +164,8 @@ export const ForgotPasswordForm: React.FC = () => {
           ? '/sign-up/verify?flow=password-reset&migrated=true'
           : '/sign-up/verify?flow=password-reset';
         
-        window.location.href = redirectUrl;
+        // Use Next.js router instead of window.location.href to prevent page reload
+        router.push(redirectUrl);
       } else if (result.status === 'needs_second_factor') {
         setError('Tweefactor authenticatie is vereist, maar wordt niet ondersteund in deze interface');
       } else {
@@ -173,7 +178,8 @@ export const ForgotPasswordForm: React.FC = () => {
       if (error.code === 'session_exists') {
         setError('Je bent al ingelogd. Ververs de pagina.');
         setTimeout(() => {
-          window.location.reload();
+          // Use Next.js router instead of window.location.reload to prevent page reload
+          router.refresh();
         }, 2000);
         return;
       }
@@ -192,10 +198,7 @@ export const ForgotPasswordForm: React.FC = () => {
           break;
         case 'session_exists':
           setError('Je bent al ingelogd. Ververs de pagina.');
-          setTimeout(() => {
-            window.location.reload();
-          }, 2000);
-          break;
+          return;
         default:
           setError('Er is een fout opgetreden. Probeer het opnieuw.');
       }

@@ -135,6 +135,9 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRequest = useRef<Promise<any> | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 1; // Reduced from 2 to prevent duplicate calls
+  const requestInProgressRef = useRef(false); // Track if request is in progress
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -170,14 +173,28 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         }
       }
 
-      // Create new request
+      // Additional deduplication check
+      if (requestInProgressRef.current) {
+        console.log('🔄 Request already in progress, skipping duplicate');
+        return;
+      }
+
+      // Create new request with timeout protection
       setIsLoading(true);
+      requestInProgressRef.current = true; // Mark request as in progress
       abortControllerRef.current = new AbortController();
       
       const startTime = Date.now();
       try {
         // Track API call
         trackRoleApiCall();
+        
+        console.log('🔍 Starting role fetch at:', new Date().toISOString());
+        
+        // Add timeout protection for Clerk-dependent calls (as recommended by Clerk Support)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 5000) // Reduced to 5 seconds for better UX
+        );
         
         // Create the request promise using centralized API
         const requestPromise = api.getUserRole().then(async (response: any) => {
@@ -191,18 +208,46 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         // Store the active request
         activeRequest.current = requestPromise;
         
-        const data = await requestPromise;
+        // Race between request and timeout
+        const data = await Promise.race([requestPromise, timeoutPromise]);
         setUserRole(data);
         
         // Track response time
         const responseTime = Date.now() - startTime;
         trackRoleResponseTime(responseTime);
         
+        console.log('✅ Role fetch completed in:', responseTime, 'ms');
+        
       } catch (error) {
         if (error instanceof Error &&
             error.name === 'AbortError') {
           console.log('Role fetch was aborted');
           return;
+        }
+        
+        // Handle timeout specifically
+        if (error instanceof Error && error.message === 'Request timeout') {
+          console.warn('Role fetch timed out after 10 seconds - this might indicate a slow backend response');
+          
+          // Retry the request if we haven't exceeded max retries
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current += 1;
+            console.log(`🔄 Retrying role fetch (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+            
+            // Small delay before retry
+            setTimeout(() => {
+              fetchUserRole();
+            }, 2000); // Increased from 1000ms to 2000ms to prevent rapid retries
+            return;
+          }
+          
+          // Don't fail completely on timeout, try to use cached data or default
+          const cachedRole = getCachedRole();
+          if (cachedRole && cachedRole.user_id === user?.id) {
+            console.log('Using cached role data due to timeout');
+            setUserRole(cachedRole);
+            return;
+          }
         }
         
         console.error('Error fetching user role:', error);
@@ -216,13 +261,16 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       } finally {
         setIsLoading(false);
         activeRequest.current = null;
+        retryCountRef.current = 0; // Reset retry count on completion
+        requestInProgressRef.current = false; // Mark request as finished
       }
     };
 
-    fetchUserRole();
-
-    // Cleanup function to abort ongoing requests
+    // Add small delay to allow Clerk to stabilize (as recommended by Clerk Support)
+    const timer = setTimeout(fetchUserRole, 100);
     return () => {
+      clearTimeout(timer);
+      // Cleanup function to abort ongoing requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }

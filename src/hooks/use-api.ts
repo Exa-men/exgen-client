@@ -2,7 +2,7 @@
  * Custom hook for API calls with proper authentication
  */
 import { useAuth } from '@clerk/nextjs';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -18,10 +18,37 @@ export interface ApiResponse<T> {
 
 export function useApi() {
   const { getToken } = useAuth();
+  
+  // Clerk token caching to reduce repeated calls
+  const tokenCache = useRef<{ token: string | null; timestamp: number }>({ 
+    token: null, 
+    timestamp: 0 
+  });
+  
+  const CACHE_DURATION = 4 * 60 * 1000; // 4 minutes (Clerk tokens expire in 5 minutes)
 
-  // Create a stable reference to the getToken function
-  const stableGetToken = useCallback(async () => {
-    return await getToken();
+  const getCachedToken = useCallback(async () => {
+    const now = Date.now();
+    
+    // Return cached token if still valid
+    if (tokenCache.current.token && 
+        (now - tokenCache.current.timestamp) < CACHE_DURATION) {
+      return tokenCache.current.token;
+    }
+    
+    // Fetch new token and cache it
+    try {
+      const token = await getToken();
+      if (token) {
+        tokenCache.current = { token, timestamp: now };
+        console.log('🔐 New Clerk token cached at:', new Date().toISOString());
+      }
+      return token;
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch Clerk token:', error);
+      // Return cached token if available, even if expired
+      return tokenCache.current.token;
+    }
   }, [getToken]);
 
   const makeAuthenticatedRequest = useCallback(async <T>(
@@ -29,7 +56,7 @@ export function useApi() {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> => {
     try {
-      const token = await stableGetToken();
+      const token = await getCachedToken();
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -64,11 +91,11 @@ export function useApi() {
         },
       };
     }
-  }, [stableGetToken]);
+  }, [getCachedToken]);
 
   const uploadFile = useCallback(async (versionId: string, file: File) => {
     try {
-      const token = await stableGetToken();
+      const token = await getCachedToken();
       if (!token) {
         return { error: { detail: 'No authentication token' } };
       }
@@ -103,20 +130,20 @@ export function useApi() {
         },
       };
     }
-  }, [stableGetToken]);
+  }, [getCachedToken]);
 
   const uploadWorkflowFile = useCallback(async (file: File, templateName: string) => {
     try {
-      const token = await stableGetToken();
+      const token = await getCachedToken();
       if (!token) {
         return { error: { detail: 'No authentication token' } };
       }
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('template_name_or_id', templateName);
+      formData.append('template_name', templateName);
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/workflows/generate`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/workflows/upload-template`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -125,10 +152,10 @@ export function useApi() {
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
         return {
           error: {
-            detail: `Upload failed: ${errorData}`,
+            detail: errorData.detail || `Upload failed: ${response.status}`,
             status: response.status,
           },
         };
@@ -143,166 +170,152 @@ export function useApi() {
         },
       };
     }
-  }, [stableGetToken]);
+  }, [getCachedToken]);
 
   // Use useMemo to prevent the API object from being recreated on every render
   return useMemo(() => ({
     // Product operations
     getProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/edit`),
-    updateProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
-      method: 'PUT',
+    listProducts: (page = 1, size = 10, search = '', filter = 'alles') => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: size.toString(),
+        filter: filter,
+      });
+      if (search) params.append('search', search);
+      return makeAuthenticatedRequest(`/api/v1/catalog/products?${params}`);
+    },
+    createProduct: (data: any) => makeAuthenticatedRequest('/api/v1/catalog/products', {
+      method: 'POST',
       body: JSON.stringify(data),
     }),
-    saveProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/save`, {
-      method: 'POST',
+    updateProduct: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
     }),
     deleteProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
       method: 'DELETE',
     }),
-    createProduct: (data: any) => makeAuthenticatedRequest('/api/v1/catalog/products', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-    getProductById: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`),
     updateProductStatus: (id: string, status: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
-    
+
     // Version operations
-    createVersion: (productId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions`, {
+    getProductVersions: (productId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions`),
+    createProductVersion: (productId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateVersion: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}`, {
+    updateProductVersion: (productId: string, versionId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteVersion: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}`, {
+    deleteProductVersion: (productId: string, versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}`, {
       method: 'DELETE',
     }),
-    toggleVersionStatus: (id: string, enabled: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${id}/status`, {
+    updateVersionStatus: (productId: string, versionId: string, isEnabled: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ is_enabled: enabled }),
+      body: JSON.stringify({ is_enabled: isEnabled }),
     }),
-    
-    
-    // Component operations
-    createComponent: (versionId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/components`, {
+
+    // Document operations
+    getVersionDocuments: (productId: string, versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/documents`),
+    createVersionDocument: (productId: string, versionId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/documents`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateComponent: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/components/${id}`, {
+    updateVersionDocument: (productId: string, versionId: string, documentId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/documents/${documentId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteComponent: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/components/${id}`, {
+    deleteVersionDocument: (productId: string, versionId: string, documentId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/documents/${documentId}`, {
       method: 'DELETE',
     }),
-    
-    // Criteria operations
-    createCriteria: (componentId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/components/${componentId}/criteria`, {
+
+    // Assessment operations
+    getAssessmentComponents: (productId: string, versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/assessment-components`),
+    createAssessmentComponent: (productId: string, versionId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/assessment-components`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    updateCriteria: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${id}`, {
+    updateAssessmentComponent: (productId: string, versionId: string, componentId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/assessment-components/${componentId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-    deleteCriteria: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${id}`, {
+    deleteAssessmentComponent: (productId: string, versionId: string, componentId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${productId}/assessment-components/${componentId}`, {
       method: 'DELETE',
     }),
-    updateLevel: (criteriaId: string, levelId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/criteria/${criteriaId}/levels/${levelId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-    
-    // File operations
-    uploadDocument: uploadFile,
-    deleteDocument: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}`, {
-      method: 'DELETE',
-    }),
-    setPreviewDocument: (id: string, isPreview: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/preview`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_preview: isPreview }),
-    }),
-    getDocumentDownloadUrl: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/download`),
-    copyDocuments: (versionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/copy-documents?source_version_id=${sourceVersionId}`, {
-      method: 'POST',
-    }),
-    
-    // List operations
-    listProducts: (page = 1, limit = 10, search?: string, filter = 'alles') => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        filter,
-      });
-      if (search) params.append('search', search);
-      return makeAuthenticatedRequest(`/api/v1/catalog/products?${params}`);
-    },
-    listDocuments: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/documents`),
-    
-    // S3 Verification operations
-    verifyDocumentS3: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${id}/verify-s3`),
-    verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/documents/verify-all`),
-    
-    // Database verification operations
-    verifyDatabase: (productId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/verify-database`),
 
     // Workflow operations
     getWorkflowGroups: () => makeAuthenticatedRequest('/api/v1/workflows/groups'),
-    getWorkflowGroup: (id: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}`),
-    updateWorkflowGroup: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-    deleteWorkflowGroup: (id: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}`, {
-      method: 'DELETE',
-    }),
-    activateWorkflowGroup: (id: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}/activate`, {
-      method: 'POST',
-    }),
-    getWorkflowConfig: (id: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}/config`),
-    updateWorkflowConfig: (id: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}/config`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-    getAvailableModels: () => makeAuthenticatedRequest('/api/v1/workflows/models/available'),
-    getWorkflowRuns: (page = 1, size = 20) => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        size: size.toString(),
-      });
-      return makeAuthenticatedRequest(`/api/v1/workflows/runs?${params}`);
-    },
-    generateWorkflow: (data: any) => makeAuthenticatedRequest('/api/v1/workflows/generate', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-    getJobStatus: (jobId: string) => makeAuthenticatedRequest(`/api/v1/workflows/jobs/${jobId}`),
-    
-    // NEW: Additional Workflow operations
-    getWorkflowStepsConfig: () => makeAuthenticatedRequest('/api/v1/workflows/config'),
-    uploadWorkflowFile: uploadWorkflowFile,
-    getWorkflowPrompt: (groupId: string, promptName: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptName}`),
-    updateWorkflowPrompt: (groupId: string, promptName: string, content: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptName}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    }),
     createWorkflowGroup: (data: any) => makeAuthenticatedRequest('/api/v1/workflows/groups', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    renameWorkflowGroup: (id: string, name: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
+    updateWorkflowGroup: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     }),
+    deleteWorkflowGroup: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'DELETE',
+    }),
+    getWorkflowPrompts: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts`),
+    createWorkflowPrompt: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    updateWorkflowPrompt: (groupId: string, promptIdOrName: string, data: any) => {
+      // Check if this is a prompt ID (UUID format) or a prompt name
+      const isPromptId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(promptIdOrName);
+      
+      if (isPromptId) {
+        // It's a prompt ID, use the standard endpoint
+        return makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptIdOrName}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        });
+      } else {
+        // It's a prompt name - this is not supported by the current backend
+        console.warn('⚠️ updateWorkflowPrompt called with promptName - this is not supported by the current backend');
+        return Promise.resolve({
+          error: {
+            detail: 'Updating prompts by name is not supported. Prompts must be managed as separate entities with IDs.',
+            status: 400
+          }
+        });
+      }
+    },
+    deleteWorkflowPrompt: (groupId: string, promptId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptId}`, {
+      method: 'DELETE',
+    }),
+    runWorkflow: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/run`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    getWorkflowRuns: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/runs`),
+    getWorkflowRun: (groupId: string, runId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/runs/${runId}`),
     updateWorkflowBaseInstructions: (groupId: string, content: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/config`, {
       method: 'PATCH',
       body: JSON.stringify({ base_instructions: content }),
     }),
+    getAvailableModels: () => makeAuthenticatedRequest('/api/v1/workflows/models/available'),
+    
+    // Workflow group specific operations
+    renameWorkflowGroup: (groupId: string, name: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+    activateWorkflowGroup: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: true }),
+    }),
+    updateWorkflowConfig: (groupId: string, config: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    }),
+    
+
 
     // Admin operations
     getAdminUsers: () => makeAuthenticatedRequest('/api/v1/admin/users'),
@@ -421,5 +434,9 @@ export function useApi() {
 
     // Auth operations
     getUserRole: () => makeAuthenticatedRequest('/api/v1/auth/user/role'),
+    
+    // File upload operations
+    uploadFile,
+    uploadWorkflowFile,
   }), [makeAuthenticatedRequest, uploadFile, uploadWorkflowFile]);
 } 

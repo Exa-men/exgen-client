@@ -77,7 +77,7 @@ const CreditOrderModal: React.FC = () => {
   });
 
   // Voucher redemption state
-  const { refreshCredits } = useCredits();
+  const { refreshCredits, refreshVouchers } = useCredits();
   const [voucherCode, setVoucherCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isVoucherFocused, setIsVoucherFocused] = useState(false);
@@ -265,6 +265,8 @@ const CreditOrderModal: React.FC = () => {
       setVoucherCode('');
       // Refresh user credits
       await refreshCredits();
+      // Refresh vouchers to update admin view
+      refreshVouchers();
       // Close modal after successful redemption
       setTimeout(() => {
         handleClose();
