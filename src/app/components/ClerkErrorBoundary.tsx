@@ -76,6 +76,33 @@ export default function ClerkErrorBoundary({
     };
   }, []);
 
+  // Listen for authentication state changes to clear caches
+  useEffect(() => {
+    if (isLoaded) {
+      // Clear any cached data when authentication state changes
+      // This prevents data from previous users from persisting
+      if (!isSignedIn) {
+        // User signed out - clear any cached data
+        console.log('🔐 User signed out, clearing caches...');
+        // Clear localStorage caches that might contain user-specific data
+        if (typeof window !== 'undefined') {
+          // Clear any cached user data
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('exgen_') || key.includes('clerk_'))) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+            console.log('🗑️ Cleared cached data:', key);
+          });
+        }
+      }
+    }
+  }, [isLoaded, isSignedIn]);
+
   // Don't show error boundary for unauthenticated users (like homepage visitors)
   // Only show it for authenticated users who experience actual errors
   if (isLoaded && !isSignedIn) {

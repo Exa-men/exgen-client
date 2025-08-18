@@ -67,7 +67,7 @@ export default function CreditOrdersPage() {
   const api = useApi();
   const router = useRouter();
   // Removed useRole hook - letting backend handle admin checks
-  const { refreshCredits } = useCredits();
+  const { refreshCredits, broadcastCreditUpdate } = useCredits();
   
   const [orders, setOrders] = useState<CreditOrder[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -86,6 +86,24 @@ export default function CreditOrdersPage() {
       return;
     }
   }, [isLoaded, isSignedIn, router]);
+
+  // Proactive token refresh to prevent expiration during long admin sessions
+  useEffect(() => {
+    if (!isSignedIn) return;
+    
+    // Refresh token every 3 minutes (before the 4-minute cache expires)
+    const tokenRefreshInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Proactively refreshing token...');
+        await api.refreshToken();
+        console.log('✅ Token refreshed proactively');
+      } catch (error) {
+        console.warn('⚠️ Failed to refresh token proactively:', error);
+      }
+    }, 3 * 60 * 1000); // 3 minutes
+    
+    return () => clearInterval(tokenRefreshInterval);
+  }, [isSignedIn, api]);
 
   // Fetch orders and packages when signed in
   useEffect(() => {
@@ -107,11 +125,40 @@ export default function CreditOrdersPage() {
           router.push('/');
           return;
         }
+        
+        // Handle authentication errors specifically
+        if (error.status === 401) {
+          if (error.detail.includes('Signature has expired') || error.detail.includes('Invalid Clerk token')) {
+            console.log('🔄 Token expired during orders fetch, attempting to refresh...');
+            try {
+              // Try to refresh the token
+              await api.refreshToken();
+              alert('Sessie verlengd, bestellingen worden opnieuw geladen.');
+              // Retry the fetch with the new token
+              const retryResult = await api.getAdminCreditOrders();
+              if (retryResult.error) {
+                throw new Error(`Failed to fetch orders after token refresh: ${retryResult.error.detail}`);
+              }
+              setOrders((retryResult.data as any).orders);
+              return; // Successfully handled, exit early
+            } catch (refreshError) {
+              console.error('❌ Failed to refresh token during orders fetch:', refreshError);
+              alert('Je sessie is verlopen. Log opnieuw in.');
+              router.push('/');
+              return;
+            }
+          } else {
+            alert('Je bent niet geautoriseerd om bestellingen te bekijken.');
+            router.push('/');
+            return;
+          }
+        }
+        
         console.error('Failed to fetch orders:', error);
         return;
       }
 
-      setOrders(data.orders);
+      setOrders((data as any).orders);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -153,6 +200,13 @@ export default function CreditOrdersPage() {
       // Refresh orders and credits
       fetchOrders();
       await refreshCredits();
+      
+      // Find the order to get the user ID for broadcasting
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        // Broadcast credit update to all components that need to know about it
+        broadcastCreditUpdate(order.user_id);
+      }
     } catch (error) {
       console.error('Error fulfilling order:', error);
       alert('Er is een fout opgetreden bij het vervullen van de bestelling.');

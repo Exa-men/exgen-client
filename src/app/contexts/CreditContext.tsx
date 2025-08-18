@@ -10,6 +10,10 @@ interface CreditContextType {
   refreshCredits: () => Promise<void>;
   refreshVouchers: () => void;
   registerVoucherRefresh: (callback: () => void) => () => void;
+  refreshCurrentUserCredits: () => Promise<void>;
+  refreshUserCredits: (userId: string) => Promise<void>;
+  registerCreditUpdateCallback: (callback: (userId: string) => void) => () => void;
+  broadcastCreditUpdate: (userId: string) => void;
 }
 
 const CreditContext = createContext<CreditContextType | undefined>(undefined);
@@ -27,7 +31,7 @@ interface CreditProviderProps {
 }
 
 export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
-  const { user, isLoaded: userLoaded } = useUser();
+  const { user, isLoaded: userLoaded, isSignedIn } = useUser();
   const api = useApi();
   const [credits, setCredits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,49 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   
   // Callback refs for voucher refresh
   const voucherRefreshCallbacks = React.useRef<Set<() => void>>(new Set());
+  
+  // Callback refs for credit updates (when admin updates user credits)
+  const creditUpdateCallbacks = React.useRef<Set<(userId: string) => void>>(new Set());
+
+  // Clear token cache when user changes to prevent using old tokens
+  useEffect(() => {
+    if (userLoaded && user?.id) {
+      // Clear any cached tokens when a new user logs in
+      api.clearTokenCache();
+      console.log('🔐 Cleared token cache for new user:', user.id);
+    }
+  }, [user?.id, userLoaded, api]);
+
+  // Clear all caches when user signs out
+  useEffect(() => {
+    if (userLoaded && !isSignedIn) {
+      // User signed out - clear all caches and reset state
+      setCredits(0);
+      setLoading(false);
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      // Clear API token cache
+      api.clearTokenCache();
+      
+      // Clear any localStorage caches
+      if (typeof window !== 'undefined') {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.includes('exgen_')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+          console.log('🗑️ Cleared cached data:', key);
+        });
+      }
+      
+      console.log('🔐 Cleared all caches on sign out');
+    }
+  }, [userLoaded, isSignedIn, api]);
 
   const fetchCredits = useCallback(async () => {
     // Don't fetch if user is not loaded yet
@@ -98,15 +145,32 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
           }
           
           // Don't fail completely on timeout, use Clerk metadata as fallback
-          setCredits(user?.publicMetadata?.credits as number || 0);
+          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+          setCredits(fallbackCredits);
+          console.log('⚠️ Using fallback credits from Clerk metadata:', fallbackCredits);
+          setLoading(false);
           return;
         }
         
         console.error('Error fetching credits:', error);
         // Fallback to Clerk metadata if API fails
-        setCredits(user?.publicMetadata?.credits as number || 0);
+        const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+        setCredits(fallbackCredits);
+        console.log('⚠️ Using fallback credits from Clerk metadata:', fallbackCredits);
+        setLoading(false);
       } else {
-        setCredits((data as any).credits);
+        const creditValue = (data as any).credits;
+        // Ensure we have a valid credit value before setting loading to false
+        if (creditValue !== undefined && creditValue !== null) {
+          setCredits(creditValue);
+          setLoading(false);
+        } else {
+          console.warn('⚠️ Invalid credit value received:', creditValue);
+          // Use fallback if API returns invalid data
+          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+          setCredits(fallbackCredits);
+          setLoading(false);
+        }
       }
       
       const responseTime = performance.now() - startTime;
@@ -115,9 +179,12 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Error fetching credits:', error);
       // Fallback to Clerk metadata
-      setCredits(user?.publicMetadata?.credits as number || 0);
-    } finally {
+      const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+      setCredits(fallbackCredits);
+      console.log('⚠️ Using fallback credits from Clerk metadata:', fallbackCredits);
       setLoading(false);
+    } finally {
+      // Only reset retry count and request status, don't set loading here
       retryCountRef.current = 0; // Reset retry count on completion
       requestInProgressRef.current = false; // Mark request as finished
     }
@@ -127,15 +194,47 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     await fetchCredits();
   }, [fetchCredits]);
 
+  const refreshCurrentUserCredits = useCallback(async () => {
+    // Force refresh credits for the current user
+    // This is useful when credits are updated by an admin
+    console.log('🔄 Refreshing current user credits...');
+    await fetchCredits();
+  }, [fetchCredits]);
+
+  const refreshUserCredits = useCallback(async (userId: string) => {
+    // Refresh credits for a specific user
+    // This is useful when admin updates another user's credits
+    if (user?.id === userId) {
+      console.log(`🔄 Refreshing credits for user ${userId} (current user)`);
+      await fetchCredits();
+    }
+    
+    // Notify all registered callbacks about the credit update
+    creditUpdateCallbacks.current.forEach(callback => callback(userId));
+  }, [user?.id, fetchCredits]);
+
+  const broadcastCreditUpdate = useCallback((userId: string) => {
+    // Broadcast credit update to all registered components
+    console.log(`📢 Broadcasting credit update for user ${userId}`);
+    creditUpdateCallbacks.current.forEach(callback => callback(userId));
+  }, []);
+
   const refreshVouchers = useCallback(() => {
     // Call all registered voucher refresh callbacks
     voucherRefreshCallbacks.current.forEach(callback => callback());
   }, []);
 
-  const registerVoucherRefresh = useCallback((callback: () => void) => {
+  const registerVoucherRefresh = useCallback((callback: () => void) => () => {
     voucherRefreshCallbacks.current.add(callback);
     return () => {
       voucherRefreshCallbacks.current.delete(callback);
+    };
+  }, []);
+
+  const registerCreditUpdateCallback = useCallback((callback: (userId: string) => void) => {
+    creditUpdateCallbacks.current.add(callback);
+    return () => {
+      creditUpdateCallbacks.current.delete(callback);
     };
   }, []);
 
@@ -143,12 +242,27 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     fetchCredits();
   }, [user, userLoaded]);
 
+  // Cleanup effect to clear caches when user changes or component unmounts
+  useEffect(() => {
+    return () => {
+      // Clear caches when component unmounts or user changes
+      if (requestInProgressRef.current) {
+        requestInProgressRef.current = false;
+      }
+      retryCountRef.current = 0;
+    };
+  }, [user?.id]);
+
   const value = {
     credits,
     loading,
     refreshCredits,
     refreshVouchers,
-    registerVoucherRefresh
+    registerVoucherRefresh,
+    refreshCurrentUserCredits,
+    refreshUserCredits,
+    registerCreditUpdateCallback,
+    broadcastCreditUpdate
   };
 
   return (

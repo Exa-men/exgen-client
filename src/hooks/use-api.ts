@@ -16,6 +16,22 @@ export interface ApiResponse<T> {
   error?: ApiError;
 }
 
+export interface WelcomeVoucherStatusResponse {
+  should_show_banner: boolean;
+  has_received: boolean;
+  user_id: string;
+  message: string;
+}
+
+export interface WelcomeVoucherActivateResponse {
+  success: boolean;
+  credits_added: number;
+  new_balance: number;
+  user_id: string;
+  message: string;
+  error?: string;
+}
+
 export function useApi() {
   const { getToken } = useAuth();
   
@@ -27,11 +43,11 @@ export function useApi() {
   
   const CACHE_DURATION = 4 * 60 * 1000; // 4 minutes (Clerk tokens expire in 5 minutes)
 
-  const getCachedToken = useCallback(async () => {
+  const getCachedToken = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
     
-    // Return cached token if still valid
-    if (tokenCache.current.token && 
+    // Return cached token if still valid and not forcing refresh
+    if (!forceRefresh && tokenCache.current.token && 
         (now - tokenCache.current.timestamp) < CACHE_DURATION) {
       return tokenCache.current.token;
     }
@@ -46,26 +62,40 @@ export function useApi() {
       return token;
     } catch (error) {
       console.warn('⚠️ Failed to fetch Clerk token:', error);
-      // Return cached token if available, even if expired
-      return tokenCache.current.token;
+      // Clear expired token from cache
+      tokenCache.current = { token: null, timestamp: 0 };
+      return null;
     }
   }, [getToken]);
 
+  const clearTokenCache = useCallback(() => {
+    tokenCache.current = { token: null, timestamp: 0 };
+    console.log('🗑️ Token cache cleared');
+  }, []);
+
   const makeAuthenticatedRequest = useCallback(async <T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount = 0
   ): Promise<ApiResponse<T>> => {
     try {
-      const token = await getCachedToken();
+      const token = await getCachedToken(retryCount > 0);
+      
+      if (!token) {
+        return {
+          error: {
+            detail: 'No authentication token available',
+            status: 401,
+          },
+        };
+      }
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(options.headers as Record<string, string>),
       };
 
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+      headers.Authorization = `Bearer ${token}`;
 
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
@@ -74,6 +104,16 @@ export function useApi() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        
+        // Handle 401 errors with automatic token refresh and retry
+        if (response.status === 401 && retryCount === 0) {
+          console.log('🔄 Token expired, refreshing and retrying...');
+          // Clear the expired token from cache
+          tokenCache.current = { token: null, timestamp: 0 };
+          // Retry once with a fresh token
+          return makeAuthenticatedRequest(endpoint, options, retryCount + 1);
+        }
+        
         return {
           error: {
             detail: errorData.detail || `HTTP ${response.status}`,
@@ -93,15 +133,18 @@ export function useApi() {
     }
   }, [getCachedToken]);
 
-  const uploadFile = useCallback(async (versionId: string, file: File) => {
+  const uploadFile = useCallback(async (versionId: string, file: File, retryCount = 0) => {
     try {
-      const token = await getCachedToken();
+      const token = await getCachedToken(retryCount > 0);
       if (!token) {
-        return { error: { detail: 'No authentication token' } };
+        return { error: { detail: 'No authentication token available', status: 401 } };
       }
 
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('name', file.name); // Add the required name parameter
+      formData.append('is_preview', 'false'); // Add optional parameter
+      formData.append('order', '0'); // Add optional parameter
 
       const response = await fetch(`${API_BASE_URL}/api/v1/catalog/versions/${versionId}/documents`, {
         method: 'POST',
@@ -113,6 +156,16 @@ export function useApi() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        
+        // Handle 401 errors with automatic token refresh and retry
+        if (response.status === 401 && retryCount === 0) {
+          console.log('🔄 Token expired during file upload, refreshing and retrying...');
+          // Clear the expired token from cache
+          tokenCache.current = { token: null, timestamp: 0 };
+          // Retry once with a fresh token
+          return uploadFile(versionId, file, retryCount + 1);
+        }
+        
         return {
           error: {
             detail: errorData.detail || `Upload failed: ${response.status}`,
@@ -132,11 +185,11 @@ export function useApi() {
     }
   }, [getCachedToken]);
 
-  const uploadWorkflowFile = useCallback(async (file: File, templateName: string) => {
+  const uploadWorkflowFile = useCallback(async (file: File, templateName: string, retryCount = 0) => {
     try {
-      const token = await getCachedToken();
+      const token = await getCachedToken(retryCount > 0);
       if (!token) {
-        return { error: { detail: 'No authentication token' } };
+        return { error: { detail: 'No authentication token available', status: 401 } };
       }
 
       const formData = new FormData();
@@ -153,6 +206,16 @@ export function useApi() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        
+        // Handle 401 errors with automatic token refresh and retry
+        if (response.status === 401 && retryCount === 0) {
+          console.log('🔄 Token expired during workflow file upload, refreshing and retrying...');
+          // Clear the expired token from cache
+          tokenCache.current = { token: null, timestamp: 0 };
+          // Retry once with a fresh token
+          return uploadWorkflowFile(file, templateName, retryCount + 1);
+        }
+        
         return {
           error: {
             detail: errorData.detail || `Upload failed: ${response.status}`,
@@ -174,6 +237,13 @@ export function useApi() {
 
   // Use useMemo to prevent the API object from being recreated on every render
   return useMemo(() => ({
+    // Token management
+    refreshToken: () => getCachedToken(true),
+    clearTokenCache,
+    
+    // Raw API call method for custom endpoints
+    makeAuthenticatedRequest,
+    
     // Product operations
     getProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/edit`),
     listProducts: (page = 1, size = 10, search = '', filter = 'alles') => {
@@ -397,8 +467,11 @@ export function useApi() {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    getWelcomeVoucherStatus: () => makeAuthenticatedRequest('/api/v1/credits/welcome-voucher/status'),
+    getWelcomeVoucherStatus: () => makeAuthenticatedRequest<WelcomeVoucherStatusResponse>('/api/v1/credits/welcome-voucher/status'),
     markFirstLogin: () => makeAuthenticatedRequest('/api/v1/credits/welcome-voucher/mark-first-login', {
+      method: 'POST',
+    }),
+    activateWelcomeVoucher: () => makeAuthenticatedRequest<WelcomeVoucherActivateResponse>('/api/v1/credits/welcome-voucher/activate', {
       method: 'POST',
     }),
 
@@ -438,5 +511,31 @@ export function useApi() {
     // File upload operations
     uploadFile,
     uploadWorkflowFile,
-  }), [makeAuthenticatedRequest, uploadFile, uploadWorkflowFile]);
+
+    // Document management operations
+    setPreviewDocument: (documentId: string, isPreview: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${documentId}/preview`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_preview: isPreview }),
+    }),
+    copyDocuments: (targetVersionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${targetVersionId}/documents/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ source_version_id: sourceVersionId }),
+    }),
+    verifyDatabase: (productId: string) => makeAuthenticatedRequest('/api/v1/catalog/verify-database', {
+      method: 'POST',
+      body: JSON.stringify({ product_id: productId }),
+    }),
+
+    // S3 verification operations
+    verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/verify-s3`, {
+      method: 'POST',
+    }),
+    verifyDocumentS3: (documentId: string) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${documentId}/verify-s3`, {
+      method: 'POST',
+    }),
+
+    // Workflow configuration operations
+    getWorkflowStepsConfig: () => makeAuthenticatedRequest('/api/v1/workflows/steps-config'),
+    getJobStatus: (jobId: string) => makeAuthenticatedRequest(`/api/v1/workflows/jobs/${jobId}/detailed-status`),
+  }), [makeAuthenticatedRequest, uploadFile, uploadWorkflowFile, getCachedToken, clearTokenCache]);
 } 

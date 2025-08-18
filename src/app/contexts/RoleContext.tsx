@@ -193,7 +193,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         
         // Add timeout protection for Clerk-dependent calls (as recommended by Clerk Support)
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 5000) // Reduced to 5 seconds for better UX
+          setTimeout(() => reject(new Error('Request timeout')), 3000) // Reduced to 3 seconds for better UX
         );
         
         // Create the request promise using centralized API
@@ -227,7 +227,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         
         // Handle timeout specifically
         if (error instanceof Error && error.message === 'Request timeout') {
-          console.warn('Role fetch timed out after 10 seconds - this might indicate a slow backend response');
+          console.warn('Role fetch timed out after 3 seconds - this might indicate a slow backend response');
           
           // Retry the request if we haven't exceeded max retries
           if (retryCountRef.current < MAX_RETRIES) {
@@ -237,7 +237,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
             // Small delay before retry
             setTimeout(() => {
               fetchUserRole();
-            }, 2000); // Increased from 1000ms to 2000ms to prevent rapid retries
+            }, 1000); // Reduced from 2000ms to 1000ms for faster retry
             return;
           }
           
@@ -266,10 +266,10 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       }
     };
 
-    // Add small delay to allow Clerk to stabilize (as recommended by Clerk Support)
-    const timer = setTimeout(fetchUserRole, 100);
+    // Remove artificial delay - start fetching immediately when ready
+    fetchUserRole();
+    
     return () => {
-      clearTimeout(timer);
       // Cleanup function to abort ongoing requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -290,8 +290,12 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       
       // Clear cached role data to prevent role escalation between users
       clearCachedRole();
+      
+      // Clear API token cache to prevent using old tokens
+      api.clearTokenCache();
+      console.log('🔐 Cleared token cache on sign out');
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, api]);
 
   // Function to manually refresh role (useful for admin role changes)
   const refreshRole = useCallback(async () => {

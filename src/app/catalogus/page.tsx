@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
+import { Search, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
+import { Skeleton } from '../components/ui/skeleton';
 
 import PDFViewer from '../components/PDFViewer';
 import TruncatedText from '../components/TruncatedText';
@@ -50,14 +51,13 @@ interface ExamProduct {
   hasPreviewDocument?: boolean; // Whether the product has a preview document
 }
 
-type SortField = 'code' | 'title' | 'credits' | 'cohort';
-type SortDirection = 'asc' | 'desc';
+
 
 export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isAdmin } = useRoleContext();
+  const { userRole, isAdmin, hasRole } = useRoleContext();
   const { refreshCredits } = useCredits();
   const { openModal } = useCreditModal();
   
@@ -72,8 +72,6 @@ export default function CatalogusPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreditsError, setShowCreditsError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('code');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(null);
   // State for purchase confirmation modal
   const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
@@ -101,6 +99,81 @@ export default function CatalogusPage() {
   // State for welcome banner
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
+  
+  console.log('🔄 === CATALOGUS PAGE RENDER ===');
+  console.log('🔄 Render state:', {
+    isSignedIn,
+    isLoaded,
+    hasRole,
+    isAdmin,
+    productsCount: products.length,
+    loading,
+    loadingMore
+  });
+  
+  // Filter products based on user role: admins see all products, regular users only see available products
+  const filteredProducts = useMemo(() => {
+    console.log('🔍 === FILTERING PRODUCTS ===');
+    console.log('🔍 Raw products array:', {
+      count: products.length,
+      products: products.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    });
+    console.log('🔍 User role info:', { isAdmin, hasRole });
+    
+    let result;
+    if (isAdmin) {
+      // Admins can see all products (draft and available)
+      result = products;
+      console.log('🔍 Admin user - showing all products:', result.length);
+    } else {
+      // Regular users can only see available products
+      const availableProducts = products.filter(product => product.status === 'available');
+      result = availableProducts;
+      console.log('🔍 Regular user - filtering for available products only');
+      console.log('🔍 Available products found:', {
+        count: availableProducts.length,
+        products: availableProducts.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      });
+      console.log('🔍 Draft products filtered out:', {
+        count: products.filter(p => p.status === 'draft').length,
+        products: products.filter(p => p.status === 'draft').map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      });
+    }
+    
+    console.log('🔍 Final filtered result:', {
+      count: result.length,
+      products: result.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    });
+    
+    return result;
+  }, [products, isAdmin, hasRole]);
+
+  // Add search loading state
+  const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Add search debounce ref
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Request deduplication - prevent multiple simultaneous API calls
+  const activeRequestRef = useRef<Promise<any> | null>(null);
+  const requestKeyRef = useRef<string>('');
+
+  // Generate a unique key for each request to prevent duplicates
+  const getRequestKey = useCallback((pageNum: number, searchTerm: string, filter: string) => {
+    return `${pageNum}-${searchTerm}-${filter}`;
+  }, []);
+
+  // Optimized loading state that considers both role and products loading
+  const isPageLoading = useMemo(() => {
+    // Show loading if we don't have a role yet, or if we're loading products
+    return !hasRole || loading;
+  }, [hasRole, loading]);
+
+  // Optimized products loading state
+  const isProductsLoading = useMemo(() => {
+    // Only show products loading if we have a role but products are still loading
+    return hasRole && loading;
+  }, [hasRole, loading]);
 
   // Validation functions for product publication
   const isProductReadyForPublication = (product: ExamProduct): boolean => {
@@ -153,10 +226,11 @@ export default function CatalogusPage() {
 
   // Handler for saving new product
   const handleSaveNewProduct = async () => {
+    console.log('💾 Saving new product:', newProduct);
     setSavingNewProduct(true);
     setError(null);
     try {
-      const { data: created, error } = await api.createProduct({
+      const productData = {
         code: newProduct.code,
         title: newProduct.title,
         description: newProduct.description,
@@ -164,26 +238,63 @@ export default function CatalogusPage() {
         credits: Number(newProduct.credits),
         cohort: newProduct.cohort,
         status: newProduct.status,
-      });
-
+      };
+      
+      console.log('📤 Sending product data to API:', productData);
+      
+      const { data: created, error } = await api.createProduct(productData);
+      
+      console.log('📥 API response:', { created, error });
+      
       if (error) {
+        console.error('❌ API error:', error);
+        
+        // Handle authentication errors specifically
+        if (error.status === 401) {
+          if (error.detail.includes('Signature has expired') || error.detail.includes('Invalid Clerk token')) {
+            console.log('🔄 Token expired, attempting to refresh...');
+            try {
+              // Try to refresh the token
+              await api.refreshToken();
+              toast.info('Sessie verlengd, probeer opnieuw.');
+              setError('Je sessie is verlengd. Probeer het product opnieuw op te slaan.');
+              return; // Don't throw error, let user retry
+            } catch (refreshError) {
+              console.error('❌ Failed to refresh token:', refreshError);
+              toast.error('Je sessie is verlopen. Log opnieuw in.');
+              setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
+              return;
+            }
+          } else {
+            toast.error('Je bent niet geautoriseerd voor deze actie.');
+            setError('Je bent niet geautoriseerd voor deze actie.');
+            return;
+          }
+        }
+        
         if (error.status === 409 && error.detail === "Product code already exists") {
           throw new Error(`Product code "${newProduct.code}" bestaat al. Gebruik een unieke code.`);
         }
         throw new Error(error.detail || 'Failed to add product');
       }
       
+      console.log('✅ Product created successfully:', created);
+      
       // Check if product already exists to prevent duplicates
       setProducts((prev) => {
         const exists = prev.some(product => product.id === (created as any).id);
         if (exists) {
+          console.log('⚠️ Product already exists in state, not adding duplicate');
           return prev; // Don't add if already exists
         }
+        console.log('➕ Adding new product to state');
         return [(created as any), ...prev];
       });
       
       handleClearNewProduct();
+      console.log('🎉 New product form cleared');
     } catch (err) {
+      console.error('💥 Error saving product:', err);
       setError(err instanceof Error ? err.message : 'Failed to add product');
     } finally {
       setSavingNewProduct(false);
@@ -199,101 +310,370 @@ export default function CatalogusPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
+  // Proactive token refresh to prevent expiration during long admin sessions
+  useEffect(() => {
     if (!isSignedIn) return;
+    
+    // Refresh token every 3 minutes (before the 4-minute cache expires)
+    const tokenRefreshInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Proactively refreshing token...');
+        await api.refreshToken();
+        console.log('✅ Token refreshed proactively');
+      } catch (error) {
+        console.warn('⚠️ Failed to refresh token proactively:', error);
+      }
+    }, 3 * 60 * 1000); // 3 minutes
+    
+    return () => clearInterval(tokenRefreshInterval);
+  }, [isSignedIn, api]);
+
+  // Separate function to fetch products with a specific search term
+  const fetchProductsWithSearch = useCallback(async (pageNum = 1, append = false, searchValue?: string) => {
+    if (!isSignedIn) return;
+    
+    // Use the passed searchValue or fall back to current state
+    const currentSearchTerm = searchValue !== undefined ? searchValue : searchTerm;
+    
+    // Generate request key for deduplication
+    const requestKey = getRequestKey(pageNum, currentSearchTerm, filter);
+    
+    console.log('📡 === PRODUCTS FETCH START ===');
+    console.log('📡 Fetching products:', { pageNum, append, searchTerm: currentSearchTerm, filter, requestKey });
+    console.log('📡 Current products state:', { 
+      currentProductsCount: products.length, 
+      currentProductIds: products.map((p: ExamProduct) => p.id),
+      loading,
+      loadingMore 
+    });
+    
+    // Check if this exact request is already in progress
+    if (activeRequestRef.current && requestKeyRef.current === requestKey) {
+      console.log('🔄 Request already in progress for key:', requestKey, '- waiting for completion');
+      try {
+        const result = await activeRequestRef.current;
+        console.log('✅ Reused existing request result');
+        return result;
+      } catch (error) {
+        console.log('❌ Existing request failed, proceeding with new request');
+      }
+    }
     
     try {
       if (pageNum === 1) setLoading(true);
       setError(null);
       
-      const { data, error: fetchError } = await api.listProducts(pageNum, PAGE_SIZE, searchTerm, filter);
+      // Store the request promise and key for deduplication
+      requestKeyRef.current = requestKey;
+      activeRequestRef.current = api.listProducts(pageNum, PAGE_SIZE, currentSearchTerm, filter);
+      
+      console.log('📡 Making API call to listProducts...');
+      const { data, error: fetchError } = await activeRequestRef.current;
+      
+      console.log('📡 === API RESPONSE RECEIVED ===');
+      console.log('📡 Raw API response:', data);
+      console.log('📡 Response structure:', {
+        hasData: !!data,
+        productsCount: (data as any)?.products?.length || 0,
+        total: (data as any)?.total,
+        hasMore: (data as any)?.hasMore,
+        page: (data as any)?.page
+      });
       
       if (fetchError) {
+        console.error('❌ API error:', fetchError);
+        
+        // Handle authentication errors specifically
+        if (fetchError.status === 401) {
+          if (fetchError.detail.includes('Signature has expired') || fetchError.detail.includes('Invalid Clerk token')) {
+            console.log('🔄 Token expired during product fetch, attempting to refresh...');
+            try {
+              // Try to refresh the token
+              await api.refreshToken();
+              toast.info('Sessie verlengd, producten worden opnieuw geladen.');
+              // Retry the fetch with the new token
+              const retryResult = await api.listProducts(pageNum, PAGE_SIZE, currentSearchTerm, filter);
+              if (retryResult.error) {
+                throw new Error(`Failed to fetch products after token refresh: ${retryResult.error.detail}`);
+              }
+              // Process the retry result
+              const retryData = retryResult.data;
+              console.log('📡 Retry successful, processing retry data...');
+              setProducts(prev => {
+                if (append) {
+                  const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
+                  const newProducts = ((retryData as any).products || []).filter((p: any) => !existingIds.has(p.id));
+                  console.log('📥 Retry - Appending products:', { 
+                    previousCount: prev.length, 
+                    newProductsCount: newProducts.length, 
+                    totalAfterAppend: prev.length + newProducts.length,
+                    newProductIds: newProducts.map((p: any) => p.id)
+                  });
+                  return [...prev, ...newProducts];
+                } else {
+                  console.log('📥 Retry - Replacing products:', { 
+                    previousCount: prev.length, 
+                    newCount: (retryData as any)?.products?.length || 0,
+                    newProductIds: ((retryData as any)?.products || []).map((p: any) => p.id)
+                  });
+                  return ((retryData as any).products || []);
+                }
+              });
+              setHasMore((retryData as any)?.hasMore);
+              setPage((retryData as any).page);
+              return; // Successfully handled, exit early
+            } catch (refreshError) {
+              console.error('❌ Failed to refresh token during product fetch:', refreshError);
+              toast.error('Je sessie is verlopen. Log opnieuw in.');
+              setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
+              setProducts([]);
+              setHasMore(false);
+              setPage(1);
+              return;
+            }
+          } else {
+            toast.error('Je bent niet geautoriseerd om producten te bekijken.');
+            setError('Je bent niet geautoriseerd om producten te bekijken.');
+            setProducts([]);
+            setHasMore(false);
+            setPage(1);
+            return;
+          }
+        }
+        
         throw new Error(`Failed to fetch products: ${fetchError.detail}`);
       }
       
+      console.log('✅ API response successful, processing data...');
+      console.log('✅ Data to be processed:', {
+        productsCount: (data as any)?.products?.length || 0, 
+        total: (data as any)?.total,
+        hasMore: (data as any)?.hasMore,
+        products: (data as any)?.products?.map((p: any) => ({ id: p.id, code: p.code, title: p.title }))
+      });
+      
+      // Log the setProducts call details
+      console.log('📥 === SETTING PRODUCTS STATE ===');
+      console.log('📥 Current products before update:', {
+        count: products.length,
+        ids: products.map((p: ExamProduct) => p.id)
+      });
+      console.log('📥 New products from API:', {
+        count: (data as any)?.products?.length || 0,
+        ids: ((data as any)?.products || []).map((p: any) => p.id)
+      });
+      console.log('📥 Operation type:', append ? 'APPEND' : 'REPLACE');
+      
       setProducts(prev => {
+        console.log('📥 === INSIDE setProducts CALLBACK ===');
+        console.log('📥 Previous products:', {
+          count: prev.length,
+          ids: prev.map((p: ExamProduct) => p.id)
+        });
+        
         if (append) {
           // When appending, filter out any duplicates
           const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
-          const newProducts = ((data as any).products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
-          return [...prev, ...newProducts];
+          const newProducts = ((data as any).products || []).filter((p: any) => !existingIds.has(p.id));
+          console.log('📥 Appending products:', { 
+            previousCount: prev.length, 
+            newProductsCount: newProducts.length, 
+            totalAfterAppend: prev.length + newProducts.length,
+            newProductIds: newProducts.map((p: any) => p.id)
+          });
+          const result = [...prev, ...newProducts];
+          console.log('📥 Final result after append:', {
+            count: result.length,
+            ids: result.map((p: ExamProduct) => p.id)
+          });
+          return result;
         } else {
           // When replacing, use the new data directly
-          return ((data as any).products || []);
+          const result = ((data as any).products || []);
+          console.log('📥 Replacing products:', { 
+            previousCount: prev.length, 
+            newCount: result.length,
+            newProductIds: result.map((p: any) => p.id)
+          });
+          console.log('📥 Final result after replace:', {
+            count: result.length,
+            ids: result.map((p: any) => p.id)
+          });
+          return result;
         }
       });
-      setHasMore((data as any).hasMore);
+      
+      const newHasMore = (data as any)?.hasMore;
+      console.log('📊 === UPDATING PAGINATION STATE ===');
+      console.log('📊 Pagination state update:', { 
+        currentPage: page, 
+        hasMore: newHasMore, 
+        totalProducts: (data as any)?.total,
+        currentProductsCount: (data as any)?.products?.length || 0
+      });
+      
+      setHasMore(newHasMore);
       setPage((data as any).page);
+      
+      console.log('✅ === PRODUCTS FETCH COMPLETED ===');
+      console.log('✅ Final state after update:', {
+        productsCount: products.length,
+        hasMore: newHasMore,
+        page: (data as any).page
+      });
+      
     } catch (err) {
+      console.error('💥 === PRODUCTS FETCH ERROR ===');
       console.error('Error fetching products:', err);
       setError('Failed to load exam products');
       setProducts([]);
       setHasMore(false);
       setPage(1);
     } finally {
+      console.log('🧹 === CLEANING UP LOADING STATES ===');
+      console.log('🧹 Setting loading states to false');
       setLoading(false);
       setLoadingMore(false);
+      setSearchLoading(false);
+      
+      // Clear the active request reference
+      activeRequestRef.current = null;
+      requestKeyRef.current = '';
     }
-  }, [isSignedIn, api, searchTerm, filter, PAGE_SIZE]);
+  }, [isSignedIn, api, filter, PAGE_SIZE, products, loading, loadingMore, searchTerm, page, getRequestKey]);
+
+  // Debounced search handler
+  const handleSearchChange = useCallback((value: string) => {
+    console.log('🔍 Search input changed:', value);
+    setSearchTerm(value);
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Set search loading state immediately
+    setSearchLoading(true);
+    
+    // Debounce the search API call
+    searchTimeoutRef.current = setTimeout(() => {
+      console.log('🔍 Executing search for:', value);
+      setSearchLoading(false);
+      
+      // Only search if we have a value or if clearing search
+      if (value.trim() || value === '') {
+        // Reset to page 1 when searching
+        setPage(1);
+        // Call API directly with the search value instead of using state
+        fetchProductsWithSearch(1, false, value);
+      }
+    }, 500); // 500ms delay
+  }, [fetchProductsWithSearch]);
+
+  const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
+    // Use the existing function for normal fetches
+    return fetchProductsWithSearch(pageNum, append);
+  }, [fetchProductsWithSearch]);
+
+  // Log products state changes
+  useEffect(() => {
+    console.log('📊 === PRODUCTS STATE CHANGED ===');
+    console.log('📊 New products state:', {
+      count: products.length,
+      ids: products.map(p => p.id),
+      loading,
+      loadingMore
+    });
+  }, [products, loading, loadingMore]);
+
+  // Track if initial fetch has been made to prevent duplicate calls
+  const initialFetchMadeRef = useRef(false);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
-    fetchProducts(1, false);
-  }, [fetchProducts]);
+    // Only fetch products if we have a role (to avoid unnecessary API calls)
+    if (hasRole && !initialFetchMadeRef.current) {
+      initialFetchMadeRef.current = true;
+      fetchProductsWithSearch(1, false);
+    }
+  }, [hasRole]); // Remove fetchProducts from dependencies to prevent re-runs
+
+  // Fetch products when filter changes
+  useEffect(() => {
+    if (hasRole && initialFetchMadeRef.current) {
+      console.log('🔄 Filter changed to:', filter);
+      
+      // Debounce filter changes to prevent rapid API calls
+      const filterTimeout = setTimeout(() => {
+        fetchProductsWithSearch(1, false);
+      }, 300); // 300ms debounce
+      
+      return () => clearTimeout(filterTimeout);
+    }
+  }, [filter, hasRole]); // Remove fetchProducts from dependencies
+
+  // Cleanup search timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
     if (!hasMore || loadingMore || loading) {
+      console.log('🔄 Infinite scroll: skipping due to conditions', { hasMore, loadingMore, loading });
       return;
     }
     
+    console.log('👁️ Setting up infinite scroll observer for page:', page);
+    
     const observer = new window.IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
+        console.log('📱 Infinite scroll triggered for page:', page + 1);
         setLoadingMore(true);
-        fetchProducts(page + 1, true);
+        fetchProductsWithSearch(page + 1, true);
       }
     }, { threshold: 1 });
     
     // Observe both desktop and mobile observer refs
     if (observerRef.current) {
       observer.observe(observerRef.current);
+      console.log('👁️ Desktop observer ref attached');
     }
     if (mobileObserverRef.current) {
       observer.observe(mobileObserverRef.current);
+      console.log('👁️ Mobile observer ref attached');
     }
     
     return () => {
       if (observerRef.current) observer.unobserve(observerRef.current);
       if (mobileObserverRef.current) observer.unobserve(mobileObserverRef.current);
     };
-  }, [hasMore, loadingMore, loading, page, fetchProducts]);
+  }, [hasMore, loadingMore, loading, page, fetchProductsWithSearch]);
 
-  // Filtered and sorted products (sorting only, filtering is now backend-driven)
+  // Products are now sorted by code column in the backend and filtered by user role
   const filteredAndSortedProducts = useMemo(() => {
-    let sorted = [...products];
-    sorted.sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
-      if (sortField === 'credits') {
-        aValue = Number(aValue);
-        bValue = Number(bValue);
-      }
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+    console.log('🎯 === FILTERED PRODUCTS CALCULATION ===');
+    console.log('🎯 Input products:', {
+      count: filteredProducts.length,
+      ids: filteredProducts.map(p => p.id),
+      isAdmin
     });
-    return sorted;
-  }, [products, sortField, sortDirection]);
+    
+    const result = filteredProducts;
+    
+    console.log('🎯 Filtered result:', {
+      count: result.length,
+      ids: result.map(p => p.id)
+    });
+    
+    return result;
+  }, [filteredProducts, isAdmin]);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
+
 
   // Show modal, then confirm purchase
   const handlePurchase = (productId: string) => {
@@ -475,22 +855,45 @@ export default function CatalogusPage() {
     if (!purchaseConfirmId) setPurchaseTermsChecked(false);
   }, [purchaseConfirmId]);
 
+  // Loading skeleton component for better perceived performance
+  const LoadingSkeleton = () => (
+    <div className="space-y-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="flex items-center space-x-4 p-4 bg-white rounded-lg shadow">
+          <Skeleton className="h-4 w-16" /> {/* Code */}
+          <Skeleton className="h-4 w-32" /> {/* Title */}
+          <Skeleton className="h-4 w-48" /> {/* Description */}
+          <Skeleton className="h-4 w-20" /> {/* Credits */}
+          <Skeleton className="h-4 w-24" /> {/* Cohort */}
+          <Skeleton className="h-4 w-16" /> {/* Version */}
+          <Skeleton className="h-4 w-20" /> {/* Actions */}
+        </div>
+      ))}
+    </div>
+  );
+
   // Check welcome banner status
   useEffect(() => {
     const checkWelcomeBanner = async () => {
       if (!isSignedIn || !user) return;
       
+      console.log('🔍 Checking welcome banner status for user:', user.id);
+      
       try {
         const { data, error } = await api.getWelcomeVoucherStatus();
 
         if (error) {
-          console.error('Error checking welcome banner status:', error);
+          console.error('❌ Error checking welcome banner status:', error);
           return;
         }
 
-        setShowWelcomeBanner((data as any).should_show_banner);
+        console.log('📊 Welcome banner API response:', data);
+        const shouldShow = (data as any).should_show_banner;
+        console.log('🎯 Should show welcome banner:', shouldShow);
+        
+        setShowWelcomeBanner(shouldShow);
       } catch (error) {
-        console.error('Error checking welcome banner status:', error);
+        console.error('💥 Exception checking welcome banner status:', error);
       } finally {
         setWelcomeBannerLoading(false);
       }
@@ -509,9 +912,13 @@ export default function CatalogusPage() {
         
         if (error) {
           console.error('Error marking first login:', error);
+          // Don't show error to user for first login marking - it's not critical
+        } else {
+          console.log('✅ First login marked successfully');
         }
       } catch (error) {
-        console.error('Error marking first login:', error);
+        console.error('Exception marking first login:', error);
+        // Don't show error to user for first login marking - it's not critical
       }
     };
 
@@ -543,9 +950,16 @@ export default function CatalogusPage() {
         </div>
 
         {/* Welcome Banner */}
-        {!welcomeBannerLoading && showWelcomeBanner && (
-          <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
-        )}
+        {(() => {
+          console.log('🎨 Welcome banner render state:', { 
+            welcomeBannerLoading, 
+            showWelcomeBanner, 
+            shouldRender: !welcomeBannerLoading && showWelcomeBanner 
+          });
+          return !welcomeBannerLoading && showWelcomeBanner ? (
+            <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
+          ) : null;
+        })()}
 
         {/* Search Bar */}
         <div className="mb-10">
@@ -555,10 +969,43 @@ export default function CatalogusPage() {
               type="text"
               placeholder="Zoek op code of titel..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-16 h-20 !text-3xl w-full shadow-lg border-2 border-examen-cyan focus:border-examen-cyan focus:ring-2 focus:ring-examen-cyan/30 transition-all"
             />
+            {/* Search loading indicator */}
+            {searchLoading && (
+              <div className="absolute right-5 top-1/2 transform -translate-y-1/2">
+                <Loader2 className="h-8 w-8 animate-spin text-examen-cyan" />
+              </div>
+            )}
+            {/* Search results count */}
+            {searchTerm && !searchLoading && (
+              <div className="absolute right-5 top-1/2 transform -translate-y-1/2">
+                <Badge variant="secondary" className="text-sm">
+                  {products.length} resultaten
+                </Badge>
+              </div>
+            )}
           </div>
+          
+          {/* Search status message */}
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              {searchLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-examen-cyan" />
+                  Zoeken naar "{searchTerm}"...
+                </span>
+              ) : (
+                <span>
+                  {products.length > 0 
+                    ? `Gevonden: ${products.length} resultaten voor "${searchTerm}"`
+                    : `Geen resultaten gevonden voor "${searchTerm}"`
+                  }
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Filter Bar */}
@@ -630,10 +1077,9 @@ export default function CatalogusPage() {
         {/* Responsive Table/Card Layout */}
         {/* Table for md+ screens */}
         <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+          {isPageLoading ? (
+            <div className="p-8">
+              <LoadingSkeleton />
             </div>
           ) : (
             <>
@@ -641,52 +1087,18 @@ export default function CatalogusPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('code')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Code
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
+                      <TableHead className="font-semibold">
+                        Code
                       </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('title')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Titel
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
+                      <TableHead className="font-semibold">Titel</TableHead>
                       <TableHead className="font-semibold">Beschrijving</TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('credits')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Credits
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('cohort')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          v.a. Cohort
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
+                      <TableHead className="font-semibold">Credits</TableHead>
+                      <TableHead className="font-semibold">v.a. Cohort</TableHead>
                       <TableHead className="font-semibold text-center">Versie</TableHead>
 
-                                              {isAdmin && (
-                          <TableHead className="font-semibold text-center">Status</TableHead>
-                        )}
+                                                                                              {isAdmin && (
+                           <TableHead className="font-semibold text-center">Status</TableHead>
+                          )}
                       <TableHead className="font-semibold text-center">Acties</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -801,7 +1213,14 @@ export default function CatalogusPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedProducts.map((product) => (
+                      filteredAndSortedProducts.map((product) => {
+                        console.log('🎨 === RENDERING PRODUCT ===', {
+                          id: product.id,
+                          code: product.code,
+                          title: product.title,
+                          status: product.status
+                        });
+                        return (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
                             {product.code}
@@ -936,13 +1355,14 @@ export default function CatalogusPage() {
                                   className="flex items-center justify-center w-full"
                                 >
                                   <Edit className="h-4 w-4 mr-1" />
-                                  Bewerken
+                                  Edit
                                 </Button>
                               )}
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -963,10 +1383,9 @@ export default function CatalogusPage() {
         </div>
         {/* Card layout for mobile (below md) */}
         <div className="md:hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+          {isPageLoading ? (
+            <div className="p-8">
+              <LoadingSkeleton />
             </div>
           ) : filteredAndSortedProducts.length === 0 ? (
             <div className="text-center py-8 text-gray-500">

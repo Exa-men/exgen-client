@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { AdminOnly } from '../../components/RoleGuard';
 import { cn } from '../../lib/utils';
 import { useApi } from '@/hooks/use-api';
+import { useCredits } from '../contexts/CreditContext';
 
 interface UserData {
   id: string;
@@ -40,6 +41,7 @@ export default function UsersPage() {
   const { getToken } = useAuth();
   const api = useApi();
   const router = useRouter();
+  const { refreshCurrentUserCredits, broadcastCreditUpdate } = useCredits();
   
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,6 +151,12 @@ export default function UsersPage() {
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, credits: newCredits } : user
       ));
+      
+      // Refresh credits for the updated user (this will also refresh current user if applicable)
+      await refreshCurrentUserCredits();
+      
+      // Broadcast the credit update to all components that need to know about it
+      broadcastCreditUpdate(userId);
       
       toast.success('User credits updated successfully');
     } catch (error) {

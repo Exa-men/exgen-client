@@ -61,7 +61,7 @@ export default function ReviewPage() {
         setLoading(true);
         setError(null);
         
-        const { data, error } = await api.getProductById(productId);
+        const { data, error } = await api.getProduct(productId);
         
         if (error) {
           throw new Error(`Failed to fetch product: ${error.detail}`);

@@ -73,10 +73,16 @@ export const SignInForm: React.FC = () => {
       return true;
     }
     
+    // Check for the specific error message you mentioned
+    if (errorMessage.includes('verification strategy is not valid for this account')) {
+      return true;
+    }
+    
     // Fallback check: error message patterns for migrated users
     return (
       errorMessage.includes('verification strategy is not valid') ||
-      errorMessage.includes('strategy is not valid for this account')
+      errorMessage.includes('strategy is not valid for this account') ||
+      errorMessage.includes('strategy_for_user_invalid')
     );
   };
 

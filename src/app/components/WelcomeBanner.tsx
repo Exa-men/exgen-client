@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { useApi } from '@/hooks/use-api';
+import type { WelcomeVoucherActivateResponse } from '@/hooks/use-api';
 
 interface WelcomeBannerProps {
   onVoucherActivated: (newBalance: number) => void;
@@ -72,23 +73,31 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
     setError(null);
 
     try {
-      const { error } = await api.markFirstLogin();
+      const { data, error } = await api.activateWelcomeVoucher();
 
       if (error) {
         console.error('Error activating welcome voucher:', error);
-        setError('Failed to activate welcome voucher');
+        const errorMessage = error.detail || 'Failed to activate welcome voucher';
+        setError(errorMessage);
+        return;
+      }
+
+      // Check if activation was successful
+      if (!data || !data.success) {
+        const errorMessage = data?.message || 'Failed to activate welcome voucher';
+        setError(errorMessage);
         return;
       }
 
       // Update local state
       setVoucherActivated(true);
       
-      // Notify parent component
+      // Notify parent component with actual credits received
       if (onVoucherActivated) {
-        onVoucherActivated(10); // Welcome voucher gives 10 credits
+        onVoucherActivated(data.credits_added); // Use actual credits from response
       }
       
-      toast.success('Welcome voucher activated successfully! You received 10 credits.');
+      toast.success(`Welcome voucher activated successfully! You received ${data.credits_added} credits.`);
       
       // Switch to celebration mode
       setIsActivating(false);
@@ -104,7 +113,8 @@ export default function WelcomeBanner({ onVoucherActivated }: WelcomeBannerProps
 
     } catch (error) {
       console.error('Error activating welcome voucher:', error);
-      setError(error instanceof Error ? error.message : 'Niet gelukt om de voucher te activeren, neem contact via support@exa.men');
+      const errorMessage = error instanceof Error ? error.message : 'Niet gelukt om de voucher te activeren, neem contact via support@exa.men';
+      setError(errorMessage);
       setIsActivating(false);
     } finally {
       setIsActivating(false);

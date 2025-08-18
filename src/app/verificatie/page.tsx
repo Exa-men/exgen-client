@@ -48,7 +48,7 @@ export default function VerificatiePage() {
         throw new Error(error.detail || 'Failed to verify hash');
       }
 
-      setResult(data);
+      setResult(data as VerificationResponse);
       
     } catch (error) {
       console.error('Verification error:', error);

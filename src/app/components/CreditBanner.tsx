@@ -23,21 +23,53 @@ const CreditBanner: React.FC<CreditBannerProps> = ({
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Only show banner when we're certain the user has no credits
-    // Add a small delay to prevent micro-flashes
-    const timer = setTimeout(() => {
-      if (userLoaded && !loading && credits === 0) {
-        setShowBanner(true);
-      } else {
-        setShowBanner(false);
-      }
-    }, 100); // Small delay to ensure stable state
+    // Only show banner when we're absolutely certain the user has no credits
+    // Wait for both user to be loaded AND credits to be loaded
+    if (userLoaded && !loading) {
+      // Add a longer delay to ensure stable state and prevent micro-flashes
+      const timer = setTimeout(() => {
+        // Only show if credits are exactly 0 (not undefined/null)
+        // And ensure we've waited long enough for any async operations to complete
+        if (credits === 0) {
+          console.log('🚨 CreditBanner: Showing banner - user has 0 credits');
+          setShowBanner(true);
+        } else {
+          console.log('✅ CreditBanner: Hiding banner - user has credits:', credits);
+          setShowBanner(false);
+        }
+      }, 500); // Increased delay to ensure stable state
 
-    return () => clearTimeout(timer);
+      return () => clearTimeout(timer);
+    } else {
+      // Hide banner while loading or user not loaded
+      console.log('⏳ CreditBanner: Hiding banner - loading:', loading, 'userLoaded:', userLoaded, 'credits:', credits);
+      setShowBanner(false);
+    }
   }, [userLoaded, loading, credits]);
 
   // Hide banner if welcome banner is being shown
   if (!showBanner || hideWhenWelcomeBannerShown) {
+    return null;
+  }
+
+  // Additional safety check - don't render anything if still loading
+  if (loading || !userLoaded) {
+    return null;
+  }
+
+  // Don't render if credits is undefined/null (still loading)
+  if (credits === undefined || credits === null) {
+    return null;
+  }
+
+  // Don't render if we're in any loading state
+  if (loading) {
+    return null;
+  }
+
+  // Final safety check - ensure we have valid credit data
+  if (typeof credits !== 'number') {
+    console.warn('⚠️ CreditBanner: Invalid credits value:', credits);
     return null;
   }
 

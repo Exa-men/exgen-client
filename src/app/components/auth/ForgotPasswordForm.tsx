@@ -1,52 +1,56 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useSignIn } from '@clerk/nextjs';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSignIn, useClerk } from '@clerk/nextjs';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
-import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft, RefreshCw } from 'lucide-react';
+import { useApi } from '../../../hooks/use-api';
+import { Loader2, ArrowLeft, CheckCircle, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 export const ForgotPasswordForm: React.FC = () => {
   const { signIn, isLoaded } = useSignIn();
+  const { client } = useClerk();
   const { switchModalMode } = useAuthModal();
-  const router = useRouter();
+  const { clearTokenCache } = useApi();
+  const searchParams = useSearchParams();
   
-  // Form states
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [code, setCode] = useState('');
-  
-  // UI states
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEmailSent, setIsEmailSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  // Modal state: 'email' or 'code'
-  const [modalState, setModalState] = useState<'email' | 'code'>('email');
-  
-  // Migration context
+  const [isProcessingReset, setIsProcessingReset] = useState(false);
+  const [countdown, setCountdown] = useState(3);
   const [isMigratedUser, setIsMigratedUser] = useState(false);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Read URL parameters on component mount
+  // Cleanup countdown interval on unmount
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const migratedEmail = urlParams.get('email');
-    const isMigrated = urlParams.get('migrated') === 'true';
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Check if user is a migrated user
+  useEffect(() => {
+    const migrated = searchParams.get('migrated');
+    const migratedEmail = searchParams.get('email');
     
-    // Set migration context
-    setIsMigratedUser(isMigrated);
-    
-    // Pre-fill email if available and not already set
-    if (migratedEmail && !email) {
+    if (migrated === 'true' && migratedEmail) {
+      setIsMigratedUser(true);
       setEmail(migratedEmail);
     }
-  }, []);
+  }, [searchParams]);
 
   const validateEmailForm = (): boolean => {
     if (!email.trim()) {
@@ -85,35 +89,23 @@ export const ForgotPasswordForm: React.FC = () => {
     return true;
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateEmailForm() || !isLoaded) return;
 
     setIsLoading(true);
-    setError('');
     
     try {
-      // Send password reset code
+      // Use Clerk's reset password email code strategy for password reset
       await signIn.create({
         strategy: 'reset_password_email_code',
         identifier: email,
       });
       
-      // Switch to code input state
-      setModalState('code');
+      setIsEmailSent(true);
     } catch (error: any) {
       console.error('Forgot password error:', error);
-      
-      // Check for direct error code first (like session_exists)
-      if (error.code === 'session_exists') {
-        setError('Je bent al ingelogd. Ververs de pagina.');
-        setTimeout(() => {
-          // Use Next.js router instead of window.location.reload to prevent page reload
-          router.refresh();
-        }, 2000);
-        return;
-      }
       
       // Check for errors array (validation errors)
       const errorCode = error.errors?.[0]?.code;
@@ -123,13 +115,6 @@ export const ForgotPasswordForm: React.FC = () => {
           break;
         case 'form_identifier_not_verified':
           setError('E-mailadres is niet geverifieerd. Controleer je inbox.');
-          break;
-        case 'session_exists':
-          setError('Je bent al ingelogd. Ververs de pagina.');
-          setTimeout(() => {
-            // Use Next.js router instead of window.location.reload to prevent page reload
-            router.refresh();
-          }, 2000);
           break;
         default:
           setError('Er is een fout opgetreden. Probeer het opnieuw.');
@@ -155,17 +140,30 @@ export const ForgotPasswordForm: React.FC = () => {
       });
       
       if (result.status === 'complete') {
-        // Check if this is a migrated user password reset
-        const urlParams = new URLSearchParams(window.location.search);
-        const isMigrated = urlParams.get('migrated') === 'true';
+        // Password reset successful - show processing state
+        console.log('✅ Password reset completed, waiting for session establishment...');
+        setIsProcessingReset(true);
         
-        // Password reset successful - redirect to verification page with appropriate parameters
-        const redirectUrl = isMigrated 
-          ? '/sign-up/verify?flow=password-reset&migrated=true'
-          : '/sign-up/verify?flow=password-reset';
+        // Clear any cached tokens to ensure fresh authentication
+        clearTokenCache();
         
-        // Use Next.js router instead of window.location.href to prevent page reload
-        router.push(redirectUrl);
+        // Start countdown and redirect after 3 seconds
+        let remainingTime = 3;
+        setCountdown(remainingTime);
+        
+        countdownIntervalRef.current = setInterval(() => {
+          remainingTime -= 1;
+          setCountdown(remainingTime);
+          
+          if (remainingTime <= 0) {
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current);
+              countdownIntervalRef.current = null;
+            }
+            console.log('🔄 Redirecting to catalogus...');
+            window.location.href = '/catalogus';
+          }
+        }, 1000);
       } else if (result.status === 'needs_second_factor') {
         setError('Tweefactor authenticatie is vereist, maar wordt niet ondersteund in deze interface');
       } else {
@@ -173,16 +171,6 @@ export const ForgotPasswordForm: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Password reset error:', error);
-      
-      // Check for direct error code first (like session_exists)
-      if (error.code === 'session_exists') {
-        setError('Je bent al ingelogd. Ververs de pagina.');
-        setTimeout(() => {
-          // Use Next.js router instead of window.location.reload to prevent page reload
-          router.refresh();
-        }, 2000);
-        return;
-      }
       
       // Check for errors array (validation errors)
       const errorCode = error.errors?.[0]?.code;
@@ -196,9 +184,6 @@ export const ForgotPasswordForm: React.FC = () => {
         case 'form_password_pwned':
           setError('Dit wachtwoord is te zwak. Kies een sterker wachtwoord.');
           break;
-        case 'session_exists':
-          setError('Je bent al ingelogd. Ververs de pagina.');
-          return;
         default:
           setError('Er is een fout opgetreden. Probeer het opnieuw.');
       }
@@ -207,200 +192,283 @@ export const ForgotPasswordForm: React.FC = () => {
     }
   };
 
-  const handleBackToEmail = () => {
-    setModalState('email');
-    setError('');
-  };
-
-  const handleResendCode = async () => {
-    if (!signIn) return;
-    
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      await signIn.create({
-        strategy: 'reset_password_email_code',
-        identifier: email,
-      });
-      
-      setError('Nieuwe code verzonden naar je e-mailadres.');
-    } catch (error: any) {
-      console.error('Resend code error:', error);
-      setError('Er is een fout opgetreden bij het verzenden van de code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Render different UI based on migration context
-  if (modalState === 'email') {
+  if (isProcessingReset) {
     return (
-      <div className="w-full mx-auto">
-        <div className="text-center mb-6">
-          {isMigratedUser ? (
-            <>
-              <div className="flex justify-center mb-4">
-                <RefreshCw className="h-8 w-8 text-examen-cyan" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                Password Reset Vereist
-              </h2>
-              <p className="text-sm text-gray-600">
-                Hoi! We hebben ons platform vernieuwd en je account gemigreerd. 
-                Je moet je wachtwoord opnieuw instellen om in te loggen.
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-center mb-4">
-                <Mail className="h-8 w-8 text-examen-cyan" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                Wachtwoord Herstellen
-              </h2>
-              <p className="text-sm text-gray-600">
-                Voer je e-mailadres in om je wachtwoord te resetten.
-              </p>
-            </>
-          )}
+      <div className="w-full mx-auto text-center">
+        <div className="mb-6">
+          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+            <CheckCircle className="h-8 w-8 text-green-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
+            Wachtwoord succesvol gereset!
+          </h2>
+          <p className="text-sm text-gray-600">
+            Je wachtwoord is bijgewerkt. We stellen je sessie in...
+          </p>
         </div>
-
-        <form onSubmit={handleEmailSubmit} className="space-y-4">
-          {/* Email */}
-          <div>
-            <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Voer je e-mailadres in"
-              disabled={isLoading}
-            />
+        
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-center space-x-3">
+            <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+            <p className="text-green-800 text-sm font-medium">
+              Sessie wordt ingesteld, even geduld...
+            </p>
           </div>
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full bg-examen-cyan hover:bg-examen-cyan-600 text-white"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Versturen...
-              </>
-            ) : (
-              'Verstuur Reset Link'
-            )}
-          </Button>
-        </form>
-
-        {/* Error Display */}
-        {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600 text-sm">{error}</p>
+          <div className="mt-3 text-center">
+            <p className="text-green-700 text-sm">
+              Doorsturen over <span className="font-bold">{countdown}</span> seconde{countdown !== 1 ? 'n' : ''}...
+            </p>
+            <div className="mt-2 w-full bg-green-200 rounded-full h-2">
+              <div 
+                className="bg-green-600 h-2 rounded-full transition-all duration-1000 ease-linear"
+                style={{ width: `${((3 - countdown) / 3) * 100}%` }}
+              ></div>
+            </div>
           </div>
-        )}
-
-        {/* Back to Sign In */}
-        <div className="text-center mt-6">
-          <button
-            type="button"
-            onClick={() => switchModalMode('sign-in')}
-            className="text-sm text-examen-cyan hover:text-examen-cyan-600"
-            disabled={isLoading}
-          >
-            Terug naar inloggen
-          </button>
+        </div>
+        
+        <div className="text-sm text-gray-500">
+          <p>Je wordt automatisch doorgestuurd naar de catalogus.</p>
         </div>
       </div>
     );
   }
 
-  // Code input state (unchanged)
+  if (isEmailSent) {
+    return (
+      <div className="w-full mx-auto">
+        <div className="text-center mb-6">
+          <div className="mx-auto w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+            <Mail className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+          </div>
+          <p className="text-sm sm:text-base text-gray-600">
+            We hebben een 6-cijferige code verzonden naar:
+          </p>
+          <p className="font-medium text-gray-900 mt-1">{email}</p>
+        </div>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start space-x-3">
+            <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-left">
+              <p className="text-blue-800 text-sm font-medium">
+                Controleer je inbox
+              </p>
+              <p className="text-blue-700 text-sm mt-1">
+                {isMigratedUser 
+                  ? 'Voer de 6-cijferige code in om je wachtwoord opnieuw in te stellen en toegang te krijgen tot je gemigreerde account.'
+                  : 'Voer de 6-cijferige code in die je per e-mail ontvangt om je wachtwoord te resetten. De code is 1 uur geldig.'
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleCodeSubmit} className="space-y-4">
+          {/* Code */}
+          <div>
+            <Label htmlFor="code" className="text-sm font-medium text-gray-700">
+              6-cijferige code
+            </Label>
+            <Input
+              id="code"
+              type="text"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                if (error) setError('');
+              }}
+              placeholder="123456"
+              maxLength={6}
+              className={error ? 'border-red-500' : ''}
+              disabled={isLoading}
+              required
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+              Nieuw wachtwoord
+            </Label>
+            <div className="relative mt-1">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder="Minimaal 8 karakters"
+                className={`pr-10 ${error ? 'border-red-500' : ''}`}
+                disabled={isLoading}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                disabled={isLoading}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm Password */}
+          <div>
+            <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+              Bevestig nieuw wachtwoord
+            </Label>
+            <div className="relative mt-1">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder="Herhaal je wachtwoord"
+                className={`pr-10 ${error ? 'border-red-500' : ''}`}
+                disabled={isLoading}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                disabled={isLoading}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-800 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-examen-cyan hover:bg-examen-cyan-600 text-white"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Wachtwoord resetten...
+              </>
+            ) : (
+              'Wachtwoord resetten'
+            )}
+          </Button>
+        </form>
+
+        {/* Action Buttons */}
+        <div className="space-y-3 mt-6">
+          <Button
+            onClick={() => {
+              setIsEmailSent(false);
+              setError('');
+              setCode('');
+              setPassword('');
+              setConfirmPassword('');
+            }}
+            variant="outline"
+            className="w-full"
+            disabled={isLoading}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Ander e-mailadres gebruiken
+          </Button>
+          
+          <Button
+            onClick={() => switchModalMode('sign-in')}
+            variant="outline"
+            className="w-full"
+            disabled={isLoading}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {isMigratedUser ? 'Terug naar inloggen' : 'Terug naar inloggen'}
+          </Button>
+          
+          <p className="text-sm text-gray-600 text-center">
+            Geen code ontvangen?{' '}
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="text-examen-cyan hover:text-examen-cyan-600 font-medium"
+            >
+              Opnieuw verzenden
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full mx-auto">
       <div className="text-center mb-6">
-        <div className="flex justify-center mb-4">
-          <CheckCircle className="h-8 w-8 text-green-600" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Code Verificatie
-        </h2>
-        <p className="text-sm text-gray-600">
-          We hebben een 6-cijferige code naar {email} gestuurd.
+        <p className="text-sm sm:text-base text-gray-600">
+          {isMigratedUser 
+            ? 'Wachtwoord herstellen'
+            : 'Voer je e-mailadres in en we sturen je een link om je wachtwoord te resetten'
+          }
         </p>
       </div>
 
-      <form onSubmit={handleCodeSubmit} className="space-y-4">
-        {/* Code */}
+      {isMigratedUser && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-left">
+              <p className="text-blue-800 text-sm font-medium mb-1">
+                Password Reset Vereist
+              </p>
+              <p className="text-blue-700 text-sm">
+                Hoi! We hebben ons platform vernieuwd en je account gemigreerd. Je moet je wachtwoord opnieuw instellen om in te loggen.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Email */}
         <div>
-          <Label htmlFor="code" className="text-sm font-medium text-gray-700">
-            Verificatie Code
+          <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+            E-mail
           </Label>
           <Input
-            id="code"
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="000000"
-            maxLength={6}
-            disabled={isLoading}
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (error) setError('');
+            }}
+            className={error ? 'border-red-500' : ''}
+            placeholder="Voer je e-mailadres in"
+            disabled={isLoading || isMigratedUser}
           />
-        </div>
-
-        {/* New Password */}
-        <div>
-          <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-            Nieuw Wachtwoord
-          </Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Minimaal 8 karakters"
-              disabled={isLoading}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              disabled={isLoading}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Confirm Password */}
-        <div>
-          <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
-            Bevestig Wachtwoord
-          </Label>
-          <div className="relative">
-            <Input
-              id="confirmPassword"
-              type={showConfirmPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Herhaal je wachtwoord"
-              disabled={isLoading}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              disabled={isLoading}
-            >
-              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
+          {error && (
+            <p className="text-red-500 text-sm mt-1">{error}</p>
+          )}
         </div>
 
         {/* Submit Button */}
@@ -412,42 +480,25 @@ export const ForgotPasswordForm: React.FC = () => {
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Wachtwoord Wijzigen...
+              Reset link verzenden...
             </>
           ) : (
-            'Wachtwoord Wijzigen'
+            isMigratedUser ? 'Verstuur Reset Link' : 'Reset link verzenden'
           )}
         </Button>
       </form>
 
-      {/* Error Display */}
-      {error && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-600 text-sm">{error}</p>
+              {/* Back to Sign In */}
+        <div className="text-center mt-6">
+          <Button
+            onClick={() => switchModalMode('sign-in')}
+            variant="outline"
+            className="w-full"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {isMigratedUser ? 'Probeer opnieuw in te loggen' : 'Terug naar inloggen'}
+          </Button>
         </div>
-      )}
-
-      {/* Action Buttons */}
-      <div className="flex justify-between items-center mt-6">
-        <button
-          type="button"
-          onClick={handleBackToEmail}
-          className="flex items-center text-sm text-gray-600 hover:text-gray-800"
-          disabled={isLoading}
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Terug
-        </button>
-        
-        <button
-          type="button"
-          onClick={handleResendCode}
-          className="text-sm text-examen-cyan hover:text-examen-cyan-600"
-          disabled={isLoading}
-        >
-          Code opnieuw versturen
-        </button>
-      </div>
     </div>
   );
 };

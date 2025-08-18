@@ -284,7 +284,7 @@ const UnifiedHeader: React.FC = () => {
                     {isLoaded && isSignedIn && (
                       <>
                         <div className="flex flex-col items-center gap-4">
-                          <CreditDisplay showLabel onOrderCredits={openModal} />
+                          <CreditDisplay onOrderCredits={openModal} />
                           <UserButton afterSignOutUrl="/" />
                         </div>
                       </>
