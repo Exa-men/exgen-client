@@ -19,8 +19,11 @@ const Page = dynamic(() => import('react-pdf').then(mod => mod.Page), {
 // Set up PDF.js worker only on client side
 if (typeof window !== 'undefined') {
   const { pdfjs } = require('react-pdf');
-  // Use the local worker file
+  // Use the local worker file with version check
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+  
+  // Log version for debugging
+  console.log('PDF.js API version:', pdfjs.version);
 }
 
 interface PDFViewerProps {
