@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { 
@@ -52,7 +52,10 @@ export default function VouchersPage() {
   const { getToken } = useAuth();
   const api = useApi();
   const router = useRouter();
-  const { registerVoucherRefresh } = useCredits();
+  const { registerVoucherRefresh, registerVoucherUpdateCallback } = useCredits();
+  
+  console.log('🎫 VouchersPage: Component rendered, isSignedIn:', isSignedIn);
+  
   // Removed useRole hook - letting backend handle admin checks
   
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -71,6 +74,40 @@ export default function VouchersPage() {
   const [newVoucherExpiresAt, setNewVoucherExpiresAt] = useState('');
   const [editVoucherCredits, setEditVoucherCredits] = useState(10);
   const [editVoucherExpiresAt, setEditVoucherExpiresAt] = useState('');
+
+  // Function to immediately update a voucher's status (for optimistic updates)
+  const updateVoucherStatusImmediately = useCallback((voucherId: string, updates: any) => {
+    console.log('🎫 VouchersPage: updateVoucherStatusImmediately called with:', { voucherId, updates });
+    
+    setVouchers(prev => {
+      console.log('🎫 VouchersPage: Current vouchers state:', prev.length, 'vouchers');
+      
+      return prev.map(voucher => {
+        if (voucher.id === voucherId) {
+          console.log('🎫 VouchersPage: Found voucher to update:', voucher);
+          
+          // Update only the specific voucher with the new data
+          const updatedVoucher = {
+            ...voucher,
+            ...updates,
+            // Ensure the status is properly updated
+            is_used: updates.is_used || voucher.is_used,
+            used_by: updates.used_by || voucher.used_by,
+            used_at: updates.used_at || voucher.used_at,
+            user_who_used_name: updates.user_who_used_name || voucher.user_who_used_name
+          };
+          
+          console.log('🎫 VouchersPage: Voucher updated in admin table:', {
+            before: { id: voucher.id, is_used: voucher.is_used, status: voucher.is_used ? 'Gebruikt' : 'Beschikbaar' },
+            after: { id: updatedVoucher.id, is_used: updatedVoucher.is_used, status: updatedVoucher.is_used ? 'Gebruikt' : 'Beschikbaar' }
+          });
+          
+          return updatedVoucher;
+        }
+        return voucher;
+      });
+    });
+  }, []);
 
   // Check authentication only (let backend handle admin check)
   useEffect(() => {
@@ -96,13 +133,26 @@ export default function VouchersPage() {
 
   // Register voucher refresh callback
   useEffect(() => {
+    console.log('🎫 VouchersPage: useEffect for voucher refresh callback, isSignedIn:', isSignedIn);
     if (isSignedIn) {
+      console.log('🎫 VouchersPage: Registering voucher refresh callback');
       const unregister = registerVoucherRefresh(fetchVouchers);
       return unregister;
     }
   }, [isSignedIn, registerVoucherRefresh]);
 
+  // Register immediate voucher update callback for optimistic UI
+  useEffect(() => {
+    console.log('🎫 VouchersPage: useEffect for voucher update callback, isSignedIn:', isSignedIn);
+    if (isSignedIn) {
+      console.log('🎫 VouchersPage: Registering voucher update callback');
+      const unregister = registerVoucherUpdateCallback(updateVoucherStatusImmediately);
+      return unregister;
+    }
+  }, [isSignedIn, registerVoucherUpdateCallback, updateVoucherStatusImmediately]);
+
   const fetchVouchers = async () => {
+    console.log('🎫 VouchersPage: fetchVouchers called');
     setLoading(true);
     try {
       const { data, error } = await api.getAdminVouchers();
@@ -118,6 +168,7 @@ export default function VouchersPage() {
         return;
       }
 
+      console.log('🎫 VouchersPage: Vouchers fetched successfully:', (data as any).vouchers?.length || 0, 'vouchers');
       setVouchers((data as any).vouchers || []);
     } catch (error) {
       console.error('Error fetching vouchers:', error);

@@ -458,6 +458,9 @@ export function useApi() {
     deleteAdminVoucher: (id: string) => makeAuthenticatedRequest(`/api/v1/admin/vouchers/${id}`, {
       method: 'DELETE',
     }),
+    deleteUser: (userId: string) => makeAuthenticatedRequest(`/api/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+    }),
     getWelcomeVoucherStats: () => makeAuthenticatedRequest('/api/v1/admin/welcome-voucher/stats'),
 
     // Credit operations

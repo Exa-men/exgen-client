@@ -40,7 +40,8 @@ export const useRoleContext = () => {
 
 // Cache configuration
 const ROLE_CACHE_KEY = 'exgen_user_role_cache';
-const ROLE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+// Cache duration: 30 minutes (good balance of performance and data freshness)
+const ROLE_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 // Global request deduplication
 let activeRequest: Promise<UserRole> | null = null;
@@ -60,7 +61,7 @@ const getCachedRole = (): UserRole | null => {
     const { data, timestamp } = JSON.parse(cached);
     const now = Date.now();
     
-    // Check if cache is still valid
+    // Check if cache is still valid (30-minute duration for optimal performance)
     if (now - timestamp < ROLE_CACHE_DURATION) {
       trackRoleCacheHit();
       return data;
@@ -89,6 +90,7 @@ const setCachedRole = (role: UserRole): void => {
     };
     localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify(cacheData));
     lastCacheTime = Date.now();
+    console.log('💾 Role cached for 30 minutes (performance optimized)');
   } catch (error) {
     console.warn('Failed to cache role:', error);
   }
@@ -103,6 +105,7 @@ const clearCachedRole = (): void => {
   try {
     localStorage.removeItem(ROLE_CACHE_KEY);
     lastCacheTime = 0;
+    console.log('🗑️ Role cache cleared');
   } catch (error) {
     console.warn('Failed to clear cached role:', error);
   }
@@ -132,7 +135,11 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
     };
   });
   
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => {
+    // Start loading if no cached role is available
+    const cachedRole = getCachedRole();
+    return !cachedRole;
+  });
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRequest = useRef<Promise<any> | null>(null);
   const retryCountRef = useRef(0);
@@ -143,6 +150,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
     const fetchUserRole = async () => {
       if (!isLoaded || !isSignedIn) {
         setUserRole({ user_id: null, role: null, first_name: null, last_name: null });
+        setIsLoading(false); // Ensure loading is set to false when not signed in
         clearCachedRole();
         return;
       }
@@ -150,13 +158,15 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       // Additional safety check: ensure user object is available
       if (!user?.id) {
         console.warn('User ID not available, skipping role fetch');
+        setIsLoading(false); // Ensure loading is set to false when user ID is not available
         return;
       }
 
-      // Check cache first
+      // Check cache first (30-minute duration for optimal performance)
       const cachedRole = getCachedRole();
       if (cachedRole && cachedRole.user_id === user?.id) {
         setUserRole(cachedRole);
+        setIsLoading(false); // Ensure loading is set to false when using cached role
         return;
       }
 
@@ -191,9 +201,9 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         
         console.log('🔍 Starting role fetch at:', new Date().toISOString());
         
-        // Add timeout protection for Clerk-dependent calls (as recommended by Clerk Support)
+        // Add timeout protection for role API calls (3s timeout for better UX)
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 3000) // Reduced to 3 seconds for better UX
+          setTimeout(() => reject(new Error('Request timeout')), 3000) // 3 seconds timeout
         );
         
         // Create the request promise using centralized API

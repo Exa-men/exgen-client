@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Crown, User, Edit, Loader2, Filter } from 'lucide-react';
+import { Search, ArrowUpDown, Crown, User, Edit, Loader2, Filter, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { toast } from 'sonner';
 
 import { AdminOnly } from '../../components/RoleGuard';
@@ -55,6 +56,9 @@ export default function UsersPage() {
   const [updatingCredits, setUpdatingCredits] = useState<string | null>(null);
   const [updatingEmail, setUpdatingEmail] = useState<string | null>(null);
   const [updatingSchool, setUpdatingSchool] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [welcomeVoucherStats, setWelcomeVoucherStats] = useState({
     total_users: 0,
     activated_welcome_vouchers: 0,
@@ -302,6 +306,32 @@ export default function UsersPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to update user department');
     } finally {
       setUpdatingUser(null);
+    }
+  };
+
+  const handleDeleteUser = async (userToDelete: UserData) => {
+    try {
+      setDeleting(userToDelete.id);
+      
+      const response = await api.deleteUser(userToDelete.id);
+
+      if (response.error) {
+        throw new Error(response.error.detail || 'Failed to delete user');
+      }
+
+      // Remove user from local state
+      setUsers(prev => prev.filter(user => user.id !== userToDelete.id));
+      
+      // Close modal and reset state
+      setDeleteConfirmOpen(false);
+      setUserToDelete(null);
+      
+      toast.success(`User ${userToDelete.first_name} ${userToDelete.last_name} deleted successfully`);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete user');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -650,13 +680,16 @@ export default function UsersPage() {
                             <ArrowUpDown className="ml-2 h-4 w-4" />
                           </Button>
                         </TableHead>
+                        <TableHead className="text-center">
+                          Actions
+                        </TableHead>
 
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAndSortedUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                             {searchTerm ? 'No users found for your search.' : 'No users available.'}
                           </TableCell>
                         </TableRow>
@@ -775,6 +808,20 @@ export default function UsersPage() {
                             <TableCell>
                               {formatDate(userData.created_at)}
                             </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setUserToDelete(userData);
+                                  setDeleteConfirmOpen(true);
+                                }}
+                                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+                                title="Delete user"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -785,6 +832,40 @@ export default function UsersPage() {
             )}
           </div>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-600">
+                Are you sure you want to delete the user "{userToDelete?.first_name} {userToDelete?.last_name}"?
+                This action cannot be undone and will permanently remove the user account.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => userToDelete && handleDeleteUser(userToDelete)}
+                disabled={deleting === userToDelete?.id}
+              >
+                {deleting === userToDelete?.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete User'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminOnly>
   );

@@ -10,6 +10,8 @@ interface CreditContextType {
   refreshCredits: () => Promise<void>;
   refreshVouchers: () => void;
   registerVoucherRefresh: (callback: () => void) => () => void;
+  updateVoucherStatus: (voucherId: string, updates: any, skipRefresh?: boolean) => void;
+  registerVoucherUpdateCallback: (callback: (voucherId: string, updates: any) => void) => () => void;
   refreshCurrentUserCredits: () => Promise<void>;
   refreshUserCredits: (userId: string) => Promise<void>;
   registerCreditUpdateCallback: (callback: (userId: string) => void) => () => void;
@@ -41,6 +43,9 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   
   // Callback refs for voucher refresh
   const voucherRefreshCallbacks = React.useRef<Set<() => void>>(new Set());
+  
+  // Callback refs for immediate voucher updates (for optimistic UI)
+  const voucherUpdateCallbacks = React.useRef<Set<(voucherId: string, updates: any) => void>>(new Set());
   
   // Callback refs for credit updates (when admin updates user credits)
   const creditUpdateCallbacks = React.useRef<Set<(userId: string) => void>>(new Set());
@@ -224,10 +229,59 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     voucherRefreshCallbacks.current.forEach(callback => callback());
   }, []);
 
+  const updateVoucherStatus = useCallback((voucherId: string, updates: any, skipRefresh = false) => {
+    // Immediately update voucher status for optimistic UI updates
+    // This function will be called when a voucher is redeemed to update the admin view
+    console.log('🎫 CreditContext: updateVoucherStatus called with:', { voucherId, updates, skipRefresh });
+    console.log('🎫 CreditContext: Number of registered voucher update callbacks:', voucherUpdateCallbacks.current.size);
+    console.log('🎫 CreditContext: Number of registered voucher refresh callbacks:', voucherRefreshCallbacks.current.size);
+    
+    // Notify all registered voucher update callbacks with the specific voucher data
+    // This allows components to update just the specific voucher instead of refreshing everything
+    voucherUpdateCallbacks.current.forEach((callback, index) => {
+      console.log(`🎫 CreditContext: Calling voucher update callback ${index}`);
+      try {
+        callback(voucherId, updates);
+      } catch (error) {
+        console.error(`🎫 CreditContext: Error in voucher update callback ${index}:`, error);
+      }
+    });
+    
+    // Only call refresh callbacks if not skipping (for components that need full refresh)
+    if (!skipRefresh) {
+      console.log('🎫 CreditContext: Calling voucher refresh callbacks');
+      voucherRefreshCallbacks.current.forEach((callback, index) => {
+        console.log(`🎫 CreditContext: Calling voucher refresh callback ${index}`);
+        try {
+          callback();
+        } catch (error) {
+          console.error(`🎫 CreditContext: Error in voucher refresh callback ${index}:`, error);
+        }
+      });
+    } else {
+      console.log('🎫 CreditContext: Skipping voucher refresh callbacks');
+    }
+  }, []);
+
   const registerVoucherRefresh = useCallback((callback: () => void) => () => {
+    console.log('🎫 CreditContext: Registering voucher refresh callback');
     voucherRefreshCallbacks.current.add(callback);
+    console.log('🎫 CreditContext: Total voucher refresh callbacks:', voucherRefreshCallbacks.current.size);
     return () => {
+      console.log('🎫 CreditContext: Unregistering voucher refresh callback');
       voucherRefreshCallbacks.current.delete(callback);
+      console.log('🎫 CreditContext: Total voucher refresh callbacks after unregister:', voucherRefreshCallbacks.current.size);
+    };
+  }, []);
+
+  const registerVoucherUpdateCallback = useCallback((callback: (voucherId: string, updates: any) => void) => () => {
+    console.log('🎫 CreditContext: Registering voucher update callback');
+    voucherUpdateCallbacks.current.add(callback);
+    console.log('🎫 CreditContext: Total voucher update callbacks:', voucherUpdateCallbacks.current.size);
+    return () => {
+      console.log('🎫 CreditContext: Unregistering voucher update callback');
+      voucherUpdateCallbacks.current.delete(callback);
+      console.log('🎫 CreditContext: Total voucher update callbacks after unregister:', voucherUpdateCallbacks.current.size);
     };
   }, []);
 
@@ -259,10 +313,12 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
     refreshCredits,
     refreshVouchers,
     registerVoucherRefresh,
+    updateVoucherStatus,
     refreshCurrentUserCredits,
     refreshUserCredits,
     registerCreditUpdateCallback,
-    broadcastCreditUpdate
+    broadcastCreditUpdate,
+    registerVoucherUpdateCallback
   };
 
   return (

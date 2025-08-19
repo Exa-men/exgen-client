@@ -77,7 +77,7 @@ const CreditOrderModal: React.FC = () => {
   });
 
   // Voucher redemption state
-  const { refreshCredits, refreshVouchers } = useCredits();
+  const { refreshCredits, refreshVouchers, updateVoucherStatus } = useCredits();
   const [voucherCode, setVoucherCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isVoucherFocused, setIsVoucherFocused] = useState(false);
@@ -263,10 +263,58 @@ const CreditOrderModal: React.FC = () => {
         creditsAdded: (data as any).credits_added
       });
       setVoucherCode('');
+      
+      // Optimistic UI update: immediately update voucher status in admin table
+      if ((data as any).data?.voucher_id) {
+        console.log('🎫 CreditOrderModal: Voucher redemption successful, data:', data);
+        
+        // Find and update the voucher in the admin vouchers table
+        const voucherId = (data as any).data.voucher_id;
+        const voucherCode = (data as any).data.voucher_code;
+        
+        console.log('🎫 CreditOrderModal: Extracted voucher data:', { voucherId, voucherCode });
+        
+        // Update the voucher status immediately for better UX
+        // This will make the admin see "Gebruikt" status right away
+        const updateVoucherInAdminTable = () => {
+          // Get the current user info for the voucher update
+          const currentUser = user;
+          if (currentUser) {
+            // Create an optimistic update object with all necessary data
+            const optimisticVoucherUpdate = {
+              id: voucherId,
+              code: voucherCode,
+              is_used: true,
+              used_by: currentUser.id,
+              used_at: new Date().toISOString(),
+              user_who_used_name: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.emailAddresses[0]?.emailAddress || 'Unknown User',
+              // Include credits info for completeness
+              credits: (data as any).data.credits_added
+            };
+            
+            console.log('🎫 CreditOrderModal: Calling updateVoucherStatus with:', optimisticVoucherUpdate);
+            
+            // Use the new updateVoucherStatus function for immediate updates
+            // This will update just the specific voucher in the admin table
+            updateVoucherStatus(voucherId, optimisticVoucherUpdate, true); // Skip full refresh for efficiency
+            
+            console.log('🎫 Voucher redeemed successfully, updating admin view:', optimisticVoucherUpdate);
+          } else {
+            console.warn('🎫 CreditOrderModal: No current user found for voucher update');
+          }
+        };
+        
+        // Execute the optimistic update
+        updateVoucherInAdminTable();
+      } else {
+        console.warn('🎫 CreditOrderModal: No voucher_id in response data:', data);
+        console.log('🎫 CreditOrderModal: Full response structure:', JSON.stringify(data, null, 2));
+      }
+      
       // Refresh user credits
       await refreshCredits();
-      // Refresh vouchers to update admin view
-      refreshVouchers();
+      // Note: refreshVouchers() is no longer needed here since updateVoucherStatus()
+      // handles the immediate update more efficiently
       // Close modal after successful redemption
       setTimeout(() => {
         handleClose();
