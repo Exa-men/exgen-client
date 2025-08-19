@@ -12,6 +12,7 @@ import {
 import { Badge } from './ui/badge';
 
 interface Version {
+  id?: string; // Add optional id field for version identification
   version: string;
   releaseDate: string;
   downloadUrl?: string;
@@ -41,7 +42,9 @@ export default function VersionDropdown({
   };
 
   const handleDownload = (version: string, versionId?: string) => {
-    onDownload?.(version, versionId);
+    // Use the version id if available, otherwise fall back to version string
+    const downloadId = versionId || version;
+    onDownload?.(version, downloadId);
   };
 
   const formatDate = (dateString: string) => {
@@ -114,7 +117,7 @@ export default function VersionDropdown({
                 className="h-6 w-6 p-0 ml-2"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDownload(version.version);
+                  handleDownload(version.version, version.id);
                 }}
               >
                 <Download className="h-3 w-3" />

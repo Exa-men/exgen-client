@@ -240,6 +240,7 @@ export function useApi() {
     // Token management
     refreshToken: () => getCachedToken(true),
     clearTokenCache,
+    getCachedToken,
     
     // Raw API call method for custom endpoints
     makeAuthenticatedRequest,
@@ -266,8 +267,8 @@ export function useApi() {
     deleteProduct: (id: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
       method: 'DELETE',
     }),
-    updateProductStatus: (id: string, status: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}/status`, {
-      method: 'PATCH',
+    updateProductStatus: (id: string, status: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${id}`, {
+      method: 'PUT',
       body: JSON.stringify({ status }),
     }),
 
@@ -284,9 +285,8 @@ export function useApi() {
     deleteProductVersion: (productId: string, versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}`, {
       method: 'DELETE',
     }),
-    updateVersionStatus: (productId: string, versionId: string, isEnabled: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${versionId}/status`, {
+    updateVersionStatus: (productId: string, versionId: string, isEnabled: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/status?enabled=${isEnabled}`, {
       method: 'PATCH',
-      body: JSON.stringify({ is_enabled: isEnabled }),
     }),
 
     // Document operations
@@ -315,6 +315,10 @@ export function useApi() {
     }),
     deleteAssessmentComponent: (productId: string, versionId: string, componentId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/versions/${productId}/assessment-components/${componentId}`, {
       method: 'DELETE',
+    }),
+    saveProductAssessment: (productId: string, data: any) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/save-assessment`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
     // Workflow operations
@@ -380,11 +384,11 @@ export function useApi() {
       method: 'PUT',
       body: JSON.stringify({ is_active: true }),
     }),
-    updateWorkflowConfig: (groupId: string, config: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ config }),
+    updateWorkflowConfig: (groupId: string, config: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(config),
     }),
-    
+
 
 
     // Admin operations
@@ -500,6 +504,12 @@ export function useApi() {
         : `/api/v1/catalog/download/${productId}/package/${downloadId}`;
       return makeAuthenticatedRequest(url);
     },
+    getDownloadVerification: (productId: string, downloadId: string, versionId?: string) => {
+      const url = versionId 
+        ? `/api/v1/catalog/download/${productId}/verification/${downloadId}?version_id=${versionId}`
+        : `/api/v1/catalog/download/${productId}/verification/${downloadId}`;
+      return makeAuthenticatedRequest(url);
+    },
 
     // System operations
     getSystemHealth: () => makeAuthenticatedRequest('/api/v1/health'),
@@ -518,6 +528,10 @@ export function useApi() {
       body: JSON.stringify({ is_preview: isPreview }),
     }),
     copyDocuments: (targetVersionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${targetVersionId}/documents/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ source_version_id: sourceVersionId }),
+    }),
+    copyAssessmentData: (targetVersionId: string, sourceVersionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${targetVersionId}/assessment/copy`, {
       method: 'POST',
       body: JSON.stringify({ source_version_id: sourceVersionId }),
     }),

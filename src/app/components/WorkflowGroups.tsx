@@ -5,6 +5,27 @@ import WorkflowConfig from './WorkflowConfig';
 import { useApi } from '@/hooks/use-api';
 import { toast } from 'sonner';
 
+/**
+ * NOTE: Current Prompt Management Implementation
+ * 
+ * This component currently implements a temporary prompt management system that stores
+ * prompts locally in the workflow group's prompts object. This is because the backend
+ * doesn't currently support updating/deleting prompts by name - it expects prompts
+ * to be managed as separate entities with IDs.
+ * 
+ * Current Limitations:
+ * - Prompts are stored locally and will be lost on page refresh
+ * - No persistence to backend database
+ * - No proper prompt versioning or history
+ * 
+ * TODO: Implement proper backend prompt management:
+ * 1. Create a prompts table/collection in the backend
+ * 2. Add endpoints for CRUD operations on prompts
+ * 3. Link prompts to workflow groups via foreign keys
+ * 4. Update the prompt management functions to use the proper backend API
+ * 5. Add prompt versioning and history tracking
+ */
+
 interface StepConfig {
   id: string;
   name: string;
@@ -51,8 +72,8 @@ const mapWorkflowGroup = (group: any): WorkflowGroup => ({
   isDefault: group.is_default,
   created_at: group.created_at,
   updated_at: group.updated_at,
-  config: group.config,
-  prompts: group.prompts
+  config: group.config && group.config.steps ? group.config : { steps: [] },
+  prompts: group.prompts || {}
 });
 
 export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }: WorkflowGroupsProps) {
@@ -87,7 +108,13 @@ export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }:
         console.log('🔍 Data length:', Array.isArray(groupsData) ? groupsData.length : 'Not an array');
         
         // Map backend snake_case to frontend camelCase
-        const mappedGroups = (groupsData as any[]).map((group: any) => mapWorkflowGroup(group));
+        const mappedGroups = (groupsData as any[]).map((group: any) => {
+          console.log('🔍 Raw group from API:', group);
+          const mapped = mapWorkflowGroup(group);
+          console.log('🔍 Mapped group:', mapped.id, 'config:', mapped.config, 'steps:', mapped.config?.steps);
+          return mapped;
+        });
+        console.log('🔍 All mapped groups:', mappedGroups);
         setGroups(mappedGroups);
         
         // Fetch available models using centralized API
@@ -251,8 +278,14 @@ export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }:
     try {
       console.log('⚙️ Updating workflow config:', id, config);
       
+      // Ensure config has valid structure
+      const validConfig = {
+        ...config,
+        steps: config.steps || []
+      };
+      
       // Optimistically update local state immediately
-      setGroups(prev => prev.map(g => g.id === id ? { ...g, config } : g));
+      setGroups(prev => prev.map(g => g.id === id ? { ...g, config: validConfig } : g));
       
       const { error: updateError } = await api.updateWorkflowConfig(id, config);
       
@@ -274,56 +307,209 @@ export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }:
   };
 
   // Update prompt for a group
+  // NOTE: This is a temporary implementation that stores prompts locally since the backend
+  // doesn't currently support updating prompts by name. The backend expects prompts to be
+  // managed as separate entities with IDs.
+  // 
+  // TODO: Implement proper backend prompt management:
+  // 1. Create a prompts table/collection in the backend
+  // 2. Add endpoints for CRUD operations on prompts
+  // 3. Link prompts to workflow groups via foreign keys
+  // 4. Update this function to use the proper backend API
   const handlePromptChange = async (id: string, promptName: string, content: string) => {
+    // Validate inputs first
+    if (!id || typeof id !== 'string') {
+      console.error('❌ Invalid ID parameter:', id);
+      toast.error('Invalid workflow group ID');
+      return;
+    }
+    
+    if (!promptName || typeof promptName !== 'string') {
+      console.error('❌ Invalid prompt name parameter:', promptName);
+      toast.error('Invalid prompt name');
+      return;
+    }
+    
+    if (content === undefined || content === null) {
+      console.error('❌ Invalid content parameter:', content);
+      toast.error('Invalid prompt content');
+      return;
+    }
+    
+    // Ensure content is a string
+    const contentString = String(content);
+    if (contentString.trim().length === 0) {
+      console.warn('⚠️ Empty prompt content provided');
+    }
+    
+    // Ensure groups state is properly initialized
+    if (!groups || !Array.isArray(groups) || groups.length === 0) {
+      console.error('❌ Groups state is not properly initialized:', groups);
+      toast.error('Workflow groups not loaded. Please refresh the page and try again.');
+      return;
+    }
+    
+    // Find the target group and validate it exists
+    const targetGroup = groups.find(g => g.id === id);
+    if (!targetGroup) {
+      console.error('❌ Target group not found:', { id, availableGroups: groups.map(g => g.id) });
+      toast.error(`Workflow group with ID ${id} not found`);
+      return;
+    }
+    
+          // Store the previous prompt content for potential rollback
+      const previousContent = targetGroup.prompts?.[promptName];
+      
+      try {
+        console.log('📝 Updating prompt:', id, promptName, contentString);
+        console.log('🔍 Current groups state:', groups);
+        console.log('🔍 Target group:', targetGroup);
+        console.log('🔍 Previous prompt content:', previousContent);
+        
+        // Ensure the prompts object exists and is properly initialized
+        const currentPrompts = targetGroup.prompts || {};
+        console.log('🔍 Current prompts object:', currentPrompts);
+        
+        // Optimistically update local state immediately
+        try {
+          setGroups(prev => {
+            const updatedGroups = prev.map(g => 
+              g.id === id 
+                ? { 
+                    ...g, 
+                    prompts: {
+                      ...currentPrompts,
+                      [promptName]: contentString
+                    }
+                  }
+                : g
+            );
+            
+            console.log('🔍 State update result:', {
+              before: prev.find(g => g.id === id)?.prompts,
+              after: updatedGroups.find(g => g.id === id)?.prompts,
+              targetGroup: updatedGroups.find(g => g.id === id)
+            });
+            
+            return updatedGroups;
+          });
+        } catch (stateUpdateError: any) {
+          console.error('❌ Error updating state:', stateUpdateError);
+          throw new Error(`Failed to update local state: ${stateUpdateError.message || 'Unknown error'}`);
+        }
+        
+        console.log('🔍 Updated local prompts state for group:', id, 'prompt:', promptName, 'content length:', contentString.length);
+      
+      // Since the backend doesn't support updating prompts by name, we'll just update the local state
+      // and store the prompt content in the workflow group's prompts object
+      // This is a temporary solution until the backend supports proper prompt management
+      console.log('ℹ️ Backend prompt update not supported, storing prompt locally');
+      
+      // For now, we'll consider this a success since we're storing the prompt locally
+      // In a production environment, you would want to implement proper backend prompt management
+      console.log('✅ Prompt stored locally successfully');
+      toast.success('Prompt updated successfully (stored locally)');
+      
+    } catch (err: any) {
+      console.error('❌ Error updating prompt:', err);
+      console.error('❌ Error details:', {
+        error: err,
+        errorType: typeof err,
+        errorMessage: err?.message,
+        errorStack: err?.stack
+      });
+      
+      // Revert optimistic update on error if we have the previous content
+      if (previousContent !== undefined) {
+        try {
+          setGroups(prev => prev.map(g => 
+            g.id === id 
+              ? { 
+                  ...g, 
+                  prompts: {
+                    ...(g.prompts || {}),
+                    [promptName]: previousContent
+                  }
+                }
+              : g
+          ));
+          console.log('✅ Successfully reverted optimistic update');
+        } catch (revertError) {
+          console.error('❌ Failed to revert optimistic update:', revertError);
+        }
+      }
+      
+      // Show user-friendly error message
+      const errorMessage = err?.message || 'An unexpected error occurred while updating the prompt';
+      toast.error(errorMessage);
+    }
+  };
+
+  // Delete prompt for a group
+  // NOTE: This is a temporary implementation that removes prompts from local state since the backend
+  // doesn't currently support deleting prompts by name. The backend expects prompts to be
+  // managed as separate entities with IDs.
+  const handlePromptDelete = async (id: string, promptName: string) => {
+    // Store the previous prompt content for potential rollback
+    const previousContent = groups.find(g => g.id === id)?.prompts?.[promptName];
+    
     try {
-      console.log('📝 Updating prompt:', id, promptName, content);
+      console.log('🗑️ Deleting prompt:', id, promptName);
       
       // Optimistically update local state immediately
       setGroups(prev => prev.map(g => 
         g.id === id 
           ? { 
               ...g, 
-              prompts: {
-                ...g.prompts,
-                [promptName]: content
-              }
+              prompts: Object.fromEntries(
+                Object.entries(g.prompts || {}).filter(([key]) => key !== promptName)
+              )
             }
           : g
       ));
       
-      // Make API call in background
-      const token = await getToken();
-      const { error } = await api.updateWorkflowPrompt(id, promptName, content);
+      console.log('🔍 Updated local prompts state for group:', id, 'removed prompt:', promptName);
       
-      if (error) {
-        // Revert optimistic update on error
-        // Note: We'd need to store the previous prompt content to revert properly
-        // For now, we'll just show an error and let the user retry
-        throw new Error('Failed to update prompt');
+      // Since the backend doesn't support deleting prompts by name, we'll just remove it from local state
+      // This is a temporary solution until the backend supports proper prompt management
+      console.log('ℹ️ Backend prompt deletion not supported, removing prompt locally');
+      
+      // For now, we'll consider this a success since we're removing the prompt locally
+      // In a production environment, you would want to implement proper backend prompt management
+      console.log('✅ Prompt removed locally successfully');
+      toast.success('Prompt deleted successfully (removed locally)');
+      
+    } catch (err: any) {
+      console.error('❌ Error deleting prompt:', err);
+      
+      // Revert optimistic update on error if we have the previous content
+      if (previousContent !== undefined) {
+        setGroups(prev => prev.map(g => 
+          g.id === id 
+            ? { 
+                ...g, 
+                prompts: {
+                  ...(g.prompts || {}),
+                  [promptName]: previousContent
+                }
+              }
+            : g
+        ));
       }
       
-      console.log('✅ Prompt updated successfully');
-      toast.success('Prompt updated successfully');
-      
-    } catch (err) {
-      console.error('❌ Error updating prompt:', err);
-      toast.error('Failed to update prompt');
+      toast.error(err.message || 'Failed to delete prompt');
     }
   };
 
-  // Delete prompt for a group (handled by config update)
-  const handlePromptDelete = async (id: string, promptName: string) => {
-    // Not implemented in backend; could be added if needed
-  };
-
   // Update base instructions for a group
+  // NOTE: This function works with the backend API and persists changes to the database
   const handleBaseInstructionsChange = async (id: string, content: string) => {
     try {
       // Optimistically update local state immediately
       setGroups(prev => prev.map(g => g.id === id ? {
         ...g,
         prompts: { 
-          ...g.prompts,
+          ...(g.prompts || {}),
           _base_instructions: content
         }
       } : g));
@@ -373,12 +559,28 @@ export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }:
   return (
     <div>
       <div className="space-y-6">
-        {groups.map((group) => (
-          availableModels && (
+        {groups.map((group) => {
+          console.log('🔍 Rendering group:', group.id, 'config:', group.config, 'steps:', group.config?.steps);
+          console.log('🔍 Group type check:', {
+            hasConfig: !!group.config,
+            configType: typeof group.config,
+            hasSteps: !!group.config?.steps,
+            stepsType: typeof group.config?.steps,
+            isArray: Array.isArray(group.config?.steps)
+          });
+          return availableModels && (
             <WorkflowConfig
               key={group.id}
-              workflowConfig={group.config || { steps: [] }}
-              prompts={group.prompts || {}}
+              workflowConfig={(() => {
+                const config = group.config && group.config.steps ? group.config : { steps: [] };
+                console.log('🔍 Final workflowConfig prop:', config);
+                return config;
+              })()}
+              prompts={(() => {
+                const prompts = group.prompts || {};
+                console.log('🔍 Passing prompts to WorkflowConfig for group:', group.id, 'prompts:', Object.keys(prompts));
+                return prompts;
+              })()}
               availableModels={availableModels}
               onConfigChange={config => handleConfigChange(group.id, config)}
               onPromptChange={(promptName, content) => handlePromptChange(group.id, promptName, content)}
@@ -396,8 +598,8 @@ export default function WorkflowGroups({ backendUrl = 'http://localhost:8000' }:
               expanded={!!expandedGroups[group.id]}
               onToggleExpand={() => setExpandedGroups(prev => ({ ...prev, [group.id]: !prev[group.id] }))}
             />
-          )
-        ))}
+          );
+        })}
       </div>
       
       {/* Add button positioned outside the space-y-6 container */}

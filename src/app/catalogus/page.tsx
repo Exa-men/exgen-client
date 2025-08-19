@@ -27,11 +27,13 @@ import { useApi } from '@/hooks/use-api';
 import { toast } from 'sonner';
 
 interface Version {
+  id?: string; // Add optional id field for version identification
   version: string;
   releaseDate: string;
   downloadUrl?: string;
   isLatest: boolean;
   isEnabled?: boolean; // Only present for admin users
+  is_enabled?: boolean; // Database field name (snake_case) - fallback for isEnabled
 }
 
 interface ExamProduct {
@@ -184,9 +186,21 @@ export default function CatalogusPage() {
     const hasVersion = product.versions && product.versions.length > 0;
     
     // Check if there's at least one enabled version (only for admin users)
+    // Handle both possible field names: isEnabled (camelCase) and is_enabled (snake_case)
     const hasEnabledVersion = isAdmin ? 
-      (product.versions && product.versions.some(version => version.isEnabled === true)) : 
+      (product.versions && product.versions.some(version => {
+        const isEnabled = version.isEnabled !== undefined ? version.isEnabled : version.is_enabled;
+        return isEnabled === true;
+      })) : 
       true; // For non-admin users, assume versions are enabled if they exist
+    
+    // Debug logging for validation
+    console.log('🔍 === PRODUCT PUBLICATION VALIDATION ===');
+    console.log('🔍 Product:', { id: product.id, code: product.code, title: product.title, status: product.status });
+    console.log('🔍 Basic info check:', { hasBasicInfo, code: !!product.code, title: !!product.title, description: !!product.description, credits: !!product.credits, cohort: !!product.cohort });
+    console.log('🔍 Version check:', { hasVersion, versionsCount: product.versions?.length, versions: product.versions });
+    console.log('🔍 Enabled version check:', { hasEnabledVersion, isAdmin, versions: product.versions?.map(v => ({ version: v.version, isEnabled: v.isEnabled })) });
+    console.log('🔍 Final validation result:', hasBasicInfo && hasVersion && hasEnabledVersion);
     
     return hasBasicInfo && hasVersion && hasEnabledVersion;
   };
@@ -471,6 +485,7 @@ export default function CatalogusPage() {
           ids: prev.map((p: ExamProduct) => p.id)
         });
         
+        let result;
         if (append) {
           // When appending, filter out any duplicates
           const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
@@ -481,15 +496,14 @@ export default function CatalogusPage() {
             totalAfterAppend: prev.length + newProducts.length,
             newProductIds: newProducts.map((p: any) => p.id)
           });
-          const result = [...prev, ...newProducts];
+          result = [...prev, ...newProducts];
           console.log('📥 Final result after append:', {
             count: result.length,
             ids: result.map((p: ExamProduct) => p.id)
           });
-          return result;
         } else {
           // When replacing, use the new data directly
-          const result = ((data as any).products || []);
+          result = ((data as any).products || []);
           console.log('📥 Replacing products:', { 
             previousCount: prev.length, 
             newCount: result.length,
@@ -499,8 +513,28 @@ export default function CatalogusPage() {
             count: result.length,
             ids: result.map((p: any) => p.id)
           });
-          return result;
         }
+        
+        // Debug: Log the structure of products to check for isEnabled property
+        console.log('🔍 === PRODUCT STRUCTURE DEBUG ===');
+        result.forEach((product: any, index: number) => {
+          console.log(`🔍 Product ${index + 1}:`, {
+            id: product.id,
+            code: product.code,
+            title: product.title,
+            status: product.status,
+            versions: product.versions?.map((v: any) => ({
+              version: v.version,
+              isEnabled: v.isEnabled,
+              is_enabled: v.is_enabled, // Check if database field is present
+              hasIsEnabled: 'isEnabled' in v,
+              hasIsEnabledUnderscore: 'is_enabled' in v,
+              allKeys: Object.keys(v)
+            }))
+          });
+        });
+        
+        return result;
       });
       
       const newHasMore = (data as any)?.hasMore;
@@ -677,26 +711,38 @@ export default function CatalogusPage() {
 
   // Show modal, then confirm purchase
   const handlePurchase = (productId: string) => {
+    console.log('🛒 Purchase button clicked for product:', productId);
     setPurchaseConfirmId(productId);
   };
 
   const handleConfirmPurchase = async () => {
     if (!purchaseConfirmId) return;
+    console.log('🛒 Starting purchase for product:', purchaseConfirmId);
     setPurchasingProduct(purchaseConfirmId);
     setPurchaseLoading(true);
     setError(null);
     try {
       const token = await getToken();
+      console.log('🔑 Got auth token:', !!token);
+      
+      const requestBody = { productId: purchaseConfirmId };
+      console.log('📤 Sending purchase request:', requestBody);
+      
       const response = await fetch(`/api/v1/catalog/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ productId: purchaseConfirmId }),
+        body: JSON.stringify(requestBody),
       });
+      
+      console.log('📥 Purchase response status:', response.status);
+      console.log('📥 Purchase response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ Purchase failed:', errorData);
         if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
           setShowCreditsError(true);
           setPurchaseConfirmId(null);
@@ -704,7 +750,10 @@ export default function CatalogusPage() {
         }
         throw new Error(errorData.error || 'Purchase failed');
       }
+      
       const result = await response.json();
+      console.log('✅ Purchase successful:', result);
+      
       // Update the product to show as purchased
       setProducts(prev => prev.map(product =>
         product.id === purchaseConfirmId
@@ -712,10 +761,14 @@ export default function CatalogusPage() {
           : product
       ));
       setPurchaseConfirmId(null);
+      
       // Refresh credit balance to update header
+      console.log('🔄 Refreshing credits...');
       await refreshCredits();
+      console.log('✅ Credits refreshed');
+      
     } catch (err) {
-      console.error('Purchase error:', err);
+      console.error('💥 Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');
     } finally {
       setPurchasingProduct(null);
@@ -740,14 +793,105 @@ export default function CatalogusPage() {
       return;
     }
     
+    // If no version is specified, automatically select the latest enabled version
+    let selectedVersionId = versionId;
+    if (!selectedVersionId && product.versions && product.versions.length > 0) {
+      // Find the latest enabled version
+      const latestEnabledVersion = product.versions.find(v => {
+        const isEnabled = v.isEnabled !== undefined ? v.isEnabled : v.is_enabled;
+        return isEnabled === true;
+      }) || product.versions.find(v => v.isLatest) || product.versions[0];
+      
+      if (latestEnabledVersion) {
+        // If the version doesn't have an ID, we need to fetch the product versions to get the actual ID
+        if (!latestEnabledVersion.id) {
+          try {
+            console.log('🔍 Version has no ID, fetching product versions to get actual version ID...');
+            const { data: versionsData, error: versionsError } = await api.getProductVersions(productId);
+            
+            if (versionsError) {
+              console.warn('⚠️ Failed to fetch product versions, using version string as fallback:', versionsError);
+              selectedVersionId = latestEnabledVersion.version;
+            } else if (versionsData && Array.isArray(versionsData)) {
+              // Find the matching version by version string
+              const matchingVersion = versionsData.find((v: any) => v.version === latestEnabledVersion.version);
+              if (matchingVersion && matchingVersion.id) {
+                selectedVersionId = matchingVersion.id;
+                console.log('✅ Found version ID from API:', {
+                  version: latestEnabledVersion.version,
+                  versionId: matchingVersion.id
+                });
+              } else {
+                console.warn('⚠️ Version not found in API response, using version string as fallback');
+                selectedVersionId = latestEnabledVersion.version;
+              }
+            } else {
+              console.warn('⚠️ Invalid versions data from API, using version string as fallback');
+              selectedVersionId = latestEnabledVersion.version;
+            }
+          } catch (error) {
+            console.warn('⚠️ Error fetching product versions, using version string as fallback:', error);
+            selectedVersionId = latestEnabledVersion.version;
+          }
+        } else {
+          selectedVersionId = latestEnabledVersion.id;
+        }
+        
+        console.log('🔍 Auto-selected version for download:', {
+          productId,
+          selectedVersion: latestEnabledVersion.version,
+          selectedVersionId,
+          isLatest: latestEnabledVersion.isLatest,
+          isEnabled: latestEnabledVersion.isEnabled || latestEnabledVersion.is_enabled
+        });
+      }
+    }
+    
     // Set up download modal
     setDownloadProduct(product);
-    setDownloadVersionId(versionId);
+    setDownloadVersionId(selectedVersionId);
     setDownloadModalOpen(true);
   };
 
   const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
-    await handleDownload(productId, versionId);
+    // If we have a versionId, use it directly
+    if (versionId) {
+      await handleDownload(productId, versionId);
+      return;
+    }
+    
+    // If we only have the version string, we need to fetch the product versions to get the actual ID
+    try {
+      console.log('🔍 Version download called with version string, fetching product versions to get actual version ID...');
+      const { data: versionsData, error: versionsError } = await api.getProductVersions(productId);
+      
+      if (versionsError) {
+        console.error('❌ Failed to fetch product versions:', versionsError);
+        setError('Failed to get version information for download');
+        return;
+      }
+      
+      if (versionsData && Array.isArray(versionsData)) {
+        // Find the matching version by version string
+        const matchingVersion = versionsData.find((v: any) => v.version === version);
+        if (matchingVersion && matchingVersion.id) {
+          console.log('✅ Found version ID from API:', {
+            version: version,
+            versionId: matchingVersion.id
+          });
+          await handleDownload(productId, matchingVersion.id);
+        } else {
+          console.error('❌ Version not found in API response:', version);
+          setError(`Version ${version} not found`);
+        }
+      } else {
+        console.error('❌ Invalid versions data from API');
+        setError('Failed to get version information');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching product versions:', error);
+      setError('Failed to get version information for download');
+    }
   };
 
   const handleOpenFeedback = (product: ExamProduct) => {
@@ -854,6 +998,11 @@ export default function CatalogusPage() {
   useEffect(() => {
     if (!purchaseConfirmId) setPurchaseTermsChecked(false);
   }, [purchaseConfirmId]);
+
+  // Debug purchase modal state
+  useEffect(() => {
+    console.log('🔍 Purchase modal state changed:', { purchaseConfirmId, purchaseProduct: !!purchaseProduct });
+  }, [purchaseConfirmId, purchaseProduct]);
 
   // Loading skeleton component for better perceived performance
   const LoadingSkeleton = () => (
@@ -1569,7 +1718,10 @@ export default function CatalogusPage() {
               type="checkbox"
               id="purchase-terms"
               checked={purchaseTermsChecked}
-              onChange={e => setPurchaseTermsChecked(e.target.checked)}
+              onChange={e => {
+                console.log('☑️ Purchase terms checkbox changed:', e.target.checked);
+                setPurchaseTermsChecked(e.target.checked);
+              }}
               className="accent-examen-cyan w-5 h-5"
             />
             <label htmlFor="purchase-terms" className="text-sm select-none">
@@ -1590,7 +1742,11 @@ export default function CatalogusPage() {
             <Button
               variant="default"
               className="bg-examen-cyan text-white"
-              onClick={handleConfirmPurchase}
+              onClick={() => {
+                console.log('🔘 Confirm purchase button clicked');
+                console.log('🔍 Button state:', { purchaseLoading, purchaseTermsChecked });
+                handleConfirmPurchase();
+              }}
               disabled={purchaseLoading || !purchaseTermsChecked}
             >
               {purchaseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Bevestigen'}

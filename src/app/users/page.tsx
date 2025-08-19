@@ -79,20 +79,22 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await api.getAdminUsers();
+      const response = await api.getAdminUsers();
       
-      if (error) {
-        if (error.status === 403) {
+      if (response.error) {
+        if (response.error.status === 403) {
           console.error('Access denied: Admin privileges required');
           alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
           router.push('/');
           return;
         }
-        console.error('Failed to fetch users:', error);
+        console.error('Failed to fetch users:', response.error);
         return;
       }
 
-      setUsers((data as any).users || []);
+      if (response.data) {
+        setUsers((response.data as any).users || []);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -102,14 +104,16 @@ export default function UsersPage() {
 
   const fetchWelcomeVoucherStats = async () => {
     try {
-      const { data, error } = await api.getWelcomeVoucherStats();
+      const response = await api.getWelcomeVoucherStats();
       
-      if (error) {
-        console.error('Error fetching welcome voucher stats:', error);
+      if (response.error) {
+        console.error('Error fetching welcome voucher stats:', response.error);
         return;
       }
 
-      setWelcomeVoucherStats(data as any);
+      if (response.data) {
+        setWelcomeVoucherStats(response.data as any);
+      }
     } catch (error) {
       console.error('Error fetching welcome voucher stats:', error);
     }
@@ -118,16 +122,29 @@ export default function UsersPage() {
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       setUpdatingRole(userId);
-      const { error } = await api.updateUserRole(userId, newRole);
-
-      if (error) {
-        throw new Error(error.detail || 'Failed to update user role');
-      }
-
-      // Update local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, role: newRole as 'user' | 'admin' } : user
       ));
+      
+      const response = await api.updateUserRole(userId, newRole);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, role: user.role } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user role');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, role: updatedUser.role || newRole } : user
+        ));
+      }
       
       toast.success('User role updated successfully');
     } catch (error) {
@@ -141,16 +158,29 @@ export default function UsersPage() {
   const handleCreditsChange = async (userId: string, newCredits: number) => {
     try {
       setUpdatingCredits(userId);
-      const { error } = await api.updateUserCredits(userId, newCredits);
-
-      if (error) {
-        throw new Error(error.detail || 'Failed to update user credits');
-      }
-
-      // Update local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, credits: newCredits } : user
       ));
+      
+      const response = await api.updateUserCredits(userId, newCredits);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, credits: user.credits } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user credits');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, credits: updatedUser.credits || newCredits } : user
+        ));
+      }
       
       // Refresh credits for the updated user (this will also refresh current user if applicable)
       await refreshCurrentUserCredits();
@@ -170,16 +200,29 @@ export default function UsersPage() {
   const handleEmailChange = async (userId: string, newEmail: string) => {
     try {
       setUpdatingEmail(userId);
-      const { error } = await api.updateUserEmail(userId, newEmail);
-
-      if (error) {
-        throw new Error(error.detail || 'Failed to update user email');
-      }
-
-      // Update local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, email: newEmail } : user
       ));
+      
+      const response = await api.updateUserEmail(userId, newEmail);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, email: user.email } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user email');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, email: updatedUser.email || newEmail } : user
+        ));
+      }
       
       toast.success('User email updated successfully');
     } catch (error) {
@@ -193,16 +236,29 @@ export default function UsersPage() {
   const handleSchoolChange = async (userId: string, newSchool: string) => {
     try {
       setUpdatingSchool(userId);
-      const { error } = await api.updateUserSchool(userId, newSchool);
-
-      if (error) {
-        throw new Error(error.detail || 'Failed to update user school');
-      }
-
-      // Update local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, school_name: newSchool } : user
       ));
+      
+      const response = await api.updateUserSchool(userId, newSchool);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, school_name: user.school_name } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user school');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, school_name: updatedUser.school_name || newSchool } : user
+        ));
+      }
       
       toast.success('User school updated successfully');
     } catch (error) {
@@ -216,16 +272,30 @@ export default function UsersPage() {
   const updateUserDepartment = async (userId: string, department: string) => {
     try {
       setUpdatingUser(userId);
-      const { error } = await api.updateUserDepartment(userId, department);
-
-      if (error) {
-        throw new Error(error.detail || 'Failed to update user department');
-      }
-
-      // Update the user in the local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, department } : user
       ));
+      
+      const response = await api.updateUserDepartment(userId, department);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, department: user.department } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user department');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, department: updatedUser.department || department } : user
+        ));
+      }
+      
       toast.success('User department updated successfully');
     } catch (err) {
       console.error('Error updating user department:', err);

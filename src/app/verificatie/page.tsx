@@ -11,6 +11,7 @@ import { useAuth } from '@clerk/nextjs';
 
 interface VerificationResponse {
   is_valid: boolean;
+  verification_code?: string;
   product_code?: string;
   product_title?: string;
   version?: string;
@@ -39,16 +40,31 @@ export default function VerificatiePage() {
 
     try {
       const { data, error } = await api.verifyHash({
-        file_hash: hash.trim(),
-        file_name: 'unknown', // Placeholder, actual file name would be needed
-        file_size: 0, // Placeholder, actual file size would be needed
+        hash: hash.trim()
       });
 
       if (error) {
         throw new Error(error.detail || 'Failed to verify hash');
       }
 
-      setResult(data as VerificationResponse);
+      console.log('🔍 Verification API response:', data);
+      console.log('🔍 Response type:', typeof data);
+      console.log('🔍 Response keys:', data ? Object.keys(data) : 'no data');
+      console.log('🔍 Full response data:', JSON.stringify(data, null, 2));
+      console.log('🔍 Data.data exists?', !!(data as any)?.data);
+      console.log('🔍 Data.data value:', (data as any)?.data);
+
+      // Extract the actual verification data from the SuccessResponse
+      const verificationData = (data as any)?.data;
+      if (!verificationData) {
+        console.error('❌ Verification data extraction failed');
+        console.error('❌ Data object:', data);
+        console.error('❌ Data.data:', (data as any)?.data);
+        throw new Error('Invalid verification response format');
+      }
+
+      console.log('🔍 Extracted verification data:', verificationData);
+      setResult(verificationData as VerificationResponse);
       
     } catch (error) {
       console.error('Verification error:', error);

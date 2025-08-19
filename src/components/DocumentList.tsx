@@ -36,10 +36,14 @@ export function DocumentList({
       
       // Update document statuses based on verification results
       if (result && result.data && onS3StatusUpdate) {
-        const verificationData = result.data as S3VerificationSummary;
-        verificationData.documents.forEach((doc: any) => {
-          onS3StatusUpdate(doc.document_id, doc.exists_in_s3 ? 'available' : 'missing');
-        });
+        // The backend returns SuccessResponse with data field, so we need to access result.data.data
+        const responseData = result.data as any;
+        if (responseData && responseData.data && responseData.data.documents) {
+          const verificationData = responseData.data as S3VerificationSummary;
+          verificationData.documents.forEach((doc: any) => {
+            onS3StatusUpdate(doc.document_id, doc.exists_in_s3 ? 'available' : 'missing');
+          });
+        }
       }
     } catch (error) {
       console.error('S3 verification failed:', error);
