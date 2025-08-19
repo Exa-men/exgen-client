@@ -316,6 +316,10 @@ export default function UsersPage() {
       const response = await api.deleteUser(userToDelete.id);
 
       if (response.error) {
+        // Check if it's a foreign key constraint error
+        if (response.error.detail && response.error.detail.includes('foreign key constraint')) {
+          throw new Error('Cannot delete user: User has associated data (vouchers, workflows, etc.) that must be removed first. Please contact an administrator.');
+        }
         throw new Error(response.error.detail || 'Failed to delete user');
       }
 
@@ -329,7 +333,11 @@ export default function UsersPage() {
       toast.success(`User ${userToDelete.first_name} ${userToDelete.last_name} deleted successfully`);
     } catch (error) {
       console.error('Error deleting user:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete user');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
+      toast.error(errorMessage);
+      
+      // Keep the modal open if deletion failed
+      setDeleteConfirmOpen(true);
     } finally {
       setDeleting(null);
     }
@@ -840,10 +848,20 @@ export default function UsersPage() {
               <DialogTitle>Delete User</DialogTitle>
             </DialogHeader>
             <div className="py-4">
-              <p className="text-gray-600">
+              <p className="text-gray-600 mb-4">
                 Are you sure you want to delete the user "{userToDelete?.first_name} {userToDelete?.last_name}"?
                 This action cannot be undone and will permanently remove the user account.
               </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-amber-800 text-sm font-medium mb-2">⚠️ Data that will be affected:</p>
+                <ul className="text-amber-700 text-sm space-y-1">
+                  <li>• User's workflow groups and configurations</li>
+                  <li>• Qualification documents and workflow runs</li>
+                  <li>• Vouchers created by this user</li>
+                  <li>• Purchase history and feedback</li>
+                  <li>• Credit orders and balance</li>
+                </ul>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
