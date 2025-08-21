@@ -97,6 +97,14 @@ const CreditOrderModal: React.FC = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [crudError, setCrudError] = useState<string | null>(null);
 
+  // Price input display states for better UX
+  const [editPriceDisplay, setEditPriceDisplay] = useState<string>('');
+  const [createPriceDisplay, setCreatePriceDisplay] = useState<string>('');
+  
+  // Credits input display states for better UX
+  const [editCreditsDisplay, setEditCreditsDisplay] = useState<string>('');
+  const [createCreditsDisplay, setCreateCreditsDisplay] = useState<string>('');
+
   // Form validation state
   const [fieldValidation, setFieldValidation] = useState<FieldValidation>({
     school_name: false,
@@ -340,10 +348,36 @@ const CreditOrderModal: React.FC = () => {
   const handleEdit = (pkg: CreditPackage) => {
     setEditingId(pkg.id);
     setEditData({ ...pkg });
+    setEditPriceDisplay(pkg.price ? (pkg.price / 100).toFixed(2) : '');
+    setEditCreditsDisplay(pkg.credits ? pkg.credits.toString() : '');
     setCrudError(null);
   };
   const handleEditChange = (field: keyof CreditPackage, value: string | number | boolean) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleEditPriceChange = (value: string) => {
+    setEditPriceDisplay(value);
+    // Only update the actual price if it's a valid number
+    if (value === '' || value === '.') {
+      setEditData(prev => ({ ...prev, price: 0 }));
+    } else {
+      const euroValue = parseFloat(value);
+      if (!isNaN(euroValue) && euroValue >= 0) {
+        setEditData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+      }
+    }
+  };
+  const handleEditCreditsChange = (value: string) => {
+    setEditCreditsDisplay(value);
+    // Only update the actual credits if it's a valid number
+    if (value === '') {
+      setEditData(prev => ({ ...prev, credits: 0 }));
+    } else {
+      const creditsValue = parseInt(value);
+      if (!isNaN(creditsValue) && creditsValue >= 0) {
+        setEditData(prev => ({ ...prev, credits: creditsValue }));
+      }
+    }
   };
   const handleEditSave = async () => {
     if (!editData.name || !editData.credits || !editData.price) {
@@ -394,10 +428,36 @@ const CreditOrderModal: React.FC = () => {
   const handleCreate = () => {
     setCreating(true);
     setCreateData({ name: '', credits: 0, price: 0, description: '', is_active: true });
+    setCreatePriceDisplay('');
+    setCreateCreditsDisplay('');
     setCrudError(null);
   };
   const handleCreateChange = (field: keyof CreditPackage, value: string | number | boolean) => {
     setCreateData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleCreatePriceChange = (value: string) => {
+    setCreatePriceDisplay(value);
+    // Only update the actual price if it's a valid number
+    if (value === '' || value === '.') {
+      setCreateData(prev => ({ ...prev, price: 0 }));
+    } else {
+      const euroValue = parseFloat(value);
+      if (!isNaN(euroValue) && euroValue >= 0) {
+        setCreateData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+      }
+    }
+  };
+  const handleCreateCreditsChange = (value: string) => {
+    setCreateCreditsDisplay(value);
+    // Only update the actual credits if it's a valid number
+    if (value === '') {
+      setCreateData(prev => ({ ...prev, credits: 0 }));
+    } else {
+      const creditsValue = parseInt(value);
+      if (!isNaN(creditsValue) && creditsValue >= 0) {
+        setCreateData(prev => ({ ...prev, credits: creditsValue }));
+      }
+    }
   };
   const handleCreateSave = async () => {
     if (!createData.name || !createData.credits || !createData.price) {
@@ -521,28 +581,54 @@ const CreditOrderModal: React.FC = () => {
                         </CardHeader>
                         <CardContent>
                           {editingId === pkg.id ? (
-                            <div className="flex gap-2 items-center">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={editData.credits as number}
-                                onChange={e => handleEditChange('credits', parseInt(e.target.value) || 0)}
-                                className="w-24"
-                                placeholder="Credits"
-                              />
-                              <Input
-                                type="number"
-                                min={1}
-                                value={editData.price as number}
-                                onChange={e => handleEditChange('price', parseInt(e.target.value) || 0)}
-                                className="w-32"
-                                placeholder="Prijs (centen)"
-                              />
-                              <span className="text-gray-500 text-sm">€{editData.price ? ((editData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                  <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                    Aantal Credits
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={editCreditsDisplay}
+                                    onChange={e => handleEditCreditsChange(e.target.value)}
+                                    className="w-full"
+                                    placeholder="Bijv. 100"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                    Prijs per Credit (€)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={0.01}
+                                    step={0.01}
+                                    value={editPriceDisplay}
+                                    onChange={e => handleEditPriceChange(e.target.value)}
+                                    className="w-full"
+                                    placeholder="Bijv. 0.50"
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                                <div className="text-xl font-bold text-examen-cyan">
+                                  €{(() => {
+                                    const pricePerCredit = (editData.price as number) / 100;
+                                    const totalCredits = editData.credits as number;
+                                    const totalPrice = pricePerCredit * totalCredits;
+                                    return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                  })()}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {editData.credits || 0} credits × €{((editData.price as number) / 100).toFixed(2)}
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="text-2xl font-bold text-examen-cyan">
-                              {formatPrice(pkg.price)}
+                              {formatPrice(pkg.price * pkg.credits)}
                             </div>
                           )}
                         </CardContent>
@@ -583,24 +669,50 @@ const CreditOrderModal: React.FC = () => {
                           />
                         </CardHeader>
                         <CardContent>
-                          <div className="flex gap-2 items-center">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={createData.credits as number}
-                              onChange={e => handleCreateChange('credits', parseInt(e.target.value) || 0)}
-                              className="w-24"
-                              placeholder="Credits"
-                            />
-                            <Input
-                              type="number"
-                              min={1}
-                              value={createData.price as number}
-                              onChange={e => handleCreateChange('price', parseInt(e.target.value) || 0)}
-                              className="w-32"
-                              placeholder="Prijs (centen)"
-                            />
-                            <span className="text-gray-500 text-sm">€{createData.price ? ((createData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                  Aantal Credits
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={createCreditsDisplay}
+                                  onChange={e => handleCreateCreditsChange(e.target.value)}
+                                  className="w-full"
+                                  placeholder="Bijv. 100"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                  Prijs per Credit (€)
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={0.01}
+                                  step={0.01}
+                                  value={createPriceDisplay}
+                                  onChange={e => handleCreatePriceChange(e.target.value)}
+                                  className="w-full"
+                                  placeholder="Bijv. 0.50"
+                                />
+                              </div>
+                            </div>
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                              <div className="text-xl font-bold text-examen-cyan">
+                                €{(() => {
+                                  const pricePerCredit = (createData.price as number) / 100;
+                                  const totalCredits = createData.credits as number;
+                                  const totalPrice = pricePerCredit * totalCredits;
+                                  return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                })()}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {createData.credits || 0} credits × €{((createData.price as number) / 100).toFixed(2)}
+                              </div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -750,7 +862,7 @@ const CreditOrderModal: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-examen-cyan">
-                        {formatPrice(selectedPackage.price)}
+                        {formatPrice(selectedPackage.price * selectedPackage.credits)}
                       </div>
                       <div className="text-sm text-gray-600">{selectedPackage.credits} credits</div>
                     </div>

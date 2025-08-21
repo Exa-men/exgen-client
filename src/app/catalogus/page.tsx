@@ -89,6 +89,10 @@ export default function CatalogusPage() {
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadProduct, setDownloadProduct] = useState<ExamProduct | null>(null);
   const [downloadVersionId, setDownloadVersionId] = useState<string | undefined>(undefined);
+  const [downloadVersionString, setDownloadVersionString] = useState<string | undefined>(undefined);
+  
+  // State to track selected versions for each product to prevent duplicate downloads
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, { versionId: string; versionString: string }>>({});
   // State for delete modal
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -102,50 +106,52 @@ export default function CatalogusPage() {
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
   
-  console.log('🔄 === CATALOGUS PAGE RENDER ===');
-  console.log('🔄 Render state:', {
-    isSignedIn,
-    isLoaded,
-    hasRole,
-    isAdmin,
-    productsCount: products.length,
-    loading,
-    loadingMore
-  });
+  // Debug logging (commented out to reduce console noise)
+  // console.log('🔄 === CATALOGUS PAGE RENDER ===');
+  // console.log('🔄 Render state:', {
+  //   isSignedIn,
+  //   isLoaded,
+  //   hasRole,
+  //   isAdmin,
+  //   productsCount: products.length,
+  //   loading,
+  //   loadingMore
+  // });
   
   // Filter products based on user role: admins see all products, regular users only see available products
   const filteredProducts = useMemo(() => {
-    console.log('🔍 === FILTERING PRODUCTS ===');
-    console.log('🔍 Raw products array:', {
-      count: products.length,
-      products: products.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-    });
-    console.log('🔍 User role info:', { isAdmin, hasRole });
+    // Debug logging (commented out to reduce console noise)
+    // console.log('🔍 === FILTERING PRODUCTS ===');
+    // console.log('🔍 Raw products array:', {
+    //   count: products.length,
+    //   products: products.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    // });
+    // console.log('🔍 User role info:', { isAdmin, hasRole });
     
     let result;
     if (isAdmin) {
       // Admins can see all products (draft and available)
       result = products;
-      console.log('🔍 Admin user - showing all products:', result.length);
+      // console.log('🔍 Admin user - showing all products:', result.length);
     } else {
       // Regular users can only see available products
       const availableProducts = products.filter(product => product.status === 'available');
       result = availableProducts;
-      console.log('🔍 Regular user - filtering for available products only');
-      console.log('🔍 Available products found:', {
-        count: availableProducts.length,
-        products: availableProducts.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-      });
-      console.log('🔍 Draft products filtered out:', {
-        count: products.filter(p => p.status === 'draft').length,
-        products: products.filter(p => p.status === 'draft').map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-      });
+      // console.log('🔍 Regular user - filtering for available products only');
+      // console.log('🔍 Available products found:', {
+      //   count: availableProducts.length,
+      //   products: availableProducts.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      // });
+      // console.log('🔍 Draft products filtered out:', {
+      //   count: products.filter(p => p.status === 'draft').length,
+      //   products: products.filter(p => p.status === 'draft').map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      // });
     }
     
-    console.log('🔍 Final filtered result:', {
-      count: result.length,
-      products: result.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-    });
+    // console.log('🔍 Final filtered result:', {
+    //   count: result.length,
+    //   products: result.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    // });
     
     return result;
   }, [products, isAdmin, hasRole]);
@@ -574,7 +580,7 @@ export default function CatalogusPage() {
       activeRequestRef.current = null;
       requestKeyRef.current = '';
     }
-  }, [isSignedIn, api, filter, PAGE_SIZE, products, loading, loadingMore, searchTerm, page, getRequestKey]);
+  }, [isSignedIn, api, filter, PAGE_SIZE, searchTerm, page, getRequestKey]);
 
   // Debounced search handler
   const handleSearchChange = useCallback((value: string) => {
@@ -609,16 +615,16 @@ export default function CatalogusPage() {
     return fetchProductsWithSearch(pageNum, append);
   }, [fetchProductsWithSearch]);
 
-  // Log products state changes
-  useEffect(() => {
-    console.log('📊 === PRODUCTS STATE CHANGED ===');
-    console.log('📊 New products state:', {
-      count: products.length,
-      ids: products.map(p => p.id),
-      loading,
-      loadingMore
-    });
-  }, [products, loading, loadingMore]);
+  // Log products state changes (commented out to reduce console noise)
+  // useEffect(() => {
+  //   console.log('📊 === PRODUCTS STATE CHANGED ===');
+  //   console.log('📊 New products state:', {
+  //     count: products.length,
+  //     ids: products.map(p => p.id),
+  //     loading,
+  //     loadingMore
+  //   });
+  // }, [products, loading, loadingMore]);
 
   // Track if initial fetch has been made to prevent duplicate calls
   const initialFetchMadeRef = useRef(false);
@@ -690,19 +696,20 @@ export default function CatalogusPage() {
 
   // Products are now sorted by code column in the backend and filtered by user role
   const filteredAndSortedProducts = useMemo(() => {
-    console.log('🎯 === FILTERED PRODUCTS CALCULATION ===');
-    console.log('🎯 Input products:', {
-      count: filteredProducts.length,
-      ids: filteredProducts.map(p => p.id),
-      isAdmin
-    });
+    // Debug logging (commented out to reduce console noise)
+    // console.log('🎯 === FILTERED PRODUCTS CALCULATION ===');
+    // console.log('🎯 Input products:', {
+    //   count: filteredProducts.length,
+    //   ids: filteredProducts.map(p => p.id),
+    //   isAdmin
+    // });
     
     const result = filteredProducts;
     
-    console.log('🎯 Filtered result:', {
-      count: result.length,
-      ids: result.map(p => p.id)
-    });
+    // console.log('🎯 Filtered result:', {
+    //   count: result.length,
+    //   ids: result.map(p => p.id)
+    // });
     
     return result;
   }, [filteredProducts, isAdmin]);
@@ -793,14 +800,26 @@ export default function CatalogusPage() {
       return;
     }
     
-    // If no version is specified, automatically select the latest enabled version
+    // If no version is specified, check if there's a selected version for this product
     let selectedVersionId = versionId;
-    if (!selectedVersionId && product.versions && product.versions.length > 0) {
-      // Find the latest enabled version
-      const latestEnabledVersion = product.versions.find(v => {
-        const isEnabled = v.isEnabled !== undefined ? v.isEnabled : v.is_enabled;
-        return isEnabled === true;
-      }) || product.versions.find(v => v.isLatest) || product.versions[0];
+    let latestEnabledVersion: any = null;
+    if (!selectedVersionId) {
+      // Check if user has selected a specific version for this product
+      const selectedVersion = selectedVersions[productId];
+      if (selectedVersion) {
+        selectedVersionId = selectedVersion.versionId;
+        console.log('🔍 Using selected version for download:', {
+          productId,
+          selectedVersion: selectedVersion.versionString,
+          selectedVersionId: selectedVersion.versionId
+        });
+      } else if (product.versions && product.versions.length > 0) {
+        // Fallback: automatically select the latest enabled version
+        latestEnabledVersion = product.versions.find(v => {
+          const isEnabled = v.isEnabled !== undefined ? v.isEnabled : v.is_enabled;
+          return isEnabled === true;
+        }) || product.versions.find(v => v.isLatest) || product.versions[0];
+      }
       
       if (latestEnabledVersion) {
         // If the version doesn't have an ID, we need to fetch the product versions to get the actual ID
@@ -850,49 +869,37 @@ export default function CatalogusPage() {
     // Set up download modal
     setDownloadProduct(product);
     setDownloadVersionId(selectedVersionId);
+    
+    // Determine the version string to display
+    let versionString = 'Unknown';
+    if (versionId && product.versions) {
+      // If a specific version was requested, find its version string
+      const selectedVersion = product.versions.find(v => v.id === versionId);
+      versionString = selectedVersion?.version || 'Unknown';
+    } else if (selectedVersions[productId]) {
+      // If using a previously selected version, use that
+      versionString = selectedVersions[productId].versionString;
+    } else if (latestEnabledVersion) {
+      // If auto-selecting, use the auto-selected version
+      versionString = latestEnabledVersion.version;
+    }
+    
+    setDownloadVersionString(versionString);
     setDownloadModalOpen(true);
   };
 
-  const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
-    // If we have a versionId, use it directly
-    if (versionId) {
-      await handleDownload(productId, versionId);
-      return;
-    }
-    
-    // If we only have the version string, we need to fetch the product versions to get the actual ID
-    try {
-      console.log('🔍 Version download called with version string, fetching product versions to get actual version ID...');
-      const { data: versionsData, error: versionsError } = await api.getProductVersions(productId);
-      
-      if (versionsError) {
-        console.error('❌ Failed to fetch product versions:', versionsError);
-        setError('Failed to get version information for download');
-        return;
+  const handleVersionSelect = (productId: string, version: string, versionId?: string) => {
+    // Track the selected version for this product
+    setSelectedVersions(prev => ({
+      ...prev,
+      [productId]: {
+        versionId: versionId || version,
+        versionString: version
       }
-      
-      if (versionsData && Array.isArray(versionsData)) {
-        // Find the matching version by version string
-        const matchingVersion = versionsData.find((v: any) => v.version === version);
-        if (matchingVersion && matchingVersion.id) {
-          console.log('✅ Found version ID from API:', {
-            version: version,
-            versionId: matchingVersion.id
-          });
-          await handleDownload(productId, matchingVersion.id);
-        } else {
-          console.error('❌ Version not found in API response:', version);
-          setError(`Version ${version} not found`);
-        }
-      } else {
-        console.error('❌ Invalid versions data from API');
-        setError('Failed to get version information');
-      }
-    } catch (error) {
-      console.error('❌ Error fetching product versions:', error);
-      setError('Failed to get version information for download');
-    }
+    }));
   };
+
+
 
   const handleOpenFeedback = (product: ExamProduct) => {
     setFeedbackProduct(product);
@@ -1100,11 +1107,12 @@ export default function CatalogusPage() {
 
         {/* Welcome Banner */}
         {(() => {
-          console.log('🎨 Welcome banner render state:', { 
-            welcomeBannerLoading, 
-            showWelcomeBanner, 
-            shouldRender: !welcomeBannerLoading && showWelcomeBanner 
-          });
+          // Debug logging (commented out to reduce console noise)
+          // console.log('🎨 Welcome banner render state:', { 
+          //   welcomeBannerLoading, 
+          //   showWelcomeBanner, 
+          //   shouldRender: !welcomeBannerLoading && showWelcomeBanner 
+          // });
           return !welcomeBannerLoading && showWelcomeBanner ? (
             <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
           ) : null;
@@ -1363,12 +1371,13 @@ export default function CatalogusPage() {
                       </TableRow>
                     ) : (
                       filteredAndSortedProducts.map((product) => {
-                        console.log('🎨 === RENDERING PRODUCT ===', {
-                          id: product.id,
-                          code: product.code,
-                          title: product.title,
-                          status: product.status
-                        });
+                        // Debug logging (commented out to reduce console noise)
+                        // console.log('🎨 === RENDERING PRODUCT ===', {
+                        //   id: product.id,
+                        //   code: product.code,
+                        //   title: product.title,
+                        //   status: product.status
+                        // });
                         return (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
@@ -1399,7 +1408,7 @@ export default function CatalogusPage() {
                               versions={product.versions}
                               currentVersion={product.version || (product.versions.length > 0 ? product.versions[0].version : "N/A")}
                               isPurchased={product.isPurchased}
-                              onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
+                              onVersionSelect={(version, versionId) => handleVersionSelect(product.id, version, versionId)}
                             />
                           </TableCell>
                           {isAdmin && (
@@ -1557,7 +1566,7 @@ export default function CatalogusPage() {
                     </div>
                     <div className="flex items-center gap-4 text-sm mb-1">
                       <span className="font-semibold">{formatCredits(product.credits || 0)} credits</span>
-                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)} /></span>
+                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onVersionSelect={(version, versionId) => handleVersionSelect(product.id, version, versionId)} /></span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
                       {!product.isPurchased && product.hasPreviewDocument && (
@@ -1668,6 +1677,15 @@ export default function CatalogusPage() {
             setDownloadModalOpen(false);
             setDownloadProduct(null);
             setDownloadVersionId(undefined);
+            setDownloadVersionString(undefined);
+            // Clear the selected version for this product to prevent affecting future downloads
+            if (downloadProduct) {
+              setSelectedVersions(prev => {
+                const newState = { ...prev };
+                delete newState[downloadProduct.id];
+                return newState;
+              });
+            }
           }}
           product={{
             id: downloadProduct.id,
@@ -1676,6 +1694,7 @@ export default function CatalogusPage() {
             versions: downloadProduct.versions.map(v => ({ version: v.version, isLatest: v.isLatest })),
           }}
           versionId={downloadVersionId}
+          versionString={downloadVersionString}
         />
       )}
       {/* Delete confirmation modal */}
@@ -1763,10 +1782,59 @@ export default function CatalogusPage() {
             setPdfViewerOpen(false);
             setSelectedProduct(null);
           }}
-          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}`}
+          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}/content`}
           title={`Preview: ${selectedProduct.title}`}
         />
       )}
+
+      {/* 
+       * DocumentList Integration Example:
+       * 
+       * To integrate the DocumentList component with document preview functionality:
+       * 
+       * 1. Add state for documents and document preview:
+       * const [documents, setDocuments] = useState<Document[]>([]);
+       * const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false);
+       * const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+       * 
+       * 2. Add handlers for document management:
+       * const handleSetPreview = (documentId: string) => {
+       *   setDocuments(prev => prev.map(doc => ({
+       *     ...doc,
+       *     isPreview: doc.id === documentId
+       *   })));
+       * };
+       * 
+       * const handlePreviewDocument = (document: Document) => {
+       *   setSelectedDocument(document);
+       *   setDocumentPreviewOpen(true);
+       * };
+       * 
+       * 3. Add the DocumentList component where needed:
+       * <DocumentList
+       *   documents={documents}
+       *   versionId={versionId}
+       *   onDelete={handleDeleteDocument}
+       *   onSetPreview={handleSetPreview}
+       *   onPreviewDocument={handlePreviewDocument}
+       * />
+       * 
+       * 4. Add the PDF viewer for document previews:
+       * {selectedDocument && (
+       *   <PDFViewer
+       *     isOpen={documentPreviewOpen}
+       *     onClose={() => {
+       *       setDocumentPreviewOpen(false);
+       *       setSelectedDocument(null);
+       *     }}
+       *     pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}/content`}
+       *     title={`Document Preview: ${selectedDocument.name}`}
+       *   />
+       * )}
+       * 
+       * The existing "Inkijken" button will continue to work as before,
+       * but now you can also manage individual document previews through the DocumentList.
+       */}
 
     </div>
   );

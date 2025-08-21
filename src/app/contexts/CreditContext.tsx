@@ -86,9 +86,46 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
         });
       }
       
-      console.log('🔐 Cleared all caches on sign out');
+      // Clear callback refs
+      voucherRefreshCallbacks.current.clear();
+      voucherUpdateCallbacks.current.clear();
+      creditUpdateCallbacks.current.clear();
+      
+      console.log('🔐 Cleared all caches and callbacks on sign out');
     }
   }, [userLoaded, isSignedIn, api]);
+
+  // Global sign out event listener for additional cleanup
+  useEffect(() => {
+    const handleGlobalSignOut = () => {
+      console.log('🔔 Credit context received global sign out event');
+      
+      // Reset all state
+      setCredits(0);
+      setLoading(false);
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      // Clear API token cache
+      api.clearTokenCache();
+      
+      // Clear callback refs
+      voucherRefreshCallbacks.current.clear();
+      voucherUpdateCallbacks.current.clear();
+      creditUpdateCallbacks.current.clear();
+      
+      console.log('🔐 Credit context reset via global sign out event');
+    };
+
+    // Listen for global sign out events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('user-signed-out', handleGlobalSignOut);
+      
+      return () => {
+        window.removeEventListener('user-signed-out', handleGlobalSignOut);
+      };
+    }
+  }, [api]);
 
   const fetchCredits = useCallback(async () => {
     // Don't fetch if user is not loaded yet
@@ -120,22 +157,51 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
       );
       
       const requestPromise = api.getCreditBalance().then(async (response: any) => {
+        console.log('🔍 CreditContext: API response received:', response);
+        
         if (response.error) {
-          console.error('Error fetching credits:', response.error);
+          console.error('❌ Error fetching credits:', response.error);
           // Fallback to Clerk metadata if API fails
-          setCredits(user?.publicMetadata?.credits as number || 0);
+          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+          console.log('⚠️ Using fallback credits from Clerk metadata:', fallbackCredits);
+          setCredits(fallbackCredits);
+          setLoading(false);
           return;
         }
-        return response;
+        
+        if (!response.data) {
+          console.warn('⚠️ No data in API response:', response);
+          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+          setCredits(fallbackCredits);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('✅ Credit data received:', response.data);
+        return response.data; // Return the actual data, not the wrapped response
       });
 
       // Race between request and timeout
-      const { data, error } = await Promise.race([requestPromise, timeoutPromise]);
-      
-      if (error) {
+      try {
+        const result = await Promise.race([requestPromise, timeoutPromise]);
+        
+        // If we get here, the request succeeded (timeout would have thrown)
+        const creditValue = (result as any)?.credits;
+        // Ensure we have a valid credit value before setting loading to false
+        if (creditValue !== undefined && creditValue !== null) {
+          setCredits(creditValue);
+          setLoading(false);
+        } else {
+          console.warn('⚠️ Invalid credit value received:', creditValue);
+          // Use fallback if API returns invalid data
+          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
+          setCredits(fallbackCredits);
+          setLoading(false);
+        }
+      } catch (error) {
         // Handle timeout specifically
         if (error instanceof Error && error.message === 'Request timeout') {
-          console.warn('Credit fetch timed out after 10 seconds - this might indicate a slow backend response');
+          console.warn('Credit fetch timed out after 5 seconds - this might indicate a slow backend response');
           
           // Retry the request if we haven't exceeded max retries
           if (retryCountRef.current < MAX_RETRIES) {
@@ -163,26 +229,16 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
         setCredits(fallbackCredits);
         console.log('⚠️ Using fallback credits from Clerk metadata:', fallbackCredits);
         setLoading(false);
-      } else {
-        const creditValue = (data as any).credits;
-        // Ensure we have a valid credit value before setting loading to false
-        if (creditValue !== undefined && creditValue !== null) {
-          setCredits(creditValue);
-          setLoading(false);
-        } else {
-          console.warn('⚠️ Invalid credit value received:', creditValue);
-          // Use fallback if API returns invalid data
-          const fallbackCredits = user?.publicMetadata?.credits as number || 0;
-          setCredits(fallbackCredits);
-          setLoading(false);
-        }
       }
       
       const responseTime = performance.now() - startTime;
       console.log('✅ Credit fetch completed in:', responseTime.toFixed(0), 'ms');
       
     } catch (error) {
-      console.error('Error fetching credits:', error);
+      console.error('❌ Unexpected error in fetchCredits:', error);
+      console.error('❌ Error type:', typeof error);
+      console.error('❌ Error message:', error instanceof Error ? error.message : String(error));
+      
       // Fallback to Clerk metadata
       const fallbackCredits = user?.publicMetadata?.credits as number || 0;
       setCredits(fallbackCredits);
@@ -293,8 +349,25 @@ export const CreditProvider: React.FC<CreditProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    fetchCredits();
-  }, [user, userLoaded]);
+    // Only fetch credits when user is fully loaded and signed in
+    if (userLoaded && isSignedIn && user) {
+      console.log('🔍 CreditContext: User ready, fetching credits for:', user.id);
+      
+      // Add a small delay to ensure backend user creation is complete
+      // This prevents race conditions during signup
+      const timer = setTimeout(() => {
+        console.log('🔍 CreditContext: Delayed credit fetch starting...');
+        fetchCredits();
+      }, 1000); // 1 second delay
+      
+      return () => clearTimeout(timer);
+    } else if (userLoaded && !isSignedIn) {
+      // User signed out, reset credits
+      console.log('🔍 CreditContext: User signed out, resetting credits');
+      setCredits(0);
+      setLoading(false);
+    }
+  }, [user, userLoaded, isSignedIn, fetchCredits]);
 
   // Cleanup effect to clear caches when user changes or component unmounts
   useEffect(() => {

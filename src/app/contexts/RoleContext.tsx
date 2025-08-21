@@ -301,11 +301,58 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       // Clear cached role data to prevent role escalation between users
       clearCachedRole();
       
-      // Clear API token cache to prevent using old tokens
-      api.clearTokenCache();
-      console.log('🔐 Cleared token cache on sign out');
+      // Reset all state to initial values
+      setUserRole({
+        user_id: null,
+        role: null,
+        first_name: null,
+        last_name: null
+      });
+      
+      // Reset retry counters
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      console.log('🔐 Role context completely reset on sign out');
     }
-  }, [isLoaded, isSignedIn, api]);
+  }, [isLoaded, isSignedIn, clearCachedRole]);
+
+  // Global sign out event listener for additional cleanup
+  useEffect(() => {
+    const handleGlobalSignOut = () => {
+      console.log('🔔 Role context received global sign out event');
+      
+      // Abort any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      activeRequest.current = null;
+      
+      // Clear cache and reset state
+      clearCachedRole();
+      setUserRole({
+        user_id: null,
+        role: null,
+        first_name: null,
+        last_name: null
+      });
+      setIsLoading(false);
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      console.log('🔐 Role context reset via global sign out event');
+    };
+
+    // Listen for global sign out events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('user-signed-out', handleGlobalSignOut);
+      
+      return () => {
+        window.removeEventListener('user-signed-out', handleGlobalSignOut);
+      };
+    }
+  }, [clearCachedRole]);
 
   // Function to manually refresh role (useful for admin role changes)
   const refreshRole = useCallback(async () => {

@@ -542,6 +542,10 @@ export function useApi() {
       method: 'POST',
       body: JSON.stringify({ product_id: productId }),
     }),
+    cleanupProductPreview: (productId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/cleanup-preview`, {
+      method: 'POST',
+    }),
+    getProductPreviewStatus: (productId: string) => makeAuthenticatedRequest(`/api/v1/catalog/products/${productId}/preview-status`),
 
     // S3 verification operations
     verifyAllDocumentsS3: (versionId: string) => makeAuthenticatedRequest(`/api/v1/catalog/versions/${versionId}/verify-s3`, {

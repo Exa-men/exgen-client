@@ -1807,6 +1807,10 @@ export default function EditExamPage() {
         console.error('Error in final product refresh:', finalRefreshError);
       }
 
+      // Reset save status to reflect that all changes have been saved
+      setSaveStatus('saved');
+      setCriteriaSaveStatus('saved');
+
       toast({
         title: "Nieuwe versie aangemaakt",
         description: `Versie ${newVersion.version} is succesvol aangemaakt${latestVersion && latestVersion.assessmentOnderdelen.length > 0 ? ' met gekopieerde assessment data' : ''}${latestVersion && latestVersion.documents.length > 0 ? ' en gekopieerde documenten' : ''}.`,

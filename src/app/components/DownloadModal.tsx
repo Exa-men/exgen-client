@@ -35,6 +35,7 @@ interface DownloadModalProps {
   onClose: () => void;
   product: ExamProduct;
   versionId?: string;
+  versionString?: string;
 }
 
 interface DownloadInfo {
@@ -49,7 +50,7 @@ interface DownloadInfo {
 
 type ModalState = 'processing' | 'complete' | 'error';
 
-export default function DownloadModal({ open, onClose, product, versionId }: DownloadModalProps) {
+export default function DownloadModal({ open, onClose, product, versionId, versionString }: DownloadModalProps) {
   const { isSignedIn } = useAuth();
   const api = useApi();
   const [state, setState] = useState<ModalState>('processing');
@@ -114,6 +115,12 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
 
   const initiateDownload = async () => {
     try {
+      // Prevent multiple simultaneous downloads
+      if (downloading) {
+        console.log('⚠️ Download already in progress, skipping duplicate request');
+        return;
+      }
+      
       setDownloading(true);
       setError(null);
 
@@ -280,16 +287,16 @@ export default function DownloadModal({ open, onClose, product, versionId }: Dow
       
       console.log('🔍 Final verification code to display:', verificationCode);
       
-      // Set download info for completion state with the real verification code
-      setDownloadInfo({
-        download_id: downloadId,
-        verification_code: verificationCode,
-        product_title: product.title,
-        product_code: product.code,
-        version: versionId || 'Unknown',
-        package_size: `${(blob.size / 1024 / 1024).toFixed(2)} MB`,
-        estimated_time: 'Completed'
-      });
+              // Set download info for completion state with the real verification code
+        setDownloadInfo({
+          download_id: downloadId,
+          verification_code: verificationCode,
+          product_title: product.title,
+          product_code: product.code,
+          version: versionString || versionId || 'Unknown',
+          package_size: `${(blob.size / 1024 / 1024).toFixed(2)} MB`,
+          estimated_time: 'Completed'
+        });
       
       // Set state to complete and stop downloading
       setState('complete');

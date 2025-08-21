@@ -84,6 +84,13 @@ export default function ClerkErrorBoundary({
       if (!isSignedIn) {
         // User signed out - clear any cached data
         console.log('🔐 User signed out, clearing caches...');
+        
+        // Dispatch a custom event to notify all contexts
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('user-signed-out'));
+          console.log('🔔 Dispatched user-signed-out event');
+        }
+        
         // Clear localStorage caches that might contain user-specific data
         if (typeof window !== 'undefined') {
           // Clear any cached user data
