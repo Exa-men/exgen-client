@@ -71,7 +71,6 @@ export default function AgentsSidebar({
                   id={agent.id}
                   name={agent.name}
                   description={agent.description}
-                  avatar={agent.avatar}
                   isSelected={selectedAgentId === agent.id}
                   isAdmin={isAdmin}
                   onSelect={onSelectAgent}

@@ -6,12 +6,7 @@ import { AdminOnly } from '../../components/RoleGuard';
 import AgentsSidebar from './components/AgentsSidebar';
 import ChatInterface from './components/ChatInterface';
 import AgentConfiguration from './components/AgentConfiguration';
-
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-}
+import { useAgents, Agent, Process, Conversation } from '../../hooks/use-agents';
 
 interface Message {
   id: string;
@@ -23,51 +18,123 @@ interface Message {
 export default function AgentsPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
+  const { getAgents, startProcess, getProcess, addConversation, executeStep, isLoading: apiLoading } = useAgents();
   
-  // Mock agents data - replace with real data from backend
-  const [agents] = useState<Agent[]>([
-    {
-      id: '1',
-      name: 'Cristine Mardrecht',
-      description: 'Specialist in het valideren van examenproducten'
-    },
-    {
-      id: '2',
-      name: 'Paulo Rommes',
-      description: 'Expert in document analyse en kwaliteitscontrole'
-    },
-    {
-      id: '3',
-      name: 'Ronald Boerdrecht',
-      description: 'Specialist in workflow optimalisatie en validatie'
-    }
-  ]);
-
+  // Real agents data from API
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [currentProcess, setCurrentProcess] = useState<Process | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'config'>('chat');
 
+  // Load agents on component mount
+  useEffect(() => {
+    const loadAgents = async () => {
+      const agentsData = await getAgents();
+      if (agentsData) {
+        setAgents(agentsData.agents);
+      }
+    };
+    
+    if (isLoaded && isSignedIn) {
+      loadAgents();
+    }
+  }, [isLoaded, isSignedIn, getAgents]);
+
   // Check if user is admin
   const isAdmin = user?.publicMetadata?.role === 'admin';
 
   // Handle agent selection
-  const handleSelectAgent = (agentId: string) => {
+  const handleSelectAgent = async (agentId: string) => {
+    if (!user?.id) return;
+    
     setSelectedAgentId(agentId);
     setCurrentView('chat');
     setIsConfiguring(false);
+    setIsLoading(true);
     
-    // Send introductory message from the agent
-    const selectedAgent = agents.find(agent => agent.id === agentId);
-    if (selectedAgent) {
-      const introMessage: Message = {
-        id: Date.now().toString(),
-        content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
-        sender: 'agent',
-        timestamp: new Date()
-      };
-      setMessages([introMessage]);
+    try {
+      // Start a new process with the selected agent
+      const process = await startProcess(agentId, {
+        user_id: user.id,
+        process_type: 'general',
+        total_steps: 5,
+        context: { step: 'introduction' }
+      });
+      
+      if (process) {
+        setCurrentProcess(process);
+        
+        // Get the selected agent info
+        const selectedAgent = agents.find(agent => agent.id === agentId);
+        if (selectedAgent) {
+          // Show thinking indicator first
+          const thinkingMessage: Message = {
+            id: Date.now().toString() + '_thinking',
+            content: '', // Empty content for thinking state
+            sender: 'agent',
+            timestamp: new Date()
+          };
+          setMessages([thinkingMessage]);
+          
+          // Execute the introduction step to get AI-generated greeting
+          try {
+            const introProcess = await executeStep(process.id, 'introduction', {
+              user_context: 'agent_selection',
+              agent_name: selectedAgent.name,
+              agent_description: selectedAgent.description
+            });
+            
+            if (introProcess && introProcess.context?.step_introduction?.output) {
+              // Replace thinking message with AI-generated greeting
+              const aiGreeting = introProcess.context.step_introduction.output;
+              const greetingMessage: Message = {
+                id: Date.now().toString() + '_greeting',
+                content: aiGreeting,
+                sender: 'agent',
+                timestamp: new Date()
+              };
+              setMessages([greetingMessage]);
+            } else {
+              // Fallback to default greeting if AI doesn't respond
+              const fallbackMessage: Message = {
+                id: Date.now().toString() + '_fallback',
+                content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
+                sender: 'agent',
+                timestamp: new Date()
+              };
+              setMessages([fallbackMessage]);
+            }
+          } catch (error) {
+            console.error('Error getting AI greeting:', error);
+            // Fallback to default greeting
+            const fallbackMessage: Message = {
+              id: Date.now().toString() + '_fallback',
+              content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
+              sender: 'agent',
+              timestamp: new Date()
+            };
+            setMessages([fallbackMessage]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error starting process:', error);
+      // Fallback to mock message
+      const selectedAgent = agents.find(agent => agent.id === agentId);
+      if (selectedAgent) {
+        const introMessage: Message = {
+          id: Date.now().toString(),
+          content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
+          sender: 'agent',
+          timestamp: new Date()
+        };
+        setMessages([introMessage]);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -80,7 +147,7 @@ export default function AgentsPage() {
 
   // Handle sending messages
   const handleSendMessage = async (messageContent: string) => {
-    if (!selectedAgentId) return;
+    if (!selectedAgentId || !currentProcess) return;
 
     // Add user message
     const userMessage: Message = {
@@ -93,17 +160,118 @@ export default function AgentsPage() {
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
 
-    // Simulate agent response (replace with real API call)
-    setTimeout(() => {
+    try {
+      // Add conversation to backend
+      const conversation = await addConversation(currentProcess.id, {
+        content: messageContent,
+        message_metadata: { step: 'user_input' }
+      });
+
+      if (conversation) {
+        // Execute the next step in the process
+        const updatedProcess = await executeStep(currentProcess.id, 'user_feedback', {
+          user_message: messageContent,
+          context: currentProcess.context
+        });
+
+        if (updatedProcess) {
+          setCurrentProcess(updatedProcess);
+          
+          // Debug: Log the entire updated process to see what we're getting
+          console.log('Updated process from backend:', updatedProcess);
+          console.log('Process context:', updatedProcess.context);
+          console.log('Process context keys:', Object.keys(updatedProcess.context || {}));
+          
+          // Check if the context has the step result
+          if (updatedProcess.context && updatedProcess.context.step_user_feedback) {
+            // Great! We have the AI response
+            const stepResult = updatedProcess.context.step_user_feedback;
+            console.log('Step result from backend:', stepResult);
+            
+            // Extract the AI response
+            let aiResponse = 'Ik heb uw vraag verwerkt, maar kon geen antwoord ophalen.';
+            
+            if (stepResult) {
+              if (typeof stepResult === 'string') {
+                aiResponse = stepResult;
+              } else if (stepResult.output) {
+                aiResponse = stepResult.output;
+              } else if (stepResult.content) {
+                aiResponse = stepResult.content;
+              } else {
+                console.log('Step result structure:', JSON.stringify(stepResult, null, 2));
+                aiResponse = 'AI response received but format unclear.';
+              }
+            }
+            
+            console.log('Final extracted AI response:', aiResponse);
+            
+            // Show the real AI response with enhanced interface
+            const agentMessage: Message = {
+              id: (Date.now() + 1).toString() + '_typing',
+              content: aiResponse,
+              sender: 'agent',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, agentMessage]);
+          } else {
+            // Context doesn't have the step result yet - this suggests a timing issue
+            console.log('⚠️ Step result not found in context - this suggests a backend timing issue');
+            console.log('Context received:', updatedProcess.context);
+            
+            // Show a message that we're waiting for the AI response
+            const waitingMessage: Message = {
+              id: Date.now().toString() + '_waiting',
+              content: '🤔 De AI is nog bezig met het verwerken van uw vraag...',
+              sender: 'agent',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, waitingMessage]);
+            
+            // Try to fetch the updated process again after a short delay
+            setTimeout(async () => {
+              try {
+                console.log('🔄 Retrying to fetch updated process...');
+                const retryProcess = await getProcess(currentProcess.id);
+                if (retryProcess && retryProcess.context?.step_user_feedback) {
+                  console.log('✅ Got updated process with AI response!');
+                  
+                  // Remove waiting message
+                  setMessages(prev => prev.filter(msg => msg.id !== waitingMessage.id));
+                  
+                  // Show the real AI response with enhanced interface
+                  const stepResult = retryProcess.context.step_user_feedback;
+                  const aiResponse = stepResult.output || 'AI response received';
+                  
+                  const agentMessage: Message = {
+                    id: (Date.now() + 1).toString() + '_typing',
+                    content: aiResponse,
+                    sender: 'agent',
+                    timestamp: new Date()
+                  };
+                  setMessages(prev => [...prev, agentMessage]);
+                }
+              } catch (error) {
+                console.error('Error retrying process fetch:', error);
+              }
+            }, 2000); // Wait 2 seconds then retry
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
+      
+      // Fallback response
       const agentMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: `Ik begrijp uw vraag over "${messageContent}". Laat me dit voor u onderzoeken en een passend antwoord geven.`,
+        content: `Ik begrijp uw vraag over "${messageContent}". Er is een technische fout opgetreden, maar ik werk eraan om u te helpen.`,
         sender: 'agent',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, agentMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   // Handle configuration save
@@ -126,6 +294,17 @@ export default function AgentsPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <div className="text-gray-600">Loading authentication...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSignedIn && agents.length === 0 && apiLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-gray-600">Loading agents...</div>
         </div>
       </div>
     );
