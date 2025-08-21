@@ -318,7 +318,7 @@ export default function UsersPage() {
       if (response.error) {
         // Check if it's a foreign key constraint error
         if (response.error.detail && response.error.detail.includes('foreign key constraint')) {
-          throw new Error('Cannot delete user: User has associated data (vouchers, workflows, etc.) that must be removed first. Please contact an administrator.');
+          throw new Error('Cannot delete user: User has associated data (vouchers, etc.) that must be removed first. Please contact an administrator.');
         }
         throw new Error(response.error.detail || 'Failed to delete user');
       }
@@ -855,8 +855,7 @@ export default function UsersPage() {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <p className="text-amber-800 text-sm font-medium mb-2">⚠️ Data that will be affected:</p>
                 <ul className="text-amber-700 text-sm space-y-1">
-                  <li>• User's workflow groups and configurations</li>
-                  <li>• Qualification documents and workflow runs</li>
+                                  <li>• Qualification documents</li>
                   <li>• Vouchers created by this user</li>
                   <li>• Purchase history and feedback</li>
                   <li>• Credit orders and balance</li>

@@ -27,7 +27,7 @@ const SmartPrefetcher: React.FC = () => {
 
         // Prefetch admin pages if user is admin
         const adminPages = isAdmin ? [
-          '/workflows',
+          '/agents',
           '/users',
           '/admin/credit-orders',
           '/admin/vouchers',
