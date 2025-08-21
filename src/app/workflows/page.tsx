@@ -67,7 +67,7 @@ export default function WorkflowsPage() {
       setDynamicStepDescriptions(descriptions);
       setError(null);
     } catch (err) {
-      console.error('Error fetching step names:', err);
+      // console.error('Error fetching step names:', err);
       setError('Failed to load workflow configuration');
       setDynamicStepNames([]);
       setDynamicStepDescriptions([]);
@@ -187,11 +187,11 @@ export default function WorkflowsPage() {
             } else {
             }
           } else {
-            console.error("Job failed:", jobStatusData.result);
+            // console.error("Job failed:", jobStatusData.result);
           }
         }
       } catch (error) {
-        console.error("Polling error:", error);
+        // console.error("Polling error:", error);
         setError('Failed to get job status');
         cleanupPolling();
       }
@@ -225,7 +225,7 @@ export default function WorkflowsPage() {
       // Start polling for job status
       pollJobStatus(jobData.job_id);
     } catch (error) {
-      console.error("Upload error:", error);
+      // console.error("Upload error:", error);
       setError(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsUploading(false);
@@ -249,7 +249,7 @@ export default function WorkflowsPage() {
       
       alert(`API Response: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
-      console.error("API call failed:", error);
+      // console.error("API call failed:", error);
       alert(`API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -264,7 +264,7 @@ export default function WorkflowsPage() {
       
       alert(`CORS Test Response: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
-      console.error("CORS test failed:", error);
+      // console.error("CORS test failed:", error);
       alert(`CORS test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

@@ -21,14 +21,11 @@ function HomeContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    console.log('=== HOMEPAGE REDIRECT LOGIC ===');
-    console.log('isLoaded:', isLoaded);
-    console.log('isSignedIn:', isSignedIn);
-    console.log('show parameter:', searchParams.get('show'));
-    console.log('Current pathname:', window.location.pathname);
-    console.log('Current URL:', window.location.href);
+    if (!isLoaded) return;
+
+    const show = searchParams.get('show');
     // Only redirect if user is signed in and there's no 'show' parameter
-    if (isLoaded && isSignedIn && !searchParams.get('show')) {
+    if (isLoaded && isSignedIn && !show) {
       // Use replace instead of push to avoid adding to history stack
       router.replace('/catalogus');
     }

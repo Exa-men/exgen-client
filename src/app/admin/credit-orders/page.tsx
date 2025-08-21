@@ -94,11 +94,11 @@ export default function CreditOrdersPage() {
     // Refresh token every 3 minutes (before the 4-minute cache expires)
     const tokenRefreshInterval = setInterval(async () => {
       try {
-        console.log('🔄 Proactively refreshing token...');
+        // console.log('🔄 Proactively refreshing token...');
         await api.refreshToken();
-        console.log('✅ Token refreshed proactively');
+        // console.log('✅ Token refreshed proactively');
       } catch (error) {
-        console.warn('⚠️ Failed to refresh token proactively:', error);
+        // console.warn('⚠️ Failed to refresh token proactively:', error);
       }
     }, 3 * 60 * 1000); // 3 minutes
     
@@ -120,7 +120,7 @@ export default function CreditOrdersPage() {
       
       if (error) {
         if (error.status === 403) {
-          console.error('Access denied: Admin privileges required');
+          // console.error('Access denied: Admin privileges required');
           alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
           router.push('/');
           return;
@@ -129,7 +129,7 @@ export default function CreditOrdersPage() {
         // Handle authentication errors specifically
         if (error.status === 401) {
           if (error.detail.includes('Signature has expired') || error.detail.includes('Invalid Clerk token')) {
-            console.log('🔄 Token expired during orders fetch, attempting to refresh...');
+            // console.log('🔄 Token expired during orders fetch, attempting to refresh...');
             try {
               // Try to refresh the token
               await api.refreshToken();
@@ -142,7 +142,7 @@ export default function CreditOrdersPage() {
               setOrders((retryResult.data as any).orders);
               return; // Successfully handled, exit early
             } catch (refreshError) {
-              console.error('❌ Failed to refresh token during orders fetch:', refreshError);
+              // console.error('❌ Failed to refresh token during orders fetch:', refreshError);
               alert('Je sessie is verlopen. Log opnieuw in.');
               router.push('/');
               return;
@@ -154,13 +154,13 @@ export default function CreditOrdersPage() {
           }
         }
         
-        console.error('Failed to fetch orders:', error);
+        // console.error('Failed to fetch orders:', error);
         return;
       }
 
       setOrders((data as any).orders);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      // console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
@@ -171,7 +171,7 @@ export default function CreditOrdersPage() {
       const { data, error } = await api.getCreditPackages();
       
       if (error) {
-        console.error('Error fetching packages:', error);
+        // console.error('Error fetching packages:', error);
         setPackages([]);
         return;
       }
@@ -179,7 +179,7 @@ export default function CreditOrdersPage() {
       // Backend returns packages directly as an array, not wrapped in an object
       setPackages(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error fetching packages:', error);
+      // console.error('Error fetching packages:', error);
       setPackages([]); // Set empty array on error to prevent undefined
     }
   };
@@ -208,7 +208,7 @@ export default function CreditOrdersPage() {
         broadcastCreditUpdate(order.user_id);
       }
     } catch (error) {
-      console.error('Error fulfilling order:', error);
+      // console.error('Error fulfilling order:', error);
       alert('Er is een fout opgetreden bij het vervullen van de bestelling.');
     } finally {
       setFulfillingOrder(null);
@@ -231,7 +231,7 @@ export default function CreditOrdersPage() {
 
       fetchOrders();
     } catch (error) {
-      console.error('Error cancelling order:', error);
+      // console.error('Error cancelling order:', error);
       alert('Er is een fout opgetreden bij het annuleren van de bestelling.');
     }
   };

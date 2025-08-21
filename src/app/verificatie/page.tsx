@@ -47,27 +47,16 @@ export default function VerificatiePage() {
         throw new Error(error.detail || 'Failed to verify hash');
       }
 
-      console.log('🔍 Verification API response:', data);
-      console.log('🔍 Response type:', typeof data);
-      console.log('🔍 Response keys:', data ? Object.keys(data) : 'no data');
-      console.log('🔍 Full response data:', JSON.stringify(data, null, 2));
-      console.log('🔍 Data.data exists?', !!(data as any)?.data);
-      console.log('🔍 Data.data value:', (data as any)?.data);
-
       // Extract the actual verification data from the SuccessResponse
       const verificationData = (data as any)?.data;
       if (!verificationData) {
-        console.error('❌ Verification data extraction failed');
-        console.error('❌ Data object:', data);
-        console.error('❌ Data.data:', (data as any)?.data);
         throw new Error('Invalid verification response format');
       }
 
-      console.log('🔍 Extracted verification data:', verificationData);
       setResult(verificationData as VerificationResponse);
       
     } catch (error) {
-      console.error('Verification error:', error);
+      // console.error('Verification error:', error);
       setError(error instanceof Error ? error.message : 'Hash verification failed');
     } finally {
       setVerifying(false);
@@ -81,7 +70,7 @@ export default function VerificatiePage() {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch (err) {
-        console.error('Failed to copy to clipboard:', err);
+        // console.error('Failed to copy to clipboard:', err);
       }
     }
   };

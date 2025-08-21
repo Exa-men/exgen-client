@@ -24,16 +24,7 @@ function SignUpVerifyContent() {
         const flowType = urlParams.get('flow'); // 'registration' or 'password-reset'
         const isMigratedUser = urlParams.get('migrated') === 'true'; // Check for migrated user indicator
 
-        console.log('=== VERIFICATION DEBUG ===');
-        console.log('URL Session ID:', createdSessionId);
-        console.log('URL Status:', status);
-        console.log('Flow Type:', flowType);
-        console.log('Is Migrated User:', isMigratedUser);
-        console.log('Current URL:', window.location.href);
-
-        if (status === 'verified' && createdSessionId) {
-          // Verification was successful, set the session active
-          console.log('Setting session active with ID:', createdSessionId);
+        if (createdSessionId && status === 'verified') {
           await setActive({ session: createdSessionId });
           
           // Set appropriate success status based on flow type
@@ -69,7 +60,6 @@ function SignUpVerifyContent() {
         // If no status params, check if this is a password reset flow
         if (flowType === 'password-reset') {
           // Password reset is already complete, just show success
-          console.log('Password reset flow detected, showing success message');
           if (isMigratedUser) {
             setVerificationStatus('migrated-user-success');
           } else {
@@ -80,14 +70,13 @@ function SignUpVerifyContent() {
           }, 2000);
         } else {
           // Call handleEmailLinkVerification for email link flows
-          console.log('No verification status found, calling handleEmailLinkVerification...');
           await handleEmailLinkVerification({
             redirectUrlComplete: '/catalogus'
           });
         }
 
       } catch (err: any) {
-        console.error('Email link verification error:', err);
+        // console.error('Email link verification error:', err);
         setVerificationStatus('error');
         setErrorMessage('Verificatie mislukt. Probeer het opnieuw of neem contact op met de beheerder.');
       }

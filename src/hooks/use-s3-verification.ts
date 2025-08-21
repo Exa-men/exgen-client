@@ -33,7 +33,7 @@ export function useS3Verification() {
       }
       return result;
     } catch (error) {
-      console.error('S3 verification failed:', error);
+      // console.error('S3 verification failed:', error);
       throw error;
     } finally {
       setVerifying(false);
@@ -45,7 +45,7 @@ export function useS3Verification() {
       const result = await api.verifyDocumentS3(documentId);
       return result;
     } catch (error) {
-      console.error('Single document S3 verification failed:', error);
+      // console.error('Single document S3 verification failed:', error);
       throw error;
     }
   }, [api]);
