@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useClerk } from '@clerk/nextjs';
-import { clearAllUserCaches } from '../lib/utils';
+import { clearAllCaches } from '../lib/utils';
 
 /**
  * Custom hook for comprehensive sign out with complete cache clearing
@@ -15,7 +15,7 @@ export const useSignOut = () => {
       // console.log('🔐 Starting comprehensive sign out process...');
       
       // Clear all caches first
-      await clearAllUserCaches();
+      await clearAllCaches();
       
       // console.log('🔐 Cache cleanup complete, proceeding with Clerk sign out...');
       
@@ -29,7 +29,7 @@ export const useSignOut = () => {
       
       // Fallback: try to clear everything and redirect
       try {
-        clearAllUserCaches(); // Use the existing function
+        clearAllCaches(); // Use the existing function
         window.location.href = '/';
         // console.log('✅ Fallback sign out completed');
       } catch (fallbackError) {

@@ -71,16 +71,13 @@ class RolePerformanceMonitor {
   // Get performance summary
   getPerformanceSummary(): string {
     const summary = {
-      totalRoles: this.roles.length,
-      activeRoles: this.roles.filter(role => role.isActive).length,
-      totalUsers: this.users.length,
-      activeUsers: this.users.filter(user => user.isActive).length,
-      averageCredits: this.calculateAverageCredits(),
-      totalCredits: this.calculateTotalCredits(),
-      creditDistribution: this.getCreditDistribution(),
-      roleEfficiency: this.calculateRoleEfficiency(),
-      userEngagement: this.calculateUserEngagement(),
-      systemHealth: this.calculateSystemHealth()
+      totalApiCalls: this.metrics.totalApiCalls,
+      cacheHits: this.metrics.cacheHits,
+      cacheMisses: this.metrics.cacheMisses,
+      duplicateRequests: this.metrics.duplicateRequests,
+      averageResponseTime: this.metrics.averageResponseTime,
+      cacheHitRate: this.getCacheHitRate(),
+      lastUpdated: this.metrics.lastUpdated
     };
 
     return JSON.stringify(summary, null, 2);

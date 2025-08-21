@@ -161,7 +161,7 @@ const UnifiedHeader: React.FC = () => {
             {isLoaded && isSignedIn && (
               <>
                 <CreditDisplay onOrderCredits={openModal} />
-                <UserButton afterSignOutUrl="/" signOutCallback={handleSignOut} />
+                <UserButton afterSignOutUrl="/" />
               </>
             )}
             {isLoaded && !isSignedIn && (
@@ -288,7 +288,7 @@ const UnifiedHeader: React.FC = () => {
                       <>
                         <div className="flex flex-col items-center gap-4">
                           <CreditDisplay onOrderCredits={openModal} />
-                          <UserButton afterSignOutUrl="/" signOutCallback={handleSignOut} />
+                          <UserButton afterSignOutUrl="/" />
                         </div>
                       </>
                     )}
