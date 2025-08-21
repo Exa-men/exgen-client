@@ -1,10 +1,124 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { AdminOnly } from '../../components/RoleGuard';
+import AgentsSidebar from './components/AgentsSidebar';
+import ChatInterface from './components/ChatInterface';
+import AgentConfiguration from './components/AgentConfiguration';
+
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  sender: 'user' | 'agent';
+  timestamp: Date;
+}
 
 export default function AgentsPage() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  
+  // Mock agents data - replace with real data from backend
+  const [agents] = useState<Agent[]>([
+    {
+      id: '1',
+      name: 'Cristine Mardrecht',
+      description: 'Specialist in het valideren van examenproducten'
+    },
+    {
+      id: '2',
+      name: 'Paulo Rommes',
+      description: 'Expert in document analyse en kwaliteitscontrole'
+    },
+    {
+      id: '3',
+      name: 'Ronald Boerdrecht',
+      description: 'Specialist in workflow optimalisatie en validatie'
+    }
+  ]);
+
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [currentView, setCurrentView] = useState<'chat' | 'config'>('chat');
+
+  // Check if user is admin
+  const isAdmin = user?.publicMetadata?.role === 'admin';
+
+  // Handle agent selection
+  const handleSelectAgent = (agentId: string) => {
+    setSelectedAgentId(agentId);
+    setCurrentView('chat');
+    setIsConfiguring(false);
+    
+    // Send introductory message from the agent
+    const selectedAgent = agents.find(agent => agent.id === agentId);
+    if (selectedAgent) {
+      const introMessage: Message = {
+        id: Date.now().toString(),
+        content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
+        sender: 'agent',
+        timestamp: new Date()
+      };
+      setMessages([introMessage]);
+    }
+  };
+
+  // Handle agent configuration
+  const handleConfigureAgent = (agentId: string) => {
+    setSelectedAgentId(agentId);
+    setCurrentView('config');
+    setIsConfiguring(true);
+  };
+
+  // Handle sending messages
+  const handleSendMessage = async (messageContent: string) => {
+    if (!selectedAgentId) return;
+
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: messageContent,
+      sender: 'user',
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+
+    // Simulate agent response (replace with real API call)
+    setTimeout(() => {
+      const agentMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: `Ik begrijp uw vraag over "${messageContent}". Laat me dit voor u onderzoeken en een passend antwoord geven.`,
+        sender: 'agent',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, agentMessage]);
+      setIsLoading(false);
+    }, 1500);
+  };
+
+  // Handle configuration save
+  const handleSaveConfiguration = (config: any) => {
+    console.log('Saving configuration:', config);
+    // TODO: Implement API call to save configuration
+    setCurrentView('chat');
+    setIsConfiguring(false);
+  };
+
+  // Handle back from configuration
+  const handleBackFromConfig = () => {
+    setCurrentView('chat');
+    setIsConfiguring(false);
+  };
 
   if (!isLoaded) {
     return (
@@ -32,28 +146,51 @@ export default function AgentsPage() {
         </div>
       }
     >
-      <main className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Title and subtitle */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Agents</h1>
-            <p className="text-gray-600">AI-powered agents for document processing and analysis</p>
-          </div>
-          
-          {/* Empty state - ready for future langchain implementation */}
-          <div className="bg-white rounded-lg p-12 shadow-sm text-center">
-            <div className="text-6xl mb-4">🤖</div>
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">Agents Coming Soon</h2>
-            <p className="text-gray-600 mb-6">
-              This page will be populated with langchain-powered agents for intelligent document processing.
-            </p>
-            <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-              <span className="w-2 h-2 bg-blue-600 rounded-full mr-2 animate-pulse"></span>
-              Under Development
-            </div>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Agents Sidebar */}
+        <AgentsSidebar
+          agents={agents}
+          selectedAgentId={selectedAgentId}
+          isAdmin={isAdmin}
+          onSelectAgent={handleSelectAgent}
+          onConfigureAgent={handleConfigureAgent}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Content Area */}
+          <div className="flex-1 p-6">
+            {!selectedAgentId ? (
+              // No agent selected
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🤖</div>
+                  <h2 className="text-2xl font-semibold text-gray-800 mb-2">Select an Agent</h2>
+                  <p className="text-gray-600">
+                    Choose an AI agent from the sidebar to start a conversation
+                  </p>
+                </div>
+              </div>
+            ) : currentView === 'config' ? (
+              // Agent configuration view
+              <AgentConfiguration
+                agentId={selectedAgentId}
+                agentName={agents.find(a => a.id === selectedAgentId)?.name || ''}
+                onBack={handleBackFromConfig}
+                onSave={handleSaveConfiguration}
+              />
+            ) : (
+              // Chat interface view
+              <ChatInterface
+                agentName={agents.find(a => a.id === selectedAgentId)?.name || ''}
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+              />
+            )}
           </div>
         </div>
-      </main>
+      </div>
     </AdminOnly>
   );
 } 
