@@ -2,6 +2,13 @@ import { useEffect, useRef } from "react";
 import { Renderer, Triangle, Program, Mesh } from "ogl";
 import "./Prism.css";
 
+// Extend HTMLDivElement to include custom properties
+declare global {
+  interface HTMLDivElement {
+    __prismIO?: IntersectionObserver;
+  }
+}
+
 const Prism = ({
   height = 3.5,
   baseWidth = 5.5,
@@ -19,7 +26,7 @@ const Prism = ({
   suspendWhenOffscreen = false,
   timeScale = 0.5,
 }) => {
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -239,10 +246,10 @@ const Prism = ({
 
     const rotBuf = new Float32Array(9);
     const setMat3FromEuler = (
-      yawY,
-      pitchX,
-      rollZ,
-      out
+      yawY: number,
+      pitchX: number,
+      rollZ: number,
+      out: Float32Array
     ) => {
       const cy = Math.cos(yawY),
         sy = Math.sin(yawY);
@@ -299,10 +306,10 @@ const Prism = ({
       roll = 0;
     let targetYaw = 0,
       targetPitch = 0;
-    const lerp = (a, b, t) => a + (b - a) * t;
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
     const pointer = { x: 0, y: 0, inside: true };
-    const onMove = (e) => {
+    const onMove = (e: PointerEvent | MouseEvent) => {
       const ww = Math.max(1, window.innerWidth);
       const wh = Math.max(1, window.innerHeight);
       const cx = ww * 0.5;
@@ -320,9 +327,9 @@ const Prism = ({
       pointer.inside = false;
     };
 
-    let onPointerMove = null;
+    let onPointerMove: ((e: PointerEvent) => void) | null = null;
     if (animationType === "hover") {
-      onPointerMove = (e) => {
+      onPointerMove = (e: PointerEvent) => {
         onMove(e);
         startRAF();
       };
@@ -336,7 +343,7 @@ const Prism = ({
       program.uniforms.uUseBaseWobble.value = 1;
     }
 
-    const render = (t) => {
+    const render = (t: number) => {
       const time = (t - t0) * 0.001;
       program.uniforms.iTime.value = time;
 
@@ -402,7 +409,7 @@ const Prism = ({
     };
 
     if (suspendWhenOffscreen) {
-      const io = new IntersectionObserver((entries) => {
+      const io = new IntersectionObserver((entries: IntersectionObserverEntry[]) => {
         const vis = entries.some((e) => e.isIntersecting);
         if (vis) startRAF();
         else stopRAF();
