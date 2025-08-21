@@ -29,13 +29,13 @@ export default function AgentsSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div className={`relative bg-white border-r border-gray-200 transition-all duration-300 ${
+    <div className={`relative bg-white/10 backdrop-blur-md border-r border-white/20 transition-all duration-300 ${
       isCollapsed ? 'w-16' : 'w-80'
     }`}>
       {/* Toggle Button */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-6 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+        className="absolute -right-3 top-6 w-6 h-6 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors z-10"
       >
         {isCollapsed ? (
           <ChevronRight className="w-3 h-3 text-gray-600" />
@@ -46,25 +46,10 @@ export default function AgentsSidebar({
 
       {/* Sidebar Content */}
       <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          {!isCollapsed && (
-            <div className="flex items-center space-x-2">
-              <Users className="w-5 h-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-gray-900">Agents</h2>
-            </div>
-          )}
-          {isCollapsed && (
-            <div className="flex justify-center">
-              <Users className="w-5 h-5 text-blue-500" />
-            </div>
-          )}
-        </div>
-
         {/* Agents List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-2 pb-0">
           {!isCollapsed ? (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {agents.map((agent) => (
                 <AgentCard
                   key={agent.id}
@@ -79,14 +64,14 @@ export default function AgentsSidebar({
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {agents.map((agent) => (
                 <div
                   key={agent.id}
-                  className={`relative p-2 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                  className={`relative p-2 rounded-lg cursor-pointer transition-all duration-200 ${
                     selectedAgentId === agent.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
+                      ? 'border-2 border-blue-400 bg-blue-500/20 backdrop-blur-sm'
+                      : 'hover:bg-white/10'
                   }`}
                   onClick={() => onSelectAgent(agent.id)}
                   title={`${agent.name} - ${agent.description}`}
@@ -112,8 +97,8 @@ export default function AgentsSidebar({
 
         {/* Footer */}
         {!isCollapsed && (
-          <div className="p-4 border-t border-gray-200">
-            <p className="text-xs text-gray-500 text-center">
+          <div className="p-2 pt-2 pb-0 border-t border-white/20">
+            <p className="text-xs text-white/70 text-center">
               {agents.length} agent{agents.length !== 1 ? 's' : ''} available
             </p>
           </div>

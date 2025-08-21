@@ -6,6 +6,7 @@ import { AdminOnly } from '../../components/RoleGuard';
 import AgentsSidebar from './components/AgentsSidebar';
 import ChatInterface from './components/ChatInterface';
 import AgentConfiguration from './components/AgentConfiguration';
+import Prism from './components/Prism';
 import { useAgents, Agent, Process, Conversation } from '../../hooks/use-agents';
 
 interface Message {
@@ -290,10 +291,10 @@ export default function AgentsPage() {
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-gray-600">Loading authentication...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-8 border border-white/20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <div className="text-white/80">Loading authentication...</div>
         </div>
       </div>
     );
@@ -301,10 +302,10 @@ export default function AgentsPage() {
 
   if (isSignedIn && agents.length === 0 && apiLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-gray-600">Loading agents...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-8 border border-white/20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <div className="text-white/80">Loading agents...</div>
         </div>
       </div>
     );
@@ -317,15 +318,15 @@ export default function AgentsPage() {
   return (
     <AdminOnly
       fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-            <p className="text-gray-600">You need admin privileges to access this page.</p>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-8 border border-white/20">
+            <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+            <p className="text-white/70">You need admin privileges to access this page.</p>
           </div>
         </div>
       }
     >
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen flex">
         {/* Agents Sidebar */}
         <AgentsSidebar
           agents={agents}
@@ -336,17 +337,32 @@ export default function AgentsPage() {
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col relative">
+          {/* Prism Background */}
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <Prism
+              animationType="rotate"
+              timeScale={0.5}
+              height={3.5}
+              baseWidth={5.5}
+              scale={3.6}
+              hueShift={0}
+              colorFrequency={1}
+              noise={0.5}
+              glow={1}
+            />
+          </div>
+          
           {/* Content Area */}
-          <div className="flex-1 p-6">
+          <div className="flex-1 p-2 pb-0 relative z-10">
             {!selectedAgentId ? (
               // No agent selected
               <div className="h-full flex items-center justify-center">
-                <div className="text-center">
+                <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-6 border border-white/20">
                   <div className="text-6xl mb-4">🤖</div>
-                  <h2 className="text-2xl font-semibold text-gray-800 mb-2">Select an Agent</h2>
-                  <p className="text-gray-600">
-                    Choose an AI agent from the sidebar to start a conversation
+                  <h2 className="text-2xl font-semibold text-black mb-2">Selecteer een Ontwikkelaar</h2>
+                  <p className="text-white/70">
+                    Kies één van de ontwikkelaars om een project te starten.
                   </p>
                 </div>
               </div>

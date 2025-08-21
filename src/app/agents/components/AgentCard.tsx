@@ -24,14 +24,14 @@ export default function AgentCard({
 }: AgentCardProps) {
   return (
     <div
-      className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md ${
+      className={`relative p-2 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-white/10 ${
         isSelected
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-200 bg-white hover:border-gray-300'
+          ? 'border-blue-400 bg-blue-500/20 backdrop-blur-md'
+          : 'border-white/30 bg-white/10 backdrop-blur-md hover:border-white/50 hover:bg-white/20'
       }`}
       onClick={() => onSelect(id)}
     >
-      <div className="flex items-start space-x-3">
+      <div className="flex items-start space-x-2">
         {/* Agent Avatar */}
         <div className="relative flex-shrink-0">
           <Avatar name={name} size={48} />
@@ -39,10 +39,10 @@ export default function AgentCard({
 
         {/* Agent Info */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">
+          <h3 className="text-sm font-semibold text-black truncate">
             {name}
           </h3>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+          <p className="text-xs text-white/70 mt-0.5 leading-relaxed">
             {description}
           </p>
         </div>
@@ -54,7 +54,7 @@ export default function AgentCard({
               e.stopPropagation();
               onConfigure(id);
             }}
-            className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            className="flex-shrink-0 p-1.5 text-white/60 hover:text-white hover:bg-white/20 rounded-full transition-colors"
             title="Configure Agent"
           >
             <Settings className="w-4 h-4" />
