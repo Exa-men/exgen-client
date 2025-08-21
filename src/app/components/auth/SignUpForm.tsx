@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSignUp } from '@clerk/nextjs';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { useAuthModal } from '../../contexts/AuthModalContext';
 import { Loader2, Eye, EyeOff, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
 import { validateEmail, getEmailValidationErrorMessage } from '../../../lib/email-validation';
+import { useRouter } from 'next/navigation';
 
 interface SignUpFormData {
   firstName: string;
@@ -19,8 +20,9 @@ interface SignUpFormData {
 }
 
 export const SignUpForm: React.FC = () => {
-  const { signUp, isLoaded } = useSignUp();
-  const { switchModalMode, closeAuthModal } = useAuthModal();
+  const { signUp, isLoaded, setActive } = useSignUp();
+  const { closeAuthModal, switchModalMode } = useAuthModal();
+  const router = useRouter();
   
   const [formData, setFormData] = useState<SignUpFormData>({
     firstName: '',
@@ -76,7 +78,8 @@ export const SignUpForm: React.FC = () => {
       // Redirect after a delay
       setTimeout(() => {
         closeAuthModal();
-        window.location.reload();
+        // Use Next.js router instead of window.location.reload to prevent page reload
+        router.refresh();
       }, 2000);
       return;
     }
@@ -97,7 +100,8 @@ export const SignUpForm: React.FC = () => {
         setErrors({ email: 'Je bent al ingelogd. Ververs de pagina.' });
         setTimeout(() => {
           closeAuthModal();
-          window.location.reload();
+          // Use Next.js router instead of window.location.reload to prevent page reload
+          router.refresh();
         }, 2000);
         break;
       default:
@@ -187,6 +191,11 @@ export const SignUpForm: React.FC = () => {
       }
       
       console.log('=== SWITCHING TO VERIFICATION SENT ===');
+      
+      // Note: User will be automatically created in backend when they first access a protected endpoint
+      // This ensures proper session token handling and avoids timing issues
+      console.log('User will be created in backend on first protected endpoint access');
+      
       // Clerk handles email verification automatically
       switchModalMode('verification-sent');
       console.log('Modal mode switched to verification-sent');

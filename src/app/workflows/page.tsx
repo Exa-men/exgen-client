@@ -6,6 +6,8 @@ import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import WorkflowConfig from '../components/WorkflowConfig';
 import WorkflowGroups from '../components/WorkflowGroups';
 import { AdminOnly } from '../../components/RoleGuard';
+import { useApi } from '@/hooks/use-api';
+import { useRouter } from 'next/navigation';
 
 
 interface JobStatus {
@@ -25,9 +27,9 @@ interface JobStatus {
 }
 
 export default function WorkflowsPage() {
-  const { isSignedIn, user, isLoaded } = useUser();
-  const { signOut } = useClerk();
-  const { getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const api = useApi();
+  const router = useRouter();
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -52,20 +54,15 @@ export default function WorkflowsPage() {
     
     setIsLoadingSteps(true);
     try {
-      const token = await getToken();
-      const response = await fetch(`${backendUrl}/api/v1/workflow/config`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { data, error } = await api.getWorkflowStepsConfig();
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch workflow config: ${response.status}`);
+      if (error) {
+        throw new Error(`Failed to fetch workflow config: ${error.detail}`);
       }
       
-      const data = await response.json();
-      const names = data.steps?.map((step: any) => step.name) || [];
-      const descriptions = data.steps?.map((step: any) => step.description) || [];
+      const workflowConfig = data as any;
+      const names = workflowConfig.steps?.map((step: any) => step.name) || [];
+      const descriptions = workflowConfig.steps?.map((step: any) => step.description) || [];
       setDynamicStepNames(names);
       setDynamicStepDescriptions(descriptions);
       setError(null);
@@ -77,7 +74,7 @@ export default function WorkflowsPage() {
     } finally {
       setIsLoadingSteps(false);
     }
-  }, [backendUrl, getToken, isSignedIn]);
+  }, [api, isSignedIn]);
 
   // Fetch on mount and when user signs in
   useEffect(() => {
@@ -173,29 +170,24 @@ export default function WorkflowsPage() {
     
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const token = await getToken();
-        const response = await fetch(`${backendUrl}/api/v1/jobs/${jobId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const { data: statusData, error } = await api.getJobStatus(jobId);
 
-        if (!response.ok) {
-          throw new Error(`Failed to get job status: ${response.status}`);
+        if (error) {
+          throw new Error(`Failed to get job status: ${error.detail}`);
         }
 
-        const statusData = await response.json();
-        setJobStatus(statusData);
-        setLogs(statusData.logs || []);
+        const jobStatusData = statusData as any;
+        setJobStatus(jobStatusData);
+        setLogs(jobStatusData.logs || []);
         
-        if (statusData.status === 'completed' || statusData.status === 'failed') {
+        if (jobStatusData.status === 'completed' || jobStatusData.status === 'failed') {
           cleanupPolling();
-          if (statusData.status === 'completed') {
-            if (statusData.result?.generated_document) {
+          if (jobStatusData.status === 'completed') {
+            if (jobStatusData.result?.generated_document) {
             } else {
             }
           } else {
-            console.error("Job failed:", statusData.result);
+            console.error("Job failed:", jobStatusData.result);
           }
         }
       } catch (error) {
@@ -204,7 +196,7 @@ export default function WorkflowsPage() {
         cleanupPolling();
       }
     }, 2000); // Poll every 2 seconds
-  }, [backendUrl, getToken, cleanupPolling]);
+  }, [api, cleanupPolling]);
 
   // Update uploadFile to refetch steps before starting job
   const uploadFile = useCallback(async () => {
@@ -222,25 +214,12 @@ export default function WorkflowsPage() {
       // Always get latest steps before starting
       await fetchStepNamesAndDescriptions();
       
-      const token = await getToken();
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('template_name_or_id', templateName);
+      const { data: jobData, error } = await api.uploadWorkflowFile(selectedFile, templateName);
 
-      const response = await fetch(`${backendUrl}/api/v1/generate`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Upload failed: ${errorText}`);
+      if (error) {
+        throw new Error(`Upload failed: ${error.detail}`);
       }
 
-      const jobData = await response.json();
       setJobStatus(jobData);
       
       // Start polling for job status
@@ -251,7 +230,7 @@ export default function WorkflowsPage() {
     } finally {
       setIsUploading(false);
     }
-  }, [selectedFile, templateName, fetchStepNamesAndDescriptions, getToken, backendUrl, pollJobStatus]);
+  }, [selectedFile, templateName, fetchStepNamesAndDescriptions, api, pollJobStatus]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -262,21 +241,12 @@ export default function WorkflowsPage() {
 
   const callApi = async () => {
     try {
-      const token = await getToken();
-      const res = await fetch(`${backendUrl}/api/v1/health`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { data, error } = await api.getSystemHealth();
       
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Error response:", errorText);
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      if (error) {
+        throw new Error(`HTTP error! status: ${error.status}, body: ${error.detail}`);
       }
       
-      const data = await res.json();
       alert(`API Response: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
       console.error("API call failed:", error);
@@ -286,21 +256,12 @@ export default function WorkflowsPage() {
 
   const testCors = async () => {
     try {
-      const token = await getToken();
-      const res = await fetch(`${backendUrl}/api/v1/test`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { data, error } = await api.getTestEndpoint();
       
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("CORS test error response:", errorText);
-        throw new Error(`HTTP error! status: ${res.status}, body: ${errorText}`);
+      if (error) {
+        throw new Error(`HTTP error! status: ${error.status}, body: ${error.detail}`);
       }
       
-      const data = await res.json();
       alert(`CORS Test Response: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
       console.error("CORS test failed:", error);
@@ -367,7 +328,8 @@ export default function WorkflowsPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Ontwikkelen</h1>
           </div>
-          <WorkflowGroups />
+          
+          <WorkflowGroups backendUrl={backendUrl} />
           
           {/* Error Display */}
           {error && (

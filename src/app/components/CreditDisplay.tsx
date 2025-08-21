@@ -1,45 +1,60 @@
 "use client"
 
-import React from 'react';
-import { Wallet } from 'lucide-react';
+import React, { useEffect } from 'react';
 import { useCredits } from '../contexts/CreditContext';
-import { cn } from '../../lib/utils';
+import { Button } from './ui/button';
+import { CreditCard } from 'lucide-react';
 
 interface CreditDisplayProps {
-  className?: string;
-  showLabel?: boolean;
-  onOrderCredits?: () => void;
+  onOrderCredits: () => void;
 }
 
-const CreditDisplay: React.FC<CreditDisplayProps> = ({ 
-  className, 
-  showLabel = false,
-  onOrderCredits
-}) => {
-  const { credits, loading } = useCredits();
+const CreditDisplay: React.FC<CreditDisplayProps> = ({ onOrderCredits }) => {
+  const { credits, loading, registerCreditUpdateCallback } = useCredits();
+
+  useEffect(() => {
+    // Register callback to listen for credit updates from admin actions
+    const unregister = registerCreditUpdateCallback((userId) => {
+      console.log(`💳 CreditDisplay: Received credit update for user ${userId}`);
+      // The credits will be automatically refreshed by the CreditContext
+    });
+
+    return unregister;
+  }, [registerCreditUpdateCallback]);
 
   if (loading) {
     return (
-      <div className={cn(
-        "flex items-center gap-2 text-gray-700",
-        className
-      )}>
-        <Wallet className="h-4 w-4 text-examen-cyan" />
-        <span className="font-medium text-sm">...</span>
+      <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600">
+        <CreditCard className="h-4 w-4 animate-pulse" />
+        <span>Loading...</span>
+      </div>
+    );
+  }
+
+  // Don't render anything if credits is undefined/null (still loading)
+  if (credits === undefined || credits === null) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600">
+        <CreditCard className="h-4 w-4 animate-pulse" />
+        <span>Loading...</span>
       </div>
     );
   }
 
   return (
-    <div className={cn(
-      "flex items-center gap-2 text-gray-700",
-      onOrderCredits && "cursor-pointer hover:text-examen-cyan transition-colors",
-      className
-    )} onClick={onOrderCredits}>
-      <Wallet className="h-4 w-4 text-examen-cyan" />
-      <span className="font-medium text-sm">
-        {credits} {showLabel ? 'credits' : ''}
-      </span>
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 px-3 py-2 bg-examen-cyan-50 text-examen-cyan rounded-lg">
+        <CreditCard className="h-4 w-4" />
+        <span className="font-medium">{credits} credits</span>
+      </div>
+      <Button
+        onClick={onOrderCredits}
+        variant="outline"
+        size="sm"
+        className="border-examen-cyan text-examen-cyan hover:bg-examen-cyan-100"
+      >
+        Bestellen
+      </Button>
     </div>
   );
 };

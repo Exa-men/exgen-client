@@ -15,7 +15,7 @@ async function testApiConnection() {
     
     // Test catalog endpoint (will fail due to auth, but we can see the structure)
     try {
-      const catalogResponse = await fetch('http://localhost:8000/api/catalog/products');
+      const catalogResponse = await fetch('http://localhost:8000/api/v1/catalog/products');
       console.log('📦 Catalog endpoint status:', catalogResponse.status);
     } catch (error) {
       console.log('📦 Catalog endpoint (expected auth failure):', error.message);
@@ -23,7 +23,7 @@ async function testApiConnection() {
     
     console.log('🎯 API integration test completed!');
     console.log('📋 Next steps:');
-    console.log('1. Start the backend server (uvicorn src.main:app --reload)');
+    console.log('1. Start the backend server (uvicorn app.main:app --reload)');
     console.log('2. Set up Clerk authentication');
     console.log('3. Test the edit page with real data');
     
@@ -42,7 +42,7 @@ async function debugPatchRequest() {
   
   // Test the specific endpoint that's causing the 405 error
   try {
-    const response = await fetch('http://localhost:8000/api/catalog/products/d75d2d14-2de3-4c8f-99db-413b193dc364', {
+    const response = await fetch('http://localhost:8000/api/v1/catalog/products/d75d2d14-2de3-4c8f-99db-413b193dc364', {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -57,7 +57,7 @@ async function debugPatchRequest() {
   
   // Check what methods are allowed
   try {
-    const response = await fetch('http://localhost:8000/api/catalog/products/d75d2d14-2de3-4c8f-99db-413b193dc364', {
+    const response = await fetch('http://localhost:8000/api/v1/catalog/products/d75d2d14-2de3-4c8f-99db-413b193dc364', {
       method: 'OPTIONS'
     });
     console.log('🔍 Allowed methods:', response.headers.get('Allow'));

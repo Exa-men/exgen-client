@@ -3,15 +3,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Crown, User, Edit, Loader2, Filter } from 'lucide-react';
+import { Search, ArrowUpDown, Crown, User, Edit, Loader2, Filter, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { toast } from 'sonner';
 
 import { AdminOnly } from '../../components/RoleGuard';
 import { cn } from '../../lib/utils';
+import { useApi } from '@/hooks/use-api';
+import { useCredits } from '../contexts/CreditContext';
 
 interface UserData {
   id: string;
@@ -34,9 +38,11 @@ type SortField = 'first_name' | 'last_name' | 'email' | 'role' | 'credits' | 'sc
 type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
+  const { refreshCurrentUserCredits, broadcastCreditUpdate } = useCredits();
   
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +52,13 @@ export default function UsersPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [updatingCredits, setUpdatingCredits] = useState<string | null>(null);
+  const [updatingEmail, setUpdatingEmail] = useState<string | null>(null);
+  const [updatingSchool, setUpdatingSchool] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [welcomeVoucherStats, setWelcomeVoucherStats] = useState({
     total_users: 0,
     activated_welcome_vouchers: 0,
@@ -68,195 +81,265 @@ export default function UsersPage() {
   }, [isSignedIn]);
 
   const fetchUsers = async () => {
-    if (!isSignedIn) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      const response = await fetch('/api/v1/admin/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await api.getAdminUsers();
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch users: ${response.status}`);
+      if (response.error) {
+        if (response.error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch users:', response.error);
+        return;
       }
-      
-      const data: UserListResponse = await response.json();
-      setUsers(data.users);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      setError('Failed to load users');
-      setUsers([]);
+
+      if (response.data) {
+        setUsers((response.data as any).users || []);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchWelcomeVoucherStats = async () => {
-    if (!isSignedIn) return;
     try {
-      const token = await getToken();
-      const response = await fetch('/api/v1/admin/welcome-voucher/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await api.getWelcomeVoucherStats();
       
-      if (response.ok) {
-        const data = await response.json();
-        setWelcomeVoucherStats(data);
+      if (response.error) {
+        console.error('Error fetching welcome voucher stats:', response.error);
+        return;
       }
-    } catch (err) {
-      console.error('Error fetching welcome voucher stats:', err);
+
+      if (response.data) {
+        setWelcomeVoucherStats(response.data as any);
+      }
+    } catch (error) {
+      console.error('Error fetching welcome voucher stats:', error);
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: 'user' | 'admin') => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/role`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ role: newRole }),
-      });
+      setUpdatingRole(userId);
+      
+      // Optimistically update the local state immediately
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, role: newRole as 'user' | 'admin' } : user
+      ));
+      
+      const response = await api.updateUserRole(userId, newRole);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user role');
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, role: user.role } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user role');
       }
 
-      // Update the user in the local state
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
-      ));
-    } catch (err) {
-      console.error('Error updating user role:', err);
-      setError('Failed to update user role');
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, role: updatedUser.role || newRole } : user
+        ));
+      }
+      
+      toast.success('User role updated successfully');
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user role');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingRole(null);
     }
   };
 
-  const updateUserCredits = async (userId: string, credits: number) => {
+  const handleCreditsChange = async (userId: string, newCredits: number) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/credits`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ credits }),
-      });
+      setUpdatingCredits(userId);
+      
+      // Optimistically update the local state immediately
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, credits: newCredits } : user
+      ));
+      
+      const response = await api.updateUserCredits(userId, newCredits);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user credits');
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, credits: user.credits } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user credits');
       }
 
-      // Update the user in the local state
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, credits } : user
-      ));
-    } catch (err) {
-      console.error('Error updating user credits:', err);
-      setError('Failed to update user credits');
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, credits: updatedUser.credits || newCredits } : user
+        ));
+      }
+      
+      // Refresh credits for the updated user (this will also refresh current user if applicable)
+      await refreshCurrentUserCredits();
+      
+      // Broadcast the credit update to all components that need to know about it
+      broadcastCreditUpdate(userId);
+      
+      toast.success('User credits updated successfully');
+    } catch (error) {
+      console.error('Error updating user credits:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user credits');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingCredits(null);
     }
   };
 
-  const updateUserEmail = async (userId: string, email: string) => {
+  const handleEmailChange = async (userId: string, newEmail: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/email`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
+      setUpdatingEmail(userId);
+      
+      // Optimistically update the local state immediately
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, email: newEmail } : user
+      ));
+      
+      const response = await api.updateUserEmail(userId, newEmail);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user email');
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, email: user.email } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user email');
       }
 
-      // Update the user in the local state
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, email } : user
-      ));
-    } catch (err) {
-      console.error('Error updating user email:', err);
-      setError('Failed to update user email');
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, email: updatedUser.email || newEmail } : user
+        ));
+      }
+      
+      toast.success('User email updated successfully');
+    } catch (error) {
+      console.error('Error updating user email:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user email');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingEmail(null);
     }
   };
 
-  const updateUserSchool = async (userId: string, schoolName: string) => {
+  const handleSchoolChange = async (userId: string, newSchool: string) => {
     try {
-      setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ school_name: schoolName }),
-      });
+      setUpdatingSchool(userId);
+      
+      // Optimistically update the local state immediately
+      setUsers(prev => prev.map(user => 
+        user.id === userId ? { ...user, school_name: newSchool } : user
+      ));
+      
+      const response = await api.updateUserSchool(userId, newSchool);
 
-      if (!response.ok) {
-        throw new Error('Failed to update user school');
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, school_name: user.school_name } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user school');
       }
 
-      // Update the user in the local state
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, school_name: schoolName } : user
-      ));
-    } catch (err) {
-      console.error('Error updating user school:', err);
-      setError('Failed to update user school');
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, school_name: updatedUser.school_name || newSchool } : user
+        ));
+      }
+      
+      toast.success('User school updated successfully');
+    } catch (error) {
+      console.error('Error updating user school:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user school');
     } finally {
-      setUpdatingUser(null);
+      setUpdatingSchool(null);
     }
   };
 
   const updateUserDepartment = async (userId: string, department: string) => {
     try {
       setUpdatingUser(userId);
-      const token = await getToken();
-      const response = await fetch(`/api/v1/admin/users/${userId}/school`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ department }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update user department');
-      }
-
-      // Update the user in the local state
+      
+      // Optimistically update the local state immediately
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, department } : user
       ));
+      
+      const response = await api.updateUserDepartment(userId, department);
+
+      if (response.error) {
+        // Revert the optimistic update if the API call failed
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, department: user.department } : user
+        ));
+        throw new Error(response.error.detail || 'Failed to update user department');
+      }
+
+      // If successful, ensure the local state has the correct value
+      if (response.data) {
+        const updatedUser = response.data as any;
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, department: updatedUser.department || department } : user
+        ));
+      }
+      
+      toast.success('User department updated successfully');
     } catch (err) {
       console.error('Error updating user department:', err);
-      setError('Failed to update user department');
+      toast.error(err instanceof Error ? err.message : 'Failed to update user department');
     } finally {
       setUpdatingUser(null);
+    }
+  };
+
+  const handleDeleteUser = async (userToDelete: UserData) => {
+    try {
+      setDeleting(userToDelete.id);
+      
+      const response = await api.deleteUser(userToDelete.id);
+
+      if (response.error) {
+        // Check if it's a foreign key constraint error
+        if (response.error.detail && response.error.detail.includes('foreign key constraint')) {
+          throw new Error('Cannot delete user: User has associated data (vouchers, workflows, etc.) that must be removed first. Please contact an administrator.');
+        }
+        throw new Error(response.error.detail || 'Failed to delete user');
+      }
+
+      // Remove user from local state
+      setUsers(prev => prev.filter(user => user.id !== userToDelete.id));
+      
+      // Close modal and reset state
+      setDeleteConfirmOpen(false);
+      setUserToDelete(null);
+      
+      toast.success(`User ${userToDelete.first_name} ${userToDelete.last_name} deleted successfully`);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
+      toast.error(errorMessage);
+      
+      // Keep the modal open if deletion failed
+      setDeleteConfirmOpen(true);
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -268,11 +351,12 @@ export default function UsersPage() {
   // Filtered and sorted users
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = users.filter(user => {
-      const matchesSearch = user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (user.school_name && user.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                           (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesSearch = 
+        (user.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.last_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.school_name && user.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (user.department && user.department.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
       return matchesSearch && matchesRole;
     });
@@ -289,8 +373,8 @@ export default function UsersPage() {
       }
       
       if (sortField === 'credits') {
-        aValue = Number(aValue);
-        bValue = Number(bValue);
+        aValue = Number(aValue || 0);
+        bValue = Number(bValue || 0);
       }
       
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -604,13 +688,16 @@ export default function UsersPage() {
                             <ArrowUpDown className="ml-2 h-4 w-4" />
                           </Button>
                         </TableHead>
+                        <TableHead className="text-center">
+                          Actions
+                        </TableHead>
 
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAndSortedUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                             {searchTerm ? 'No users found for your search.' : 'No users available.'}
                           </TableCell>
                         </TableRow>
@@ -632,10 +719,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newEmail = prompt(`Enter new email for ${userData.first_name} ${userData.last_name}:`, userData.email);
                                     if (newEmail && newEmail.includes('@')) {
-                                      updateUserEmail(userData.id, newEmail);
+                                      handleEmailChange(userData.id, newEmail);
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingEmail === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>
@@ -645,8 +732,8 @@ export default function UsersPage() {
                               <div className="flex items-center space-x-2">
                                 <Select
                                   value={userData.role}
-                                  onValueChange={(value: 'user' | 'admin') => updateUserRole(userData.id, value)}
-                                  disabled={updatingUser === userData.id}
+                                  onValueChange={(value: 'user' | 'admin') => handleRoleChange(userData.id, value)}
+                                  disabled={updatingRole === userData.id}
                                 >
                                   <SelectTrigger className="w-32">
                                     <SelectValue />
@@ -677,10 +764,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newCredits = prompt(`Enter new credits for ${userData.first_name} ${userData.last_name}:`, userData.credits.toString());
                                     if (newCredits && !isNaN(Number(newCredits))) {
-                                      updateUserCredits(userData.id, Number(newCredits));
+                                      handleCreditsChange(userData.id, Number(newCredits));
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingCredits === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>
@@ -697,10 +784,10 @@ export default function UsersPage() {
                                   onClick={() => {
                                     const newSchool = prompt(`Enter school name for ${userData.first_name} ${userData.last_name}:`, userData.school_name || '');
                                     if (newSchool !== null) {
-                                      updateUserSchool(userData.id, newSchool);
+                                      handleSchoolChange(userData.id, newSchool);
                                     }
                                   }}
-                                  disabled={updatingUser === userData.id}
+                                  disabled={updatingSchool === userData.id}
                                 >
                                   <Edit className="h-3 w-3" />
                                 </Button>
@@ -729,6 +816,20 @@ export default function UsersPage() {
                             <TableCell>
                               {formatDate(userData.created_at)}
                             </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setUserToDelete(userData);
+                                  setDeleteConfirmOpen(true);
+                                }}
+                                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+                                title="Delete user"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -739,6 +840,50 @@ export default function UsersPage() {
             )}
           </div>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to delete the user "{userToDelete?.first_name} {userToDelete?.last_name}"?
+                This action cannot be undone and will permanently remove the user account.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-amber-800 text-sm font-medium mb-2">⚠️ Data that will be affected:</p>
+                <ul className="text-amber-700 text-sm space-y-1">
+                  <li>• User's workflow groups and configurations</li>
+                  <li>• Qualification documents and workflow runs</li>
+                  <li>• Vouchers created by this user</li>
+                  <li>• Purchase history and feedback</li>
+                  <li>• Credit orders and balance</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => userToDelete && handleDeleteUser(userToDelete)}
+                disabled={deleting === userToDelete?.id}
+              >
+                {deleting === userToDelete?.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete User'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminOnly>
   );

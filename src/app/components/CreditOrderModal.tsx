@@ -16,6 +16,8 @@ import { useCreditModal } from '../contexts/CreditModalContext';
 import { useRoleContext } from '../contexts/RoleContext';
 import { downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface CreditPackage {
   id: string;
@@ -38,6 +40,7 @@ interface CreditOrderForm {
   country: string;
   comments?: string;
   terms_accepted: boolean;
+  quantity: number;
 }
 
 interface FieldValidation {
@@ -53,6 +56,7 @@ const CreditOrderModal: React.FC = () => {
   const { user } = useUser();
   const { getToken } = useAuth();
   const { isOpen, closeModal } = useCreditModal();
+  const api = useApi();
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -68,11 +72,12 @@ const CreditOrderModal: React.FC = () => {
     city: '',
     postal_code: '',
     country: 'Netherlands',
-    terms_accepted: false
+    terms_accepted: false,
+    quantity: 1
   });
 
   // Voucher redemption state
-  const { refreshCredits } = useCredits();
+  const { refreshCredits, refreshVouchers, updateVoucherStatus } = useCredits();
   const [voucherCode, setVoucherCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isVoucherFocused, setIsVoucherFocused] = useState(false);
@@ -91,6 +96,14 @@ const CreditOrderModal: React.FC = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [crudError, setCrudError] = useState<string | null>(null);
+
+  // Price input display states for better UX
+  const [editPriceDisplay, setEditPriceDisplay] = useState<string>('');
+  const [createPriceDisplay, setCreatePriceDisplay] = useState<string>('');
+  
+  // Credits input display states for better UX
+  const [editCreditsDisplay, setEditCreditsDisplay] = useState<string>('');
+  const [createCreditsDisplay, setCreateCreditsDisplay] = useState<string>('');
 
   // Form validation state
   const [fieldValidation, setFieldValidation] = useState<FieldValidation>({
@@ -113,20 +126,17 @@ const CreditOrderModal: React.FC = () => {
   const fetchPackages = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/credits/packages', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getCreditPackages();
       
-      if (response.ok) {
-        const data = await response.json();
-        setPackages(data.packages);
+      if (error) {
+        toast.error(`Failed to fetch packages: ${error.detail}`);
+        setPackages([]); // Set empty array on error
       } else {
-        console.error('Failed to fetch packages');
+        setPackages(data as CreditPackage[]);
       }
     } catch (error) {
       console.error('Error fetching packages:', error);
+      setPackages([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -188,22 +198,15 @@ const CreditOrderModal: React.FC = () => {
 
     setOrderLoading(true);
     try {
-      const response = await fetch('/api/v1/credits/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(orderForm)
-      });
-
-      if (response.ok) {
-        setStep('success');
-        await refreshCredits();
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.createCreditOrder(orderForm);
+      
+      if (error) {
         alert(`Fout bij het plaatsen van de bestelling: ${error.detail}`);
+        return;
       }
+      
+      setStep('success');
+      await refreshCredits();
     } catch (error) {
       console.error('Error submitting order:', error);
       alert('Er is een fout opgetreden bij het plaatsen van de bestelling.');
@@ -229,7 +232,8 @@ const CreditOrderModal: React.FC = () => {
       city: '',
       postal_code: '',
       country: 'Netherlands',
-      terms_accepted: false
+      terms_accepted: false,
+      quantity: 1
     });
     // Reset voucher state
     setVoucherCode('');
@@ -251,38 +255,78 @@ const CreditOrderModal: React.FC = () => {
     setRedeemResult(null);
 
     try {
-      const response = await fetch('/api/v1/vouchers/redeem', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: voucherCode.trim().toUpperCase()
-        })
-      });
+      const { data, error } = await api.redeemVoucher({ code: voucherCode.trim().toUpperCase() });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setRedeemResult({
-          success: true,
-          message: data.message,
-          creditsAdded: data.credits_added
-        });
-        setVoucherCode('');
-        // Refresh user credits
-        await refreshCredits();
-        // Close modal after successful redemption
-        setTimeout(() => {
-          handleClose();
-        }, 2000);
-      } else {
+      if (error) {
         setRedeemResult({
           success: false,
-          message: data.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
+          message: error.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
         });
+        return;
       }
+
+      setRedeemResult({
+        success: true,
+        message: (data as any).message,
+        creditsAdded: (data as any).credits_added
+      });
+      setVoucherCode('');
+      
+      // Optimistic UI update: immediately update voucher status in admin table
+      if ((data as any).data?.voucher_id) {
+        console.log('🎫 CreditOrderModal: Voucher redemption successful, data:', data);
+        
+        // Find and update the voucher in the admin vouchers table
+        const voucherId = (data as any).data.voucher_id;
+        const voucherCode = (data as any).data.voucher_code;
+        
+        console.log('🎫 CreditOrderModal: Extracted voucher data:', { voucherId, voucherCode });
+        
+        // Update the voucher status immediately for better UX
+        // This will make the admin see "Gebruikt" status right away
+        const updateVoucherInAdminTable = () => {
+          // Get the current user info for the voucher update
+          const currentUser = user;
+          if (currentUser) {
+            // Create an optimistic update object with all necessary data
+            const optimisticVoucherUpdate = {
+              id: voucherId,
+              code: voucherCode,
+              is_used: true,
+              used_by: currentUser.id,
+              used_at: new Date().toISOString(),
+              user_who_used_name: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.emailAddresses[0]?.emailAddress || 'Unknown User',
+              // Include credits info for completeness
+              credits: (data as any).data.credits_added
+            };
+            
+            console.log('🎫 CreditOrderModal: Calling updateVoucherStatus with:', optimisticVoucherUpdate);
+            
+            // Use the new updateVoucherStatus function for immediate updates
+            // This will update just the specific voucher in the admin table
+            updateVoucherStatus(voucherId, optimisticVoucherUpdate, true); // Skip full refresh for efficiency
+            
+            console.log('🎫 Voucher redeemed successfully, updating admin view:', optimisticVoucherUpdate);
+          } else {
+            console.warn('🎫 CreditOrderModal: No current user found for voucher update');
+          }
+        };
+        
+        // Execute the optimistic update
+        updateVoucherInAdminTable();
+      } else {
+        console.warn('🎫 CreditOrderModal: No voucher_id in response data:', data);
+        console.log('🎫 CreditOrderModal: Full response structure:', JSON.stringify(data, null, 2));
+      }
+      
+      // Refresh user credits
+      await refreshCredits();
+      // Note: refreshVouchers() is no longer needed here since updateVoucherStatus()
+      // handles the immediate update more efficiently
+      // Close modal after successful redemption
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
     } catch (error) {
       console.error('Error redeeming voucher:', error);
       setRedeemResult({
@@ -304,10 +348,36 @@ const CreditOrderModal: React.FC = () => {
   const handleEdit = (pkg: CreditPackage) => {
     setEditingId(pkg.id);
     setEditData({ ...pkg });
+    setEditPriceDisplay(pkg.price ? (pkg.price / 100).toFixed(2) : '');
+    setEditCreditsDisplay(pkg.credits ? pkg.credits.toString() : '');
     setCrudError(null);
   };
   const handleEditChange = (field: keyof CreditPackage, value: string | number | boolean) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleEditPriceChange = (value: string) => {
+    setEditPriceDisplay(value);
+    // Only update the actual price if it's a valid number
+    if (value === '' || value === '.') {
+      setEditData(prev => ({ ...prev, price: 0 }));
+    } else {
+      const euroValue = parseFloat(value);
+      if (!isNaN(euroValue) && euroValue >= 0) {
+        setEditData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+      }
+    }
+  };
+  const handleEditCreditsChange = (value: string) => {
+    setEditCreditsDisplay(value);
+    // Only update the actual credits if it's a valid number
+    if (value === '') {
+      setEditData(prev => ({ ...prev, credits: 0 }));
+    } else {
+      const creditsValue = parseInt(value);
+      if (!isNaN(creditsValue) && creditsValue >= 0) {
+        setEditData(prev => ({ ...prev, credits: creditsValue }));
+      }
+    }
   };
   const handleEditSave = async () => {
     if (!editData.name || !editData.credits || !editData.price) {
@@ -316,21 +386,13 @@ const CreditOrderModal: React.FC = () => {
     }
     try {
       setCrudError(null);
-      const response = await fetch(`/api/v1/admin/credits/packages/${editingId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(editData)
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setEditingId(null);
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.updateAdminCreditPackage(editingId!, editData);
+      if (error) {
         setCrudError(error.detail || 'Fout bij opslaan');
+        return;
       }
+      await fetchPackages();
+      setEditingId(null);
     } catch (e) {
       setCrudError('Fout bij opslaan');
     }
@@ -349,19 +411,13 @@ const CreditOrderModal: React.FC = () => {
     setDeleteLoading(true);
     setCrudError(null);
     try {
-      const response = await fetch(`/api/v1/admin/credits/packages/${deleteId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setDeleteId(null);
-      } else {
-        const error = await response.json();
+      const { error } = await api.deleteAdminCreditPackage(deleteId);
+      if (error) {
         setCrudError(error.detail || 'Fout bij verwijderen');
+        return;
       }
+      await fetchPackages();
+      setDeleteId(null);
     } catch (e) {
       setCrudError('Fout bij verwijderen');
     } finally {
@@ -372,10 +428,36 @@ const CreditOrderModal: React.FC = () => {
   const handleCreate = () => {
     setCreating(true);
     setCreateData({ name: '', credits: 0, price: 0, description: '', is_active: true });
+    setCreatePriceDisplay('');
+    setCreateCreditsDisplay('');
     setCrudError(null);
   };
   const handleCreateChange = (field: keyof CreditPackage, value: string | number | boolean) => {
     setCreateData((prev) => ({ ...prev, [field]: value }));
+  };
+  const handleCreatePriceChange = (value: string) => {
+    setCreatePriceDisplay(value);
+    // Only update the actual price if it's a valid number
+    if (value === '' || value === '.') {
+      setCreateData(prev => ({ ...prev, price: 0 }));
+    } else {
+      const euroValue = parseFloat(value);
+      if (!isNaN(euroValue) && euroValue >= 0) {
+        setCreateData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+      }
+    }
+  };
+  const handleCreateCreditsChange = (value: string) => {
+    setCreateCreditsDisplay(value);
+    // Only update the actual credits if it's a valid number
+    if (value === '') {
+      setCreateData(prev => ({ ...prev, credits: 0 }));
+    } else {
+      const creditsValue = parseInt(value);
+      if (!isNaN(creditsValue) && creditsValue >= 0) {
+        setCreateData(prev => ({ ...prev, credits: creditsValue }));
+      }
+    }
   };
   const handleCreateSave = async () => {
     if (!createData.name || !createData.credits || !createData.price) {
@@ -384,21 +466,13 @@ const CreditOrderModal: React.FC = () => {
     }
     try {
       setCrudError(null);
-      const response = await fetch('/api/v1/admin/credits/packages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getToken()}`
-        },
-        body: JSON.stringify(createData)
-      });
-      if (response.ok) {
-        await fetchPackages();
-        setCreating(false);
-      } else {
-        const error = await response.json();
+      const { data, error } = await api.createAdminCreditPackage(createData);
+      if (error) {
         setCrudError(error.detail || 'Fout bij aanmaken');
+        return;
       }
+      await fetchPackages();
+      setCreating(false);
     } catch (e) {
       setCrudError('Fout bij aanmaken');
     }
@@ -445,7 +519,7 @@ const CreditOrderModal: React.FC = () => {
               ) : (
                 <>
                   <div className="grid gap-4">
-                    {packages.map((pkg) => (
+                    {(packages || []).map((pkg) => (
                       <Card
                         key={pkg.id}
                         className={cn(
@@ -507,28 +581,54 @@ const CreditOrderModal: React.FC = () => {
                         </CardHeader>
                         <CardContent>
                           {editingId === pkg.id ? (
-                            <div className="flex gap-2 items-center">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={editData.credits as number}
-                                onChange={e => handleEditChange('credits', parseInt(e.target.value) || 0)}
-                                className="w-24"
-                                placeholder="Credits"
-                              />
-                              <Input
-                                type="number"
-                                min={1}
-                                value={editData.price as number}
-                                onChange={e => handleEditChange('price', parseInt(e.target.value) || 0)}
-                                className="w-32"
-                                placeholder="Prijs (centen)"
-                              />
-                              <span className="text-gray-500 text-sm">€{editData.price ? ((editData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                  <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                    Aantal Credits
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={editCreditsDisplay}
+                                    onChange={e => handleEditCreditsChange(e.target.value)}
+                                    className="w-full"
+                                    placeholder="Bijv. 100"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                    Prijs per Credit (€)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={0.01}
+                                    step={0.01}
+                                    value={editPriceDisplay}
+                                    onChange={e => handleEditPriceChange(e.target.value)}
+                                    className="w-full"
+                                    placeholder="Bijv. 0.50"
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                                <div className="text-xl font-bold text-examen-cyan">
+                                  €{(() => {
+                                    const pricePerCredit = (editData.price as number) / 100;
+                                    const totalCredits = editData.credits as number;
+                                    const totalPrice = pricePerCredit * totalCredits;
+                                    return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                  })()}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {editData.credits || 0} credits × €{((editData.price as number) / 100).toFixed(2)}
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="text-2xl font-bold text-examen-cyan">
-                              {formatPrice(pkg.price)}
+                              {formatPrice(pkg.price * pkg.credits)}
                             </div>
                           )}
                         </CardContent>
@@ -569,24 +669,50 @@ const CreditOrderModal: React.FC = () => {
                           />
                         </CardHeader>
                         <CardContent>
-                          <div className="flex gap-2 items-center">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={createData.credits as number}
-                              onChange={e => handleCreateChange('credits', parseInt(e.target.value) || 0)}
-                              className="w-24"
-                              placeholder="Credits"
-                            />
-                            <Input
-                              type="number"
-                              min={1}
-                              value={createData.price as number}
-                              onChange={e => handleCreateChange('price', parseInt(e.target.value) || 0)}
-                              className="w-32"
-                              placeholder="Prijs (centen)"
-                            />
-                            <span className="text-gray-500 text-sm">€{createData.price ? ((createData.price as number) / 100).toFixed(2) : '0.00'}</span>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                  Aantal Credits
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={createCreditsDisplay}
+                                  onChange={e => handleCreateCreditsChange(e.target.value)}
+                                  className="w-full"
+                                  placeholder="Bijv. 100"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                  Prijs per Credit (€)
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={0.01}
+                                  step={0.01}
+                                  value={createPriceDisplay}
+                                  onChange={e => handleCreatePriceChange(e.target.value)}
+                                  className="w-full"
+                                  placeholder="Bijv. 0.50"
+                                />
+                              </div>
+                            </div>
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                              <div className="text-xl font-bold text-examen-cyan">
+                                €{(() => {
+                                  const pricePerCredit = (createData.price as number) / 100;
+                                  const totalCredits = createData.credits as number;
+                                  const totalPrice = pricePerCredit * totalCredits;
+                                  return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                })()}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {createData.credits || 0} credits × €{((createData.price as number) / 100).toFixed(2)}
+                              </div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -736,7 +862,7 @@ const CreditOrderModal: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-examen-cyan">
-                        {formatPrice(selectedPackage.price)}
+                        {formatPrice(selectedPackage.price * selectedPackage.credits)}
                       </div>
                       <div className="text-sm text-gray-600">{selectedPackage.credits} credits</div>
                     </div>

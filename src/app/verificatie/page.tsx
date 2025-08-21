@@ -6,9 +6,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@clerk/nextjs';
 
 interface VerificationResponse {
   is_valid: boolean;
+  verification_code?: string;
   product_code?: string;
   product_title?: string;
   version?: string;
@@ -17,6 +20,8 @@ interface VerificationResponse {
 }
 
 export default function VerificatiePage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const api = useApi();
   const [hash, setHash] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerificationResponse | null>(null);
@@ -34,23 +39,36 @@ export default function VerificatiePage() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/catalog/verify-hash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hash: hash.trim() }),
+      const { data, error } = await api.verifyHash({
+        hash: hash.trim()
       });
 
-      const data: VerificationResponse = await response.json();
-
-      if (response.ok) {
-        setResult(data);
-      } else {
-        setError(data.status || 'Er is een fout opgetreden bij de verificatie');
+      if (error) {
+        throw new Error(error.detail || 'Failed to verify hash');
       }
-    } catch (err) {
-      setError('Er is een fout opgetreden bij de verificatie');
+
+      console.log('🔍 Verification API response:', data);
+      console.log('🔍 Response type:', typeof data);
+      console.log('🔍 Response keys:', data ? Object.keys(data) : 'no data');
+      console.log('🔍 Full response data:', JSON.stringify(data, null, 2));
+      console.log('🔍 Data.data exists?', !!(data as any)?.data);
+      console.log('🔍 Data.data value:', (data as any)?.data);
+
+      // Extract the actual verification data from the SuccessResponse
+      const verificationData = (data as any)?.data;
+      if (!verificationData) {
+        console.error('❌ Verification data extraction failed');
+        console.error('❌ Data object:', data);
+        console.error('❌ Data.data:', (data as any)?.data);
+        throw new Error('Invalid verification response format');
+      }
+
+      console.log('🔍 Extracted verification data:', verificationData);
+      setResult(verificationData as VerificationResponse);
+      
+    } catch (error) {
+      console.error('Verification error:', error);
+      setError(error instanceof Error ? error.message : 'Hash verification failed');
     } finally {
       setVerifying(false);
     }

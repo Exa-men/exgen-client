@@ -4,22 +4,25 @@ import React from 'react';
 import { Button } from "./ui/button";
 import { Menu } from "lucide-react";
 import Link from 'next/link';
-import { useUser, useClerk } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { UserButton } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useRoleContext } from '../contexts/RoleContext';
 import { useCreditModal } from '../contexts/CreditModalContext';
 import { useAuthModal } from '../contexts/AuthModalContext';
 import CreditDisplay from './CreditDisplay';
+import { useSignOut } from '../../hooks/use-sign-out';
 
 const UnifiedHeader: React.FC = () => {
   const { isSignedIn, isLoaded } = useUser();
-  const { signOut } = useClerk();
+  const { signOut: handleSignOut } = useSignOut();
   const { isAdmin, clearRole, userRole } = useRoleContext();
   const { openModal } = useCreditModal();
   const { openAuthModal } = useAuthModal();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
+
+  
 
   // Clear role cache when signing out
   React.useEffect(() => {
@@ -158,7 +161,7 @@ const UnifiedHeader: React.FC = () => {
             {isLoaded && isSignedIn && (
               <>
                 <CreditDisplay onOrderCredits={openModal} />
-                <UserButton afterSignOutUrl="/" />
+                <UserButton afterSignOutUrl="/" signOutCallback={handleSignOut} />
               </>
             )}
             {isLoaded && !isSignedIn && (
@@ -284,8 +287,8 @@ const UnifiedHeader: React.FC = () => {
                     {isLoaded && isSignedIn && (
                       <>
                         <div className="flex flex-col items-center gap-4">
-                          <CreditDisplay showLabel onOrderCredits={openModal} />
-                          <UserButton afterSignOutUrl="/" />
+                          <CreditDisplay onOrderCredits={openModal} />
+                          <UserButton afterSignOutUrl="/" signOutCallback={handleSignOut} />
                         </div>
                       </>
                     )}

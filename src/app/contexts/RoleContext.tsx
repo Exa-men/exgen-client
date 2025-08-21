@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
+import { useApi } from '@/hooks/use-api';
 import { 
   trackRoleApiCall, 
   trackRoleCacheHit, 
@@ -39,7 +40,8 @@ export const useRoleContext = () => {
 
 // Cache configuration
 const ROLE_CACHE_KEY = 'exgen_user_role_cache';
-const ROLE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+// Cache duration: 30 minutes (good balance of performance and data freshness)
+const ROLE_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 // Global request deduplication
 let activeRequest: Promise<UserRole> | null = null;
@@ -59,7 +61,7 @@ const getCachedRole = (): UserRole | null => {
     const { data, timestamp } = JSON.parse(cached);
     const now = Date.now();
     
-    // Check if cache is still valid
+    // Check if cache is still valid (30-minute duration for optimal performance)
     if (now - timestamp < ROLE_CACHE_DURATION) {
       trackRoleCacheHit();
       return data;
@@ -88,6 +90,7 @@ const setCachedRole = (role: UserRole): void => {
     };
     localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify(cacheData));
     lastCacheTime = Date.now();
+    console.log('💾 Role cached for 30 minutes (performance optimized)');
   } catch (error) {
     console.warn('Failed to cache role:', error);
   }
@@ -102,6 +105,7 @@ const clearCachedRole = (): void => {
   try {
     localStorage.removeItem(ROLE_CACHE_KEY);
     lastCacheTime = 0;
+    console.log('🗑️ Role cache cleared');
   } catch (error) {
     console.warn('Failed to clear cached role:', error);
   }
@@ -114,6 +118,7 @@ interface RoleProviderProps {
 export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const [userRole, setUserRole] = useState<UserRole>(() => {
     // Initialize with cached data if available
     const cachedRole = getCachedRole();
@@ -130,13 +135,22 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
     };
   });
   
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => {
+    // Start loading if no cached role is available
+    const cachedRole = getCachedRole();
+    return !cachedRole;
+  });
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequest = useRef<Promise<any> | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 1; // Reduced from 2 to prevent duplicate calls
+  const requestInProgressRef = useRef(false); // Track if request is in progress
 
   useEffect(() => {
     const fetchUserRole = async () => {
       if (!isLoaded || !isSignedIn) {
         setUserRole({ user_id: null, role: null, first_name: null, last_name: null });
+        setIsLoading(false); // Ensure loading is set to false when not signed in
         clearCachedRole();
         return;
       }
@@ -144,21 +158,23 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
       // Additional safety check: ensure user object is available
       if (!user?.id) {
         console.warn('User ID not available, skipping role fetch');
+        setIsLoading(false); // Ensure loading is set to false when user ID is not available
         return;
       }
 
-      // Check cache first
+      // Check cache first (30-minute duration for optimal performance)
       const cachedRole = getCachedRole();
       if (cachedRole && cachedRole.user_id === user?.id) {
         setUserRole(cachedRole);
+        setIsLoading(false); // Ensure loading is set to false when using cached role
         return;
       }
 
       // Prevent duplicate requests
-      if (activeRequest) {
+      if (activeRequest.current) {
         trackRoleDuplicateRequest();
         try {
-          const result = await activeRequest;
+          const result = await activeRequest.current;
           setUserRole(result);
           return;
         } catch (error) {
@@ -167,57 +183,81 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         }
       }
 
-      // Create new request
+      // Additional deduplication check
+      if (requestInProgressRef.current) {
+        console.log('🔄 Request already in progress, skipping duplicate');
+        return;
+      }
+
+      // Create new request with timeout protection
       setIsLoading(true);
+      requestInProgressRef.current = true; // Mark request as in progress
       abortControllerRef.current = new AbortController();
       
       const startTime = Date.now();
       try {
-        const token = await getToken();
-        
-        // Additional safety check: ensure token is valid
-        if (!token) {
-          console.warn('No valid token available, skipping role fetch');
-          setIsLoading(false);
-          return;
-        }
-        
         // Track API call
         trackRoleApiCall();
         
-        // Create the request promise
-        const requestPromise = fetch('/api/v1/user/role', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          signal: abortControllerRef.current.signal,
-        }).then(async (response) => {
-          if (response.ok) {
-            const data = await response.json();
-            // Cache the successful response
-            setCachedRole(data);
-            return data;
-          } else {
-            console.error('Failed to fetch user role:', response.status);
-            throw new Error(`HTTP ${response.status}`);
+        console.log('🔍 Starting role fetch at:', new Date().toISOString());
+        
+        // Add timeout protection for role API calls (3s timeout for better UX)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 3000) // 3 seconds timeout
+        );
+        
+        // Create the request promise using centralized API
+        const requestPromise = api.getUserRole().then(async (response: any) => {
+          if (response.error) {
+            console.error('Failed to fetch user role:', response.error);
+            throw new Error(`HTTP ${response.error.status || 'Unknown'}`);
           }
+          return response.data;
         });
 
         // Store the active request
-        activeRequest = requestPromise;
+        activeRequest.current = requestPromise;
         
-        const data = await requestPromise;
+        // Race between request and timeout
+        const data = await Promise.race([requestPromise, timeoutPromise]);
         setUserRole(data);
         
         // Track response time
         const responseTime = Date.now() - startTime;
         trackRoleResponseTime(responseTime);
         
+        console.log('✅ Role fetch completed in:', responseTime, 'ms');
+        
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          // Request was aborted, don't update state
+        if (error instanceof Error &&
+            error.name === 'AbortError') {
+          console.log('Role fetch was aborted');
           return;
+        }
+        
+        // Handle timeout specifically
+        if (error instanceof Error && error.message === 'Request timeout') {
+          console.warn('Role fetch timed out after 3 seconds - this might indicate a slow backend response');
+          
+          // Retry the request if we haven't exceeded max retries
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current += 1;
+            console.log(`🔄 Retrying role fetch (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+            
+            // Small delay before retry
+            setTimeout(() => {
+              fetchUserRole();
+            }, 1000); // Reduced from 2000ms to 1000ms for faster retry
+            return;
+          }
+          
+          // Don't fail completely on timeout, try to use cached data or default
+          const cachedRole = getCachedRole();
+          if (cachedRole && cachedRole.user_id === user?.id) {
+            console.log('Using cached role data due to timeout');
+            setUserRole(cachedRole);
+            return;
+          }
         }
         
         console.error('Error fetching user role:', error);
@@ -229,21 +269,23 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
           setUserRole({ user_id: null, role: 'user', first_name: null, last_name: null });
         }
       } finally {
-        // Clear the active request
-        activeRequest = null;
         setIsLoading(false);
+        activeRequest.current = null;
+        retryCountRef.current = 0; // Reset retry count on completion
+        requestInProgressRef.current = false; // Mark request as finished
       }
     };
 
+    // Remove artificial delay - start fetching immediately when ready
     fetchUserRole();
-
-    // Cleanup function to abort ongoing requests
+    
     return () => {
+      // Cleanup function to abort ongoing requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [isLoaded, isSignedIn, getToken, user?.id]);
+  }, [isLoaded, isSignedIn, user?.id]);
 
   // Cleanup effect for logout
   useEffect(() => {
@@ -253,13 +295,64 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      activeRequest = null;
+      activeRequest.current = null;
       setIsLoading(false);
       
       // Clear cached role data to prevent role escalation between users
       clearCachedRole();
+      
+      // Reset all state to initial values
+      setUserRole({
+        user_id: null,
+        role: null,
+        first_name: null,
+        last_name: null
+      });
+      
+      // Reset retry counters
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      console.log('🔐 Role context completely reset on sign out');
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, clearCachedRole]);
+
+  // Global sign out event listener for additional cleanup
+  useEffect(() => {
+    const handleGlobalSignOut = () => {
+      console.log('🔔 Role context received global sign out event');
+      
+      // Abort any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      activeRequest.current = null;
+      
+      // Clear cache and reset state
+      clearCachedRole();
+      setUserRole({
+        user_id: null,
+        role: null,
+        first_name: null,
+        last_name: null
+      });
+      setIsLoading(false);
+      retryCountRef.current = 0;
+      requestInProgressRef.current = false;
+      
+      console.log('🔐 Role context reset via global sign out event');
+    };
+
+    // Listen for global sign out events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('user-signed-out', handleGlobalSignOut);
+      
+      return () => {
+        window.removeEventListener('user-signed-out', handleGlobalSignOut);
+      };
+    }
+  }, [clearCachedRole]);
 
   // Function to manually refresh role (useful for admin role changes)
   const refreshRole = useCallback(async () => {
@@ -280,7 +373,7 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
     }
     
     // Clear the global active request
-    activeRequest = null;
+    activeRequest.current = null;
     
     // Clear cache and reset state
     clearCachedRole();

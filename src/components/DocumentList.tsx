@@ -1,9 +1,58 @@
 import React from 'react';
-import { FileText, Eye, Trash2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { FileText, Eye, Trash2, CheckCircle, AlertCircle, Loader2, EyeOff } from 'lucide-react';
 import { Button } from '../app/components/ui/button';
 import { Badge } from '../app/components/ui/badge';
 import { useS3Verification, S3VerificationSummary } from '../hooks/use-s3-verification';
+import { useApi } from '../hooks/use-api';
+import { toast } from 'sonner';
 
+/*
+ * DocumentList Component with Preview Functionality
+ * 
+ * This component allows users to:
+ * 1. Set ONE document as preview (automatically unsets others)
+ * 2. View the preview document using the existing PDF viewer
+ * 3. Manage document preview status
+ * 
+ * Usage with existing PDF viewer:
+ * 
+ * const [documents, setDocuments] = useState<Document[]>([]);
+ * const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+ * const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+ * 
+ * const handleSetPreview = (documentId: string) => {
+ *   setDocuments(prev => prev.map(doc => ({
+ *     ...doc,
+ *     isPreview: doc.id === documentId
+ *   })));
+ * };
+ * 
+ * const handlePreviewDocument = (document: Document) => {
+ *   setSelectedDocument(document);
+ *   setPdfViewerOpen(true);
+ * };
+ * 
+ * <DocumentList
+ *   documents={documents}
+ *   versionId={versionId}
+ *   productId={productId}
+ *   onDelete={handleDelete}
+ *   onSetPreview={handleSetPreview}
+ *   onPreviewDocument={handlePreviewDocument}
+ * />
+ * 
+ * {selectedDocument && (
+ *   <PDFViewer
+ *     isOpen={pdfViewerOpen}
+ *     onClose={() => {
+ *       setPdfViewerOpen(false);
+ *       setSelectedDocument(null);
+ *     }}
+ *     pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${productId}/content`}
+ *     title={`Preview: ${selectedDocument.name}`}
+ *   />
+ * )}
+ */
 interface Document {
   id: string;
   name: string;
@@ -16,19 +65,24 @@ interface Document {
 interface DocumentListProps {
   documents: Document[];
   versionId: string;
+  productId: string; // Add product ID for cleanup operations
   onDelete: (documentId: string) => void;
   onSetPreview: (documentId: string) => void;
   onS3StatusUpdate?: (documentId: string, status: 'available' | 'missing') => void;
+  onPreviewDocument?: (document: Document) => void; // New prop for preview functionality
 }
 
 export function DocumentList({ 
   documents, 
   versionId, 
+  productId,
   onDelete, 
   onSetPreview,
-  onS3StatusUpdate 
+  onS3StatusUpdate,
+  onPreviewDocument
 }: DocumentListProps) {
   const { verifyAllDocuments, verifying } = useS3Verification();
+  const api = useApi();
 
   const handleVerifyAll = async () => {
     try {
@@ -36,13 +90,57 @@ export function DocumentList({
       
       // Update document statuses based on verification results
       if (result && result.data && onS3StatusUpdate) {
-        const verificationData = result.data as S3VerificationSummary;
-        verificationData.documents.forEach((doc: any) => {
-          onS3StatusUpdate(doc.document_id, doc.exists_in_s3 ? 'available' : 'missing');
-        });
+        // The backend returns SuccessResponse with data field, so we need to access result.data.data
+        const responseData = result.data as any;
+        if (responseData && responseData.data && responseData.data.documents) {
+          const verificationData = responseData.data as S3VerificationSummary;
+          verificationData.documents.forEach((doc: any) => {
+            onS3StatusUpdate(doc.document_id, doc.exists_in_s3 ? 'available' : 'missing');
+          });
+        }
       }
     } catch (error) {
       console.error('S3 verification failed:', error);
+    }
+  };
+
+  const handleSetPreview = async (documentId: string, isPreview: boolean) => {
+    try {
+      // First, clean up any existing preview inconsistencies
+      if (isPreview) {
+        try {
+          await api.cleanupProductPreview(productId);
+          console.log('Cleaned up preview inconsistencies for product:', productId);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup preview inconsistencies:', cleanupError);
+          // Continue with setting preview status even if cleanup fails
+        }
+      }
+      
+      const result = await api.setPreviewDocument(documentId, isPreview);
+      
+      if (result.error) {
+        toast.error(`Failed to set preview status: ${result.error.detail}`);
+        return;
+      }
+      
+      // Call the parent callback to update the document list
+      onSetPreview(documentId);
+      
+      if (isPreview) {
+        toast.success('Document set as preview');
+      } else {
+        toast.success('Document preview disabled');
+      }
+    } catch (error) {
+      console.error('Failed to set preview status:', error);
+      toast.error('Failed to set preview status');
+    }
+  };
+
+  const handlePreviewDocument = (document: Document) => {
+    if (onPreviewDocument) {
+      onPreviewDocument(document);
     }
   };
 
@@ -129,28 +227,38 @@ export function DocumentList({
                     )}
                   </div>
                   <div className="flex items-center space-x-1">
+                    {/* Preview Button */}
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => onSetPreview(doc.id)}
+                      onClick={() => handleSetPreview(doc.id, !doc.isPreview)}
                       className={`${
                         doc.isPreview 
                           ? 'text-green-600 hover:text-green-700' 
                           : 'text-gray-400 hover:text-gray-600'
                       }`}
-                      title={doc.isPreview ? 'Preview uitgeschakeld' : 'Preview inschakeld'}
+                      title={doc.isPreview ? 'Preview uitschakelen' : 'Preview inschakelen'}
                     >
                       {doc.isPreview ? (
                         <Eye className="h-3 w-3" />
                       ) : (
-                        <div className="relative">
-                          <Eye className="h-3 w-3" />
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-4 h-px bg-gray-400 transform rotate-45"></div>
-                          </div>
-                        </div>
+                        <EyeOff className="h-3 w-3" />
                       )}
                     </Button>
+                    
+                    {/* View Preview Button - only show if document is preview */}
+                    {doc.isPreview && onPreviewDocument && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePreviewDocument(doc)}
+                        className="text-blue-600 hover:text-blue-700"
+                        title="Preview bekijken"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    )}
+                    
                     <Button
                       size="sm"
                       variant="ghost"

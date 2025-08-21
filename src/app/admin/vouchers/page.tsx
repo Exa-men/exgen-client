@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { 
@@ -30,25 +30,32 @@ import { Textarea } from '../../components/ui/textarea';
 
 import { useCredits } from '../../contexts/CreditContext';
 import { cn } from '../../../lib/utils';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface Voucher {
   id: string;
   code: string;
   credits: number;
-  expires_at: string;
+  expires_at: string | null;
   is_used: boolean;
-  used_by?: string;
-  used_at?: string;
+  used_by?: string | null;
+  used_at?: string | null;
   created_by: string;
-  created_at: string;
-  user_who_used_name?: string;
+  created_at: string | null;
+  user_who_used_name?: string | null;
   admin_who_created_name: string;
 }
 
 export default function VouchersPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const api = useApi();
   const router = useRouter();
+  const { registerVoucherRefresh, registerVoucherUpdateCallback } = useCredits();
+  
+  console.log('🎫 VouchersPage: Component rendered, isSignedIn:', isSignedIn);
+  
   // Removed useRole hook - letting backend handle admin checks
   
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -67,6 +74,40 @@ export default function VouchersPage() {
   const [newVoucherExpiresAt, setNewVoucherExpiresAt] = useState('');
   const [editVoucherCredits, setEditVoucherCredits] = useState(10);
   const [editVoucherExpiresAt, setEditVoucherExpiresAt] = useState('');
+
+  // Function to immediately update a voucher's status (for optimistic updates)
+  const updateVoucherStatusImmediately = useCallback((voucherId: string, updates: any) => {
+    console.log('🎫 VouchersPage: updateVoucherStatusImmediately called with:', { voucherId, updates });
+    
+    setVouchers(prev => {
+      console.log('🎫 VouchersPage: Current vouchers state:', prev.length, 'vouchers');
+      
+      return prev.map(voucher => {
+        if (voucher.id === voucherId) {
+          console.log('🎫 VouchersPage: Found voucher to update:', voucher);
+          
+          // Update only the specific voucher with the new data
+          const updatedVoucher = {
+            ...voucher,
+            ...updates,
+            // Ensure the status is properly updated
+            is_used: updates.is_used || voucher.is_used,
+            used_by: updates.used_by || voucher.used_by,
+            used_at: updates.used_at || voucher.used_at,
+            user_who_used_name: updates.user_who_used_name || voucher.user_who_used_name
+          };
+          
+          console.log('🎫 VouchersPage: Voucher updated in admin table:', {
+            before: { id: voucher.id, is_used: voucher.is_used, status: voucher.is_used ? 'Gebruikt' : 'Beschikbaar' },
+            after: { id: updatedVoucher.id, is_used: updatedVoucher.is_used, status: updatedVoucher.is_used ? 'Gebruikt' : 'Beschikbaar' }
+          });
+          
+          return updatedVoucher;
+        }
+        return voucher;
+      });
+    });
+  }, []);
 
   // Check authentication only (let backend handle admin check)
   useEffect(() => {
@@ -90,25 +131,45 @@ export default function VouchersPage() {
     }
   }, [isSignedIn]);
 
+  // Register voucher refresh callback
+  useEffect(() => {
+    console.log('🎫 VouchersPage: useEffect for voucher refresh callback, isSignedIn:', isSignedIn);
+    if (isSignedIn) {
+      console.log('🎫 VouchersPage: Registering voucher refresh callback');
+      const unregister = registerVoucherRefresh(fetchVouchers);
+      return unregister;
+    }
+  }, [isSignedIn, registerVoucherRefresh]);
+
+  // Register immediate voucher update callback for optimistic UI
+  useEffect(() => {
+    console.log('🎫 VouchersPage: useEffect for voucher update callback, isSignedIn:', isSignedIn);
+    if (isSignedIn) {
+      console.log('🎫 VouchersPage: Registering voucher update callback');
+      const unregister = registerVoucherUpdateCallback(updateVoucherStatusImmediately);
+      return unregister;
+    }
+  }, [isSignedIn, registerVoucherUpdateCallback, updateVoucherStatusImmediately]);
+
   const fetchVouchers = async () => {
+    console.log('🎫 VouchersPage: fetchVouchers called');
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/admin/vouchers', {
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+      const { data, error } = await api.getAdminVouchers();
       
-      if (response.ok) {
-        const data = await response.json();
-        setVouchers(data.vouchers);
-      } else if (response.status === 403) {
-        console.error('Access denied: Admin privileges required');
-        alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
-        router.push('/');
-      } else {
-        console.error('Failed to fetch vouchers');
+      if (error) {
+        if (error.status === 403) {
+          console.error('Access denied: Admin privileges required');
+          alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
+          router.push('/');
+          return;
+        }
+        console.error('Failed to fetch vouchers:', error);
+        return;
       }
+
+      console.log('🎫 VouchersPage: Vouchers fetched successfully:', (data as any).vouchers?.length || 0, 'vouchers');
+      setVouchers((data as any).vouchers || []);
     } catch (error) {
       console.error('Error fetching vouchers:', error);
     } finally {
@@ -117,34 +178,37 @@ export default function VouchersPage() {
   };
 
   const handleCreateVoucher = async () => {
+    if (!newVoucherCredits) {
+      alert('Vul alle verplichte velden in');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/v1/admin/vouchers', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credits: newVoucherCredits,
-          expires_at: new Date(newVoucherExpiresAt).toISOString()
-        })
+      const { data, error } = await api.createAdminVoucher({
+        credits: newVoucherCredits,
+        expires_at: newVoucherExpiresAt, // Send as YYYY-MM-DD format
       });
 
-      if (response.ok) {
-        const newVoucher = await response.json();
-        setVouchers(prev => [newVoucher, ...prev]);
-        setCreateDialogOpen(false);
-        setNewVoucherCredits(10);
-        const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 10);
-        setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het aanmaken van voucher: ${error.detail}`);
+      if (error) {
+        throw new Error(error.detail || 'Failed to create voucher');
       }
+
+      // Add to local state
+      setVouchers(prev => [(data as any), ...prev]);
+      
+      // Reset form
+      setNewVoucherCredits(10);
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 10);
+      setNewVoucherExpiresAt(defaultDate.toISOString().split('T')[0]);
+      
+      // Close the modal
+      setCreateDialogOpen(false);
+      
+      toast.success('Voucher created successfully');
     } catch (error) {
       console.error('Error creating voucher:', error);
-      alert('Er is een fout opgetreden bij het aanmaken van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to create voucher');
     }
   };
 
@@ -153,54 +217,52 @@ export default function VouchersPage() {
     
     setUpdatingVoucher(selectedVoucher.id);
     try {
-      const response = await fetch(`/api/v1/admin/vouchers/${selectedVoucher.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credits: editVoucherCredits,
-          expires_at: new Date(editVoucherExpiresAt).toISOString()
-        })
+      const { error } = await api.updateAdminVoucher(selectedVoucher.id, {
+        credits: editVoucherCredits,
+        expires_at: editVoucherExpiresAt, // Send as YYYY-MM-DD format
       });
 
-      if (response.ok) {
-        const updatedVoucher = await response.json();
-        setVouchers(prev => prev.map(v => v.id === selectedVoucher.id ? updatedVoucher : v));
-        setEditDialogOpen(false);
-        setSelectedVoucher(null);
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het bijwerken van voucher: ${error.detail}`);
+      if (error) {
+        throw new Error(error.detail || 'Failed to update voucher');
       }
+
+      // Update local state
+      setVouchers(prev => prev.map(v => 
+        v.id === selectedVoucher.id ? { ...v, credits: editVoucherCredits, expires_at: editVoucherExpiresAt } : v
+      ));
+      
+      // Close the modal
+      setEditDialogOpen(false);
+      
+      toast.success('Voucher updated successfully');
     } catch (error) {
       console.error('Error updating voucher:', error);
-      alert('Er is een fout opgetreden bij het bijwerken van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to update voucher');
     } finally {
       setUpdatingVoucher(null);
     }
   };
 
   const handleDeleteVoucher = async (voucherId: string) => {
-    setDeletingVoucher(voucherId);
-    try {
-      const response = await fetch(`/api/v1/admin/vouchers/${voucherId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${await getToken()}`
-        }
-      });
+    if (!confirm('Weet je zeker dat je deze voucher wilt verwijderen?')) {
+      return;
+    }
 
-      if (response.ok) {
-        setVouchers(prev => prev.filter(v => v.id !== voucherId));
-      } else {
-        const error = await response.json();
-        alert(`Fout bij het verwijderen van voucher: ${error.detail}`);
+    try {
+      setDeletingVoucher(voucherId);
+      const { error } = await api.deleteAdminVoucher(voucherId);
+
+      if (error) {
+        throw new Error(error.detail || 'Failed to delete voucher');
       }
+
+      // Remove from local state
+      setVouchers(prev => prev.filter(v => v.id !== voucherId));
+      
+      toast.success('Voucher deleted successfully');
     } catch (error) {
       console.error('Error deleting voucher:', error);
-      alert('Er is een fout opgetreden bij het verwijderen van de voucher.');
+      alert(error instanceof Error ? error.message : 'Failed to delete voucher');
     } finally {
       setDeletingVoucher(null);
     }
@@ -219,31 +281,54 @@ export default function VouchersPage() {
   const openEditDialog = (voucher: Voucher) => {
     setSelectedVoucher(voucher);
     setEditVoucherCredits(voucher.credits);
-    setEditVoucherExpiresAt(voucher.expires_at.split('T')[0]);
+    setEditVoucherExpiresAt(voucher.expires_at ? voucher.expires_at.split('T')[0] : '');
     setEditDialogOpen(true);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('nl-NL', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) {
+      return '-';
+    }
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return '-';
+      }
+      
+      return date.toLocaleDateString('nl-NL', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return '-';
+    }
   };
 
-  const getStatusBadge = (isUsed: boolean, expiresAt: string) => {
+  const getStatusBadge = (isUsed: boolean, expiresAt: string | null | undefined) => {
     if (isUsed) {
       return <Badge variant="secondary">Gebruikt</Badge>;
     }
     
-    const isExpired = new Date(expiresAt) < new Date();
-    if (isExpired) {
-      return <Badge variant="destructive">Verlopen</Badge>;
+    if (!expiresAt) {
+      return <Badge variant="destructive">Geen vervaldatum</Badge>;
     }
     
-    return <Badge variant="default">Beschikbaar</Badge>;
+    try {
+      const isExpired = new Date(expiresAt) < new Date();
+      if (isExpired) {
+        return <Badge variant="destructive">Verlopen</Badge>;
+      }
+      
+      return <Badge variant="default">Beschikbaar</Badge>;
+    } catch (error) {
+      console.error('Error checking expiration:', expiresAt, error);
+      return <Badge variant="destructive">Ongeldige datum</Badge>;
+    }
   };
 
   const filteredVouchers = vouchers.filter(voucher => {
@@ -374,7 +459,7 @@ export default function VouchersPage() {
                             <User className="h-4 w-4 text-green-600" />
                             {voucher.user_who_used_name}
                             <span className="text-xs text-gray-500">
-                              {formatDate(voucher.used_at!)}
+                              {formatDate(voucher.used_at)}
                             </span>
                           </div>
                         ) : (

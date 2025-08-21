@@ -50,25 +50,49 @@ interface WorkflowConfigProps {
 
 // Helper to get a unique id for a step (fallback if missing)
 function getStepId(step: StepConfig, index: number) {
-  return step.id || `${index}-${step.name}`;
+  console.log('🔍 getStepId called with:', { step, index });
+  if (!step) {
+    console.log('⚠️ getStepId: step is null/undefined, returning fallback ID');
+    return `step-${index}`;
+  }
+  const result = step.id || `${index}-${step.name || 'unnamed'}`;
+  console.log('✅ getStepId result:', result);
+  return result;
 }
 
 // Helper to ensure all steps have explicit enabled property
-function withExplicitEnabled(steps: StepConfig[]): StepConfig[] {
-  return steps.map((step) => ({
+function withExplicitEnabled(steps: StepConfig[] | undefined): StepConfig[] {
+  console.log('🔍 withExplicitEnabled called with:', { steps, type: typeof steps, isArray: Array.isArray(steps) });
+  if (!steps || !Array.isArray(steps)) {
+    console.log('⚠️ withExplicitEnabled: steps is not an array, returning empty array');
+    return [];
+  }
+  const result = steps.map((step) => ({
     ...step,
     enabled: step.enabled === false ? false : true,
   }));
+  console.log('✅ withExplicitEnabled result:', result);
+  return result;
 }
 
 // Helper to ensure all steps have a unique id
-function ensureStepIds(steps: StepConfig[]): StepConfig[] {
-  return steps.map((step, idx) => ({
-    ...step,
-    id: step.id && typeof step.id === 'string' && step.id.length > 0
-      ? step.id
-      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${idx}`),
-  }));
+function ensureStepIds(steps: StepConfig[] | undefined): StepConfig[] {
+  console.log('🔍 ensureStepIds called with:', { steps, type: typeof steps, isArray: Array.isArray(steps) });
+  if (!steps || !Array.isArray(steps)) {
+    console.log('⚠️ ensureStepIds: steps is not an array, returning empty array');
+    return [];
+  }
+  const result = steps.map((step, idx) => {
+    console.log('🔍 Processing step:', { step, idx });
+    return {
+      ...step,
+      id: step.id && typeof step.id === 'string' && step.id.length > 0
+        ? step.id
+        : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${idx}`),
+    };
+  });
+  console.log('✅ ensureStepIds result:', result);
+  return result;
 }
 
 export default function WorkflowConfig({
@@ -95,6 +119,27 @@ export default function WorkflowConfig({
   if (!availableModels) {
     return null;
   }
+
+  // Additional guard: ensure availableModels.available_models exists
+  if (!availableModels.available_models) {
+    console.warn('WorkflowConfig: availableModels.available_models is undefined', availableModels);
+    return null;
+  }
+
+  // Guard: if workflowConfig is not defined or doesn't have steps, do not render
+  if (!workflowConfig || !workflowConfig.steps) {
+    console.warn('WorkflowConfig: workflowConfig or workflowConfig.steps is undefined', workflowConfig);
+    return null;
+  }
+
+  // Additional debugging
+  console.log('🔍 WorkflowConfig received:', {
+    workflowConfig,
+    steps: workflowConfig.steps,
+    stepsType: typeof workflowConfig.steps,
+    isArray: Array.isArray(workflowConfig.steps)
+  });
+
   // 3. Remove all useAuth, useEffect for fetching, and API calls. Replace with props usage and callback invocations.
   // 4. Replace setWorkflowConfig, setPrompts, setAvailableModels, etc. with onConfigChange, onPromptChange, etc.
   // 5. Remove backendUrl and all references to it.
@@ -297,11 +342,16 @@ export default function WorkflowConfig({
 
   // Update step field (edit)
   const updateStepField = (stepIndex: number, field: keyof StepConfig, value: any) => {
-    if (!workflowConfig) return;
+    console.log('🔍 updateStepField called:', { stepIndex, field, value, workflowConfig });
+    if (!workflowConfig) {
+      console.log('⚠️ updateStepField: workflowConfig is null/undefined');
+      return;
+    }
     
     const updatedSteps = workflowConfig.steps.map((step, idx) =>
       idx === stepIndex ? { ...step, [field]: value } : step
     );
+    console.log('🔍 Updated steps:', updatedSteps);
     onConfigChange({ steps: ensureStepIds(updatedSteps) });
   };
 
@@ -339,7 +389,11 @@ export default function WorkflowConfig({
 
   // Add this handler inside the WorkflowConfig component
   function handleAddStep() {
-    if (!workflowConfig) return;
+    console.log('🔍 handleAddStep called with workflowConfig:', workflowConfig);
+    if (!workflowConfig) {
+      console.log('⚠️ handleAddStep: workflowConfig is null/undefined');
+      return;
+    }
     const newStep: StepConfig = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       name: `New Step ${workflowConfig.steps.length + 1}`,
@@ -349,7 +403,9 @@ export default function WorkflowConfig({
       model: availableModels.available_models[Object.keys(availableModels.available_models)[0]][0] || '', // Use default model from availableModels
       enabled: false, // New steps are disabled by default
     };
+    console.log('🔍 New step created:', newStep);
     const updatedSteps = [...workflowConfig.steps, newStep];
+    console.log('🔍 Updated steps:', updatedSteps);
     onConfigChange({ steps: ensureStepIds(updatedSteps) });
     // Optionally, save to backend immediately
     // (async () => { // Removed as per parent's responsibility
@@ -622,19 +678,45 @@ export default function WorkflowConfig({
             <Droppable droppableId="steps-droppable">
               {(provided: any) => (
                 <div className="space-y-4" ref={provided.innerRef} {...provided.droppableProps}>
-                  {/* Removed saving and saving UI */}
-                  {ensureStepIds(workflowConfig.steps).map((step, stepIndex) => {
-                    // Remove _base_instructions from prompt_components for display
-                    const filteredPromptComponents = step.prompt_components.filter(
-                      c => !c.includes('_base_instructions')
-                    );
-                    const hasBaseInstructions = step.prompt_components.some(
-                      (c) => c.includes('_base_instructions')
-                    );
-                    const stepId = getStepId(step, stepIndex);
-                    const isEnabled = step.enabled !== false; // Default to true if missing
-                    return (
-                      <Draggable key={step.id} draggableId={step.id} index={stepIndex}>
+                                    {/* Removed saving and saving UI */}
+                  {(() => {
+                    try {
+                      console.log('🔍 About to call ensureStepIds with:', workflowConfig.steps);
+                      const steps = ensureStepIds(workflowConfig.steps || []);
+                      console.log('🔍 Steps to render:', steps);
+                      if (!steps || steps.length === 0) {
+                        return <div className="text-gray-500 p-4 text-center">No steps configured yet. Add a step to get started.</div>;
+                      }
+                      return steps.map((step, stepIndex) => {
+                        // Safety check for step properties
+                        if (!step || typeof step !== 'object') {
+                          console.error('❌ Invalid step object:', step);
+                          return <div key={`error-${stepIndex}`} className="text-red-600 p-4">Invalid step data</div>;
+                        }
+                        
+                        // Ensure step has required properties
+                        const safeStep = {
+                          ...step,
+                          prompt_components: Array.isArray(step.prompt_components) ? step.prompt_components : [],
+                          name: step.name || `Step ${stepIndex + 1}`,
+                          description: step.description || '',
+                          output_type: step.output_type || 'text',
+                          output_variable: step.output_variable || '',
+                          model: step.model || '',
+                          enabled: step.enabled !== false
+                        };
+                        
+                        // Remove _base_instructions from prompt_components for display
+                        const filteredPromptComponents = safeStep.prompt_components.filter(
+                          c => !c.includes('_base_instructions')
+                        );
+                        const hasBaseInstructions = safeStep.prompt_components.some(
+                          (c) => c.includes('_base_instructions')
+                        );
+                        const stepId = getStepId(safeStep, stepIndex);
+                        const isEnabled = safeStep.enabled;
+                                                  return (
+                            <Draggable key={safeStep.id} draggableId={safeStep.id} index={stepIndex}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
@@ -656,7 +738,7 @@ export default function WorkflowConfig({
                                   onChange={e => {
                                     e.stopPropagation();
                                     const updatedSteps = workflowConfig.steps.map((step, idx) =>
-                                      idx === stepIndex ? { ...step, enabled: e.target.checked } : { ...step, enabled: step.enabled === false ? false : true }
+                                      idx === stepIndex ? { ...step, enabled: e.target.checked } : { ...step, enabled: step.enabled !== false }
                                     );
                                     onConfigChange({ steps: ensureStepIds(updatedSteps) });
                                     // Save to backend
@@ -690,7 +772,7 @@ export default function WorkflowConfig({
                                   <ChevronRightIcon className="h-5 w-5 text-gray-500" />
                                 )}
                                 <span className="font-medium text-gray-800">
-                                  🔧 Step {stepIndex + 1}: {step.name}
+                                  🔧 Step {stepIndex + 1}: {safeStep.name}
                                 </span>
                               </div>
                               <div className="flex space-x-2">
@@ -734,7 +816,7 @@ export default function WorkflowConfig({
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setShowDeleteStepModal({stepIndex, stepName: step.name});
+                                          setShowDeleteStepModal({stepIndex, stepName: safeStep.name});
                                         }}
                                         className="text-gray-400 hover:text-red-600"
                                         title="Delete Step"
@@ -758,13 +840,13 @@ export default function WorkflowConfig({
                                   {editingStep === stepIndex ? (
                                     <input
                                       type="text"
-                                      value={step.name}
+                                      value={safeStep.name}
                                       onChange={(e) => updateStepField(stepIndex, 'name', e.target.value)}
                                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
                                     <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-800">
-                                      {step.name}
+                                      {safeStep.name}
                                     </div>
                                   )}
                                 </div>
@@ -776,14 +858,14 @@ export default function WorkflowConfig({
                                   </label>
                                   {editingStep === stepIndex ? (
                                     <textarea
-                                      value={step.description}
+                                      value={safeStep.description}
                                       onChange={(e) => updateStepField(stepIndex, 'description', e.target.value)}
                                       rows={2}
                                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                   ) : (
                                     <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-800">
-                                      {step.description}
+                                      {safeStep.description}
                                     </div>
                                   )}
                                 </div>
@@ -796,7 +878,7 @@ export default function WorkflowConfig({
                                   {editingStep === stepIndex ? (
                                     <div className="relative">
                                       <select
-                                        value={step.model}
+                                        value={safeStep.model}
                                         onChange={(e) => updateStepField(stepIndex, 'model', e.target.value)}
                                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                                       >
@@ -814,7 +896,7 @@ export default function WorkflowConfig({
                                     </div>
                                   ) : (
                                     <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-800">
-                                      {step.model}
+                                      {safeStep.model}
                                     </div>
                                   )}
                                 </div>
@@ -827,7 +909,7 @@ export default function WorkflowConfig({
                                   {editingStep === stepIndex ? (
                                     <div className="relative">
                                       <select
-                                        value={step.output_type}
+                                        value={safeStep.output_type}
                                         onChange={(e) => updateStepField(stepIndex, 'output_type', e.target.value)}
                                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                                       >
@@ -842,13 +924,13 @@ export default function WorkflowConfig({
                                     </div>
                                   ) : (
                                     <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-800">
-                                      {step.output_type}
+                                      {safeStep.output_type}
                                     </div>
                                   )}
                                 </div>
 
                                 {/* Output Variable (if applicable) */}
-                                {step.output_type === 'text' && (
+                                                                    {safeStep.output_type === 'text' && (
                                   <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                       Output Variable
@@ -856,14 +938,14 @@ export default function WorkflowConfig({
                                     {editingStep === stepIndex ? (
                                       <input
                                         type="text"
-                                        value={step.output_variable || ''}
+                                        value={safeStep.output_variable || ''}
                                         onChange={(e) => updateStepField(stepIndex, 'output_variable', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         placeholder="e.g., SUMMARY_QUALIFICATION_REQUIREMENTS"
                                       />
                                     ) : (
                                       <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-800">
-                                        {step.output_variable || 'Not specified'}
+                                        {safeStep.output_variable || 'Not specified'}
                                       </div>
                                     )}
                                   </div>
@@ -964,7 +1046,13 @@ export default function WorkflowConfig({
                         )}
                       </Draggable>
                     );
-                  })}
+                  });
+                    } catch (error) {
+                      console.error('❌ Error rendering steps:', error);
+                      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                      return <div className="text-red-600 p-4">Error rendering steps: {errorMessage}</div>;
+                    }
+                  })()}
                   {provided.placeholder}
                   {/* Add Step Bar */}
                   <div

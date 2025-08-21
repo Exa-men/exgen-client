@@ -47,7 +47,7 @@ const SmartPrefetcher: React.FC = () => {
     };
 
     // Small delay to ensure the app is stable after login
-    const timer = setTimeout(prefetchPages, 1000);
+    const timer = setTimeout(prefetchPages, 500); // Reduced from 1000ms for better performance
 
     return () => clearTimeout(timer);
   }, [isLoaded, isSignedIn, isAdmin, router]);

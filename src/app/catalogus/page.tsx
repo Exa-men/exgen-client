@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowUpDown, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
+import { Search, Eye, Download, ShoppingCart, Loader2, MessageSquare, Trash2, Edit, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
+import { Skeleton } from '../components/ui/skeleton';
 
 import PDFViewer from '../components/PDFViewer';
 import TruncatedText from '../components/TruncatedText';
@@ -22,13 +23,17 @@ import { useCreditModal } from '../contexts/CreditModalContext';
 import { cn, downloadInkoopvoorwaarden } from '../../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { useRoleContext } from '../contexts/RoleContext';
+import { useApi } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 interface Version {
+  id?: string; // Add optional id field for version identification
   version: string;
   releaseDate: string;
   downloadUrl?: string;
   isLatest: boolean;
   isEnabled?: boolean; // Only present for admin users
+  is_enabled?: boolean; // Database field name (snake_case) - fallback for isEnabled
 }
 
 interface ExamProduct {
@@ -48,14 +53,13 @@ interface ExamProduct {
   hasPreviewDocument?: boolean; // Whether the product has a preview document
 }
 
-type SortField = 'code' | 'title' | 'credits' | 'cohort';
-type SortDirection = 'asc' | 'desc';
+
 
 export default function CatalogusPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const { userRole, isAdmin } = useRoleContext();
+  const { userRole, isAdmin, hasRole } = useRoleContext();
   const { refreshCredits } = useCredits();
   const { openModal } = useCreditModal();
   
@@ -70,8 +74,6 @@ export default function CatalogusPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreditsError, setShowCreditsError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('code');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(null);
   // State for purchase confirmation modal
   const [purchaseConfirmId, setPurchaseConfirmId] = useState<string | null>(null);
@@ -87,6 +89,10 @@ export default function CatalogusPage() {
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadProduct, setDownloadProduct] = useState<ExamProduct | null>(null);
   const [downloadVersionId, setDownloadVersionId] = useState<string | undefined>(undefined);
+  const [downloadVersionString, setDownloadVersionString] = useState<string | undefined>(undefined);
+  
+  // State to track selected versions for each product to prevent duplicate downloads
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, { versionId: string; versionString: string }>>({});
   // State for delete modal
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -99,6 +105,83 @@ export default function CatalogusPage() {
   // State for welcome banner
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
+  
+  // Debug logging (commented out to reduce console noise)
+  // console.log('🔄 === CATALOGUS PAGE RENDER ===');
+  // console.log('🔄 Render state:', {
+  //   isSignedIn,
+  //   isLoaded,
+  //   hasRole,
+  //   isAdmin,
+  //   productsCount: products.length,
+  //   loading,
+  //   loadingMore
+  // });
+  
+  // Filter products based on user role: admins see all products, regular users only see available products
+  const filteredProducts = useMemo(() => {
+    // Debug logging (commented out to reduce console noise)
+    // console.log('🔍 === FILTERING PRODUCTS ===');
+    // console.log('🔍 Raw products array:', {
+    //   count: products.length,
+    //   products: products.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    // });
+    // console.log('🔍 User role info:', { isAdmin, hasRole });
+    
+    let result;
+    if (isAdmin) {
+      // Admins can see all products (draft and available)
+      result = products;
+      // console.log('🔍 Admin user - showing all products:', result.length);
+    } else {
+      // Regular users can only see available products
+      const availableProducts = products.filter(product => product.status === 'available');
+      result = availableProducts;
+      // console.log('🔍 Regular user - filtering for available products only');
+      // console.log('🔍 Available products found:', {
+      //   count: availableProducts.length,
+      //   products: availableProducts.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      // });
+      // console.log('🔍 Draft products filtered out:', {
+      //   count: products.filter(p => p.status === 'draft').length,
+      //   products: products.filter(p => p.status === 'draft').map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+      // });
+    }
+    
+    // console.log('🔍 Final filtered result:', {
+    //   count: result.length,
+    //   products: result.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
+    // });
+    
+    return result;
+  }, [products, isAdmin, hasRole]);
+
+  // Add search loading state
+  const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Add search debounce ref
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Request deduplication - prevent multiple simultaneous API calls
+  const activeRequestRef = useRef<Promise<any> | null>(null);
+  const requestKeyRef = useRef<string>('');
+
+  // Generate a unique key for each request to prevent duplicates
+  const getRequestKey = useCallback((pageNum: number, searchTerm: string, filter: string) => {
+    return `${pageNum}-${searchTerm}-${filter}`;
+  }, []);
+
+  // Optimized loading state that considers both role and products loading
+  const isPageLoading = useMemo(() => {
+    // Show loading if we don't have a role yet, or if we're loading products
+    return !hasRole || loading;
+  }, [hasRole, loading]);
+
+  // Optimized products loading state
+  const isProductsLoading = useMemo(() => {
+    // Only show products loading if we have a role but products are still loading
+    return hasRole && loading;
+  }, [hasRole, loading]);
 
   // Validation functions for product publication
   const isProductReadyForPublication = (product: ExamProduct): boolean => {
@@ -109,9 +192,21 @@ export default function CatalogusPage() {
     const hasVersion = product.versions && product.versions.length > 0;
     
     // Check if there's at least one enabled version (only for admin users)
+    // Handle both possible field names: isEnabled (camelCase) and is_enabled (snake_case)
     const hasEnabledVersion = isAdmin ? 
-      (product.versions && product.versions.some(version => version.isEnabled === true)) : 
+      (product.versions && product.versions.some(version => {
+        const isEnabled = version.isEnabled !== undefined ? version.isEnabled : version.is_enabled;
+        return isEnabled === true;
+      })) : 
       true; // For non-admin users, assume versions are enabled if they exist
+    
+    // Debug logging for validation
+    console.log('🔍 === PRODUCT PUBLICATION VALIDATION ===');
+    console.log('🔍 Product:', { id: product.id, code: product.code, title: product.title, status: product.status });
+    console.log('🔍 Basic info check:', { hasBasicInfo, code: !!product.code, title: !!product.title, description: !!product.description, credits: !!product.credits, cohort: !!product.cohort });
+    console.log('🔍 Version check:', { hasVersion, versionsCount: product.versions?.length, versions: product.versions });
+    console.log('🔍 Enabled version check:', { hasEnabledVersion, isAdmin, versions: product.versions?.map(v => ({ version: v.version, isEnabled: v.isEnabled })) });
+    console.log('🔍 Final validation result:', hasBasicInfo && hasVersion && hasEnabledVersion);
     
     return hasBasicInfo && hasVersion && hasEnabledVersion;
   };
@@ -151,54 +246,82 @@ export default function CatalogusPage() {
 
   // Handler for saving new product
   const handleSaveNewProduct = async () => {
+    console.log('💾 Saving new product:', newProduct);
     setSavingNewProduct(true);
     setError(null);
     try {
-      const token = await getToken();
-      const response = await fetch('/api/catalog/products', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: newProduct.code,
-          title: newProduct.title,
-          description: newProduct.description,
-          cost: Number(newProduct.credits),
-          credits: Number(newProduct.credits),
-          cohort: newProduct.cohort,
-
-          status: newProduct.status,
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 409 && errorData.detail === "Product code already exists") {
+      const productData = {
+        code: newProduct.code,
+        title: newProduct.title,
+        description: newProduct.description,
+        cost: Number(newProduct.credits),
+        credits: Number(newProduct.credits),
+        cohort: newProduct.cohort,
+        status: newProduct.status,
+      };
+      
+      console.log('📤 Sending product data to API:', productData);
+      
+      const { data: created, error } = await api.createProduct(productData);
+      
+      console.log('📥 API response:', { created, error });
+      
+      if (error) {
+        console.error('❌ API error:', error);
+        
+        // Handle authentication errors specifically
+        if (error.status === 401) {
+          if (error.detail.includes('Signature has expired') || error.detail.includes('Invalid Clerk token')) {
+            console.log('🔄 Token expired, attempting to refresh...');
+            try {
+              // Try to refresh the token
+              await api.refreshToken();
+              toast.info('Sessie verlengd, probeer opnieuw.');
+              setError('Je sessie is verlengd. Probeer het product opnieuw op te slaan.');
+              return; // Don't throw error, let user retry
+            } catch (refreshError) {
+              console.error('❌ Failed to refresh token:', refreshError);
+              toast.error('Je sessie is verlopen. Log opnieuw in.');
+              setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
+              return;
+            }
+          } else {
+            toast.error('Je bent niet geautoriseerd voor deze actie.');
+            setError('Je bent niet geautoriseerd voor deze actie.');
+            return;
+          }
+        }
+        
+        if (error.status === 409 && error.detail === "Product code already exists") {
           throw new Error(`Product code "${newProduct.code}" bestaat al. Gebruik een unieke code.`);
         }
-        throw new Error(errorData.detail || errorData.error || 'Failed to add product');
+        throw new Error(error.detail || 'Failed to add product');
       }
-      const created = await response.json();
+      
+      console.log('✅ Product created successfully:', created);
       
       // Check if product already exists to prevent duplicates
       setProducts((prev) => {
-        const exists = prev.some(product => product.id === created.id);
+        const exists = prev.some(product => product.id === (created as any).id);
         if (exists) {
+          console.log('⚠️ Product already exists in state, not adding duplicate');
           return prev; // Don't add if already exists
         }
-        return [created, ...prev];
+        console.log('➕ Adding new product to state');
+        return [(created as any), ...prev];
       });
       
       handleClearNewProduct();
+      console.log('🎉 New product form cleared');
     } catch (err) {
+      console.error('💥 Error saving product:', err);
       setError(err instanceof Error ? err.message : 'Failed to add product');
     } finally {
       setSavingNewProduct(false);
     }
   };
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const api = useApi();
 
   // Redirect if not signed in
   useEffect(() => {
@@ -207,132 +330,426 @@ export default function CatalogusPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
+  // Proactive token refresh to prevent expiration during long admin sessions
+  useEffect(() => {
     if (!isSignedIn) return;
+    
+    // Refresh token every 3 minutes (before the 4-minute cache expires)
+    const tokenRefreshInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Proactively refreshing token...');
+        await api.refreshToken();
+        console.log('✅ Token refreshed proactively');
+      } catch (error) {
+        console.warn('⚠️ Failed to refresh token proactively:', error);
+      }
+    }, 3 * 60 * 1000); // 3 minutes
+    
+    return () => clearInterval(tokenRefreshInterval);
+  }, [isSignedIn, api]);
+
+  // Separate function to fetch products with a specific search term
+  const fetchProductsWithSearch = useCallback(async (pageNum = 1, append = false, searchValue?: string) => {
+    if (!isSignedIn) return;
+    
+    // Use the passed searchValue or fall back to current state
+    const currentSearchTerm = searchValue !== undefined ? searchValue : searchTerm;
+    
+    // Generate request key for deduplication
+    const requestKey = getRequestKey(pageNum, currentSearchTerm, filter);
+    
+    console.log('📡 === PRODUCTS FETCH START ===');
+    console.log('📡 Fetching products:', { pageNum, append, searchTerm: currentSearchTerm, filter, requestKey });
+    console.log('📡 Current products state:', { 
+      currentProductsCount: products.length, 
+      currentProductIds: products.map((p: ExamProduct) => p.id),
+      loading,
+      loadingMore 
+    });
+    
+    // Check if this exact request is already in progress
+    if (activeRequestRef.current && requestKeyRef.current === requestKey) {
+      console.log('🔄 Request already in progress for key:', requestKey, '- waiting for completion');
+      try {
+        const result = await activeRequestRef.current;
+        console.log('✅ Reused existing request result');
+        return result;
+      } catch (error) {
+        console.log('❌ Existing request failed, proceeding with new request');
+      }
+    }
     
     try {
       if (pageNum === 1) setLoading(true);
       setError(null);
-      const token = await getToken();
-      const url = `/api/catalog/products?page=${pageNum}&limit=${PAGE_SIZE}&search=${encodeURIComponent(searchTerm)}&filter=${filter}`;
       
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      // Store the request promise and key for deduplication
+      requestKeyRef.current = requestKey;
+      activeRequestRef.current = api.listProducts(pageNum, PAGE_SIZE, currentSearchTerm, filter);
+      
+      console.log('📡 Making API call to listProducts...');
+      const { data, error: fetchError } = await activeRequestRef.current;
+      
+      console.log('📡 === API RESPONSE RECEIVED ===');
+      console.log('📡 Raw API response:', data);
+      console.log('📡 Response structure:', {
+        hasData: !!data,
+        productsCount: (data as any)?.products?.length || 0,
+        total: (data as any)?.total,
+        hasMore: (data as any)?.hasMore,
+        page: (data as any)?.page
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status}`);
+      if (fetchError) {
+        console.error('❌ API error:', fetchError);
+        
+        // Handle authentication errors specifically
+        if (fetchError.status === 401) {
+          if (fetchError.detail.includes('Signature has expired') || fetchError.detail.includes('Invalid Clerk token')) {
+            console.log('🔄 Token expired during product fetch, attempting to refresh...');
+            try {
+              // Try to refresh the token
+              await api.refreshToken();
+              toast.info('Sessie verlengd, producten worden opnieuw geladen.');
+              // Retry the fetch with the new token
+              const retryResult = await api.listProducts(pageNum, PAGE_SIZE, currentSearchTerm, filter);
+              if (retryResult.error) {
+                throw new Error(`Failed to fetch products after token refresh: ${retryResult.error.detail}`);
+              }
+              // Process the retry result
+              const retryData = retryResult.data;
+              console.log('📡 Retry successful, processing retry data...');
+              setProducts(prev => {
+                if (append) {
+                  const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
+                  const newProducts = ((retryData as any).products || []).filter((p: any) => !existingIds.has(p.id));
+                  console.log('📥 Retry - Appending products:', { 
+                    previousCount: prev.length, 
+                    newProductsCount: newProducts.length, 
+                    totalAfterAppend: prev.length + newProducts.length,
+                    newProductIds: newProducts.map((p: any) => p.id)
+                  });
+                  return [...prev, ...newProducts];
+                } else {
+                  console.log('📥 Retry - Replacing products:', { 
+                    previousCount: prev.length, 
+                    newCount: (retryData as any)?.products?.length || 0,
+                    newProductIds: ((retryData as any)?.products || []).map((p: any) => p.id)
+                  });
+                  return ((retryData as any).products || []);
+                }
+              });
+              setHasMore((retryData as any)?.hasMore);
+              setPage((retryData as any).page);
+              return; // Successfully handled, exit early
+            } catch (refreshError) {
+              console.error('❌ Failed to refresh token during product fetch:', refreshError);
+              toast.error('Je sessie is verlopen. Log opnieuw in.');
+              setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
+              setProducts([]);
+              setHasMore(false);
+              setPage(1);
+              return;
+            }
+          } else {
+            toast.error('Je bent niet geautoriseerd om producten te bekijken.');
+            setError('Je bent niet geautoriseerd om producten te bekijken.');
+            setProducts([]);
+            setHasMore(false);
+            setPage(1);
+            return;
+          }
+        }
+        
+        throw new Error(`Failed to fetch products: ${fetchError.detail}`);
       }
       
-      const data = await response.json();
+      console.log('✅ API response successful, processing data...');
+      console.log('✅ Data to be processed:', {
+        productsCount: (data as any)?.products?.length || 0, 
+        total: (data as any)?.total,
+        hasMore: (data as any)?.hasMore,
+        products: (data as any)?.products?.map((p: any) => ({ id: p.id, code: p.code, title: p.title }))
+      });
+      
+      // Log the setProducts call details
+      console.log('📥 === SETTING PRODUCTS STATE ===');
+      console.log('📥 Current products before update:', {
+        count: products.length,
+        ids: products.map((p: ExamProduct) => p.id)
+      });
+      console.log('📥 New products from API:', {
+        count: (data as any)?.products?.length || 0,
+        ids: ((data as any)?.products || []).map((p: any) => p.id)
+      });
+      console.log('📥 Operation type:', append ? 'APPEND' : 'REPLACE');
       
       setProducts(prev => {
+        console.log('📥 === INSIDE setProducts CALLBACK ===');
+        console.log('📥 Previous products:', {
+          count: prev.length,
+          ids: prev.map((p: ExamProduct) => p.id)
+        });
+        
+        let result;
         if (append) {
           // When appending, filter out any duplicates
           const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
-          const newProducts = (data.products || []).filter((p: ExamProduct) => !existingIds.has(p.id));
-          return [...prev, ...newProducts];
+          const newProducts = ((data as any).products || []).filter((p: any) => !existingIds.has(p.id));
+          console.log('📥 Appending products:', { 
+            previousCount: prev.length, 
+            newProductsCount: newProducts.length, 
+            totalAfterAppend: prev.length + newProducts.length,
+            newProductIds: newProducts.map((p: any) => p.id)
+          });
+          result = [...prev, ...newProducts];
+          console.log('📥 Final result after append:', {
+            count: result.length,
+            ids: result.map((p: ExamProduct) => p.id)
+          });
         } else {
           // When replacing, use the new data directly
-          return (data.products || []);
+          result = ((data as any).products || []);
+          console.log('📥 Replacing products:', { 
+            previousCount: prev.length, 
+            newCount: result.length,
+            newProductIds: result.map((p: any) => p.id)
+          });
+          console.log('📥 Final result after replace:', {
+            count: result.length,
+            ids: result.map((p: any) => p.id)
+          });
         }
+        
+        // Debug: Log the structure of products to check for isEnabled property
+        console.log('🔍 === PRODUCT STRUCTURE DEBUG ===');
+        result.forEach((product: any, index: number) => {
+          console.log(`🔍 Product ${index + 1}:`, {
+            id: product.id,
+            code: product.code,
+            title: product.title,
+            status: product.status,
+            versions: product.versions?.map((v: any) => ({
+              version: v.version,
+              isEnabled: v.isEnabled,
+              is_enabled: v.is_enabled, // Check if database field is present
+              hasIsEnabled: 'isEnabled' in v,
+              hasIsEnabledUnderscore: 'is_enabled' in v,
+              allKeys: Object.keys(v)
+            }))
+          });
+        });
+        
+        return result;
       });
-      setHasMore(data.hasMore);
-      setPage(data.page);
+      
+      const newHasMore = (data as any)?.hasMore;
+      console.log('📊 === UPDATING PAGINATION STATE ===');
+      console.log('📊 Pagination state update:', { 
+        currentPage: page, 
+        hasMore: newHasMore, 
+        totalProducts: (data as any)?.total,
+        currentProductsCount: (data as any)?.products?.length || 0
+      });
+      
+      setHasMore(newHasMore);
+      setPage((data as any).page);
+      
+      console.log('✅ === PRODUCTS FETCH COMPLETED ===');
+      console.log('✅ Final state after update:', {
+        productsCount: products.length,
+        hasMore: newHasMore,
+        page: (data as any).page
+      });
+      
     } catch (err) {
+      console.error('💥 === PRODUCTS FETCH ERROR ===');
       console.error('Error fetching products:', err);
       setError('Failed to load exam products');
       setProducts([]);
       setHasMore(false);
       setPage(1);
     } finally {
+      console.log('🧹 === CLEANING UP LOADING STATES ===');
+      console.log('🧹 Setting loading states to false');
       setLoading(false);
       setLoadingMore(false);
+      setSearchLoading(false);
+      
+      // Clear the active request reference
+      activeRequestRef.current = null;
+      requestKeyRef.current = '';
     }
-  }, [isSignedIn, getToken, searchTerm, filter, PAGE_SIZE]);
+  }, [isSignedIn, api, filter, PAGE_SIZE, searchTerm, page, getRequestKey]);
+
+  // Debounced search handler
+  const handleSearchChange = useCallback((value: string) => {
+    console.log('🔍 Search input changed:', value);
+    setSearchTerm(value);
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Set search loading state immediately
+    setSearchLoading(true);
+    
+    // Debounce the search API call
+    searchTimeoutRef.current = setTimeout(() => {
+      console.log('🔍 Executing search for:', value);
+      setSearchLoading(false);
+      
+      // Only search if we have a value or if clearing search
+      if (value.trim() || value === '') {
+        // Reset to page 1 when searching
+        setPage(1);
+        // Call API directly with the search value instead of using state
+        fetchProductsWithSearch(1, false, value);
+      }
+    }, 500); // 500ms delay
+  }, [fetchProductsWithSearch]);
+
+  const fetchProducts = useCallback(async (pageNum = 1, append = false) => {
+    // Use the existing function for normal fetches
+    return fetchProductsWithSearch(pageNum, append);
+  }, [fetchProductsWithSearch]);
+
+  // Log products state changes (commented out to reduce console noise)
+  // useEffect(() => {
+  //   console.log('📊 === PRODUCTS STATE CHANGED ===');
+  //   console.log('📊 New products state:', {
+  //     count: products.length,
+  //     ids: products.map(p => p.id),
+  //     loading,
+  //     loadingMore
+  //   });
+  // }, [products, loading, loadingMore]);
+
+  // Track if initial fetch has been made to prevent duplicate calls
+  const initialFetchMadeRef = useRef(false);
 
   // Initial fetch and on search/filter change
   useEffect(() => {
-    fetchProducts(1, false);
-  }, [fetchProducts]);
+    // Only fetch products if we have a role (to avoid unnecessary API calls)
+    if (hasRole && !initialFetchMadeRef.current) {
+      initialFetchMadeRef.current = true;
+      fetchProductsWithSearch(1, false);
+    }
+  }, [hasRole]); // Remove fetchProducts from dependencies to prevent re-runs
+
+  // Fetch products when filter changes
+  useEffect(() => {
+    if (hasRole && initialFetchMadeRef.current) {
+      console.log('🔄 Filter changed to:', filter);
+      
+      // Debounce filter changes to prevent rapid API calls
+      const filterTimeout = setTimeout(() => {
+        fetchProductsWithSearch(1, false);
+      }, 300); // 300ms debounce
+      
+      return () => clearTimeout(filterTimeout);
+    }
+  }, [filter, hasRole]); // Remove fetchProducts from dependencies
+
+  // Cleanup search timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
     if (!hasMore || loadingMore || loading) {
+      console.log('🔄 Infinite scroll: skipping due to conditions', { hasMore, loadingMore, loading });
       return;
     }
     
+    console.log('👁️ Setting up infinite scroll observer for page:', page);
+    
     const observer = new window.IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
+        console.log('📱 Infinite scroll triggered for page:', page + 1);
         setLoadingMore(true);
-        fetchProducts(page + 1, true);
+        fetchProductsWithSearch(page + 1, true);
       }
     }, { threshold: 1 });
     
     // Observe both desktop and mobile observer refs
     if (observerRef.current) {
       observer.observe(observerRef.current);
+      console.log('👁️ Desktop observer ref attached');
     }
     if (mobileObserverRef.current) {
       observer.observe(mobileObserverRef.current);
+      console.log('👁️ Mobile observer ref attached');
     }
     
     return () => {
       if (observerRef.current) observer.unobserve(observerRef.current);
       if (mobileObserverRef.current) observer.unobserve(mobileObserverRef.current);
     };
-  }, [hasMore, loadingMore, loading, page, fetchProducts]);
+  }, [hasMore, loadingMore, loading, page, fetchProductsWithSearch]);
 
-  // Filtered and sorted products (sorting only, filtering is now backend-driven)
+  // Products are now sorted by code column in the backend and filtered by user role
   const filteredAndSortedProducts = useMemo(() => {
-    let sorted = [...products];
-    sorted.sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
-      if (sortField === 'credits') {
-        aValue = Number(aValue);
-        bValue = Number(bValue);
-      }
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  }, [products, sortField, sortDirection]);
+    // Debug logging (commented out to reduce console noise)
+    // console.log('🎯 === FILTERED PRODUCTS CALCULATION ===');
+    // console.log('🎯 Input products:', {
+    //   count: filteredProducts.length,
+    //   ids: filteredProducts.map(p => p.id),
+    //   isAdmin
+    // });
+    
+    const result = filteredProducts;
+    
+    // console.log('🎯 Filtered result:', {
+    //   count: result.length,
+    //   ids: result.map(p => p.id)
+    // });
+    
+    return result;
+  }, [filteredProducts, isAdmin]);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
+
 
   // Show modal, then confirm purchase
   const handlePurchase = (productId: string) => {
+    console.log('🛒 Purchase button clicked for product:', productId);
     setPurchaseConfirmId(productId);
   };
 
   const handleConfirmPurchase = async () => {
     if (!purchaseConfirmId) return;
+    console.log('🛒 Starting purchase for product:', purchaseConfirmId);
     setPurchasingProduct(purchaseConfirmId);
     setPurchaseLoading(true);
     setError(null);
     try {
       const token = await getToken();
-      const response = await fetch(`/api/catalog/purchase`, {
+      console.log('🔑 Got auth token:', !!token);
+      
+      const requestBody = { productId: purchaseConfirmId };
+      console.log('📤 Sending purchase request:', requestBody);
+      
+      const response = await fetch(`/api/v1/catalog/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ productId: purchaseConfirmId }),
+        body: JSON.stringify(requestBody),
       });
+      
+      console.log('📥 Purchase response status:', response.status);
+      console.log('📥 Purchase response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ Purchase failed:', errorData);
         if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
           setShowCreditsError(true);
           setPurchaseConfirmId(null);
@@ -340,7 +757,10 @@ export default function CatalogusPage() {
         }
         throw new Error(errorData.error || 'Purchase failed');
       }
+      
       const result = await response.json();
+      console.log('✅ Purchase successful:', result);
+      
       // Update the product to show as purchased
       setProducts(prev => prev.map(product =>
         product.id === purchaseConfirmId
@@ -348,10 +768,14 @@ export default function CatalogusPage() {
           : product
       ));
       setPurchaseConfirmId(null);
+      
       // Refresh credit balance to update header
+      console.log('🔄 Refreshing credits...');
       await refreshCredits();
+      console.log('✅ Credits refreshed');
+      
     } catch (err) {
-      console.error('Purchase error:', err);
+      console.error('💥 Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');
     } finally {
       setPurchasingProduct(null);
@@ -376,15 +800,106 @@ export default function CatalogusPage() {
       return;
     }
     
+    // If no version is specified, check if there's a selected version for this product
+    let selectedVersionId = versionId;
+    let latestEnabledVersion: any = null;
+    if (!selectedVersionId) {
+      // Check if user has selected a specific version for this product
+      const selectedVersion = selectedVersions[productId];
+      if (selectedVersion) {
+        selectedVersionId = selectedVersion.versionId;
+        console.log('🔍 Using selected version for download:', {
+          productId,
+          selectedVersion: selectedVersion.versionString,
+          selectedVersionId: selectedVersion.versionId
+        });
+      } else if (product.versions && product.versions.length > 0) {
+        // Fallback: automatically select the latest enabled version
+        latestEnabledVersion = product.versions.find(v => {
+          const isEnabled = v.isEnabled !== undefined ? v.isEnabled : v.is_enabled;
+          return isEnabled === true;
+        }) || product.versions.find(v => v.isLatest) || product.versions[0];
+      }
+      
+      if (latestEnabledVersion) {
+        // If the version doesn't have an ID, we need to fetch the product versions to get the actual ID
+        if (!latestEnabledVersion.id) {
+          try {
+            console.log('🔍 Version has no ID, fetching product versions to get actual version ID...');
+            const { data: versionsData, error: versionsError } = await api.getProductVersions(productId);
+            
+            if (versionsError) {
+              console.warn('⚠️ Failed to fetch product versions, using version string as fallback:', versionsError);
+              selectedVersionId = latestEnabledVersion.version;
+            } else if (versionsData && Array.isArray(versionsData)) {
+              // Find the matching version by version string
+              const matchingVersion = versionsData.find((v: any) => v.version === latestEnabledVersion.version);
+              if (matchingVersion && matchingVersion.id) {
+                selectedVersionId = matchingVersion.id;
+                console.log('✅ Found version ID from API:', {
+                  version: latestEnabledVersion.version,
+                  versionId: matchingVersion.id
+                });
+              } else {
+                console.warn('⚠️ Version not found in API response, using version string as fallback');
+                selectedVersionId = latestEnabledVersion.version;
+              }
+            } else {
+              console.warn('⚠️ Invalid versions data from API, using version string as fallback');
+              selectedVersionId = latestEnabledVersion.version;
+            }
+          } catch (error) {
+            console.warn('⚠️ Error fetching product versions, using version string as fallback:', error);
+            selectedVersionId = latestEnabledVersion.version;
+          }
+        } else {
+          selectedVersionId = latestEnabledVersion.id;
+        }
+        
+        console.log('🔍 Auto-selected version for download:', {
+          productId,
+          selectedVersion: latestEnabledVersion.version,
+          selectedVersionId,
+          isLatest: latestEnabledVersion.isLatest,
+          isEnabled: latestEnabledVersion.isEnabled || latestEnabledVersion.is_enabled
+        });
+      }
+    }
+    
     // Set up download modal
     setDownloadProduct(product);
-    setDownloadVersionId(versionId);
+    setDownloadVersionId(selectedVersionId);
+    
+    // Determine the version string to display
+    let versionString = 'Unknown';
+    if (versionId && product.versions) {
+      // If a specific version was requested, find its version string
+      const selectedVersion = product.versions.find(v => v.id === versionId);
+      versionString = selectedVersion?.version || 'Unknown';
+    } else if (selectedVersions[productId]) {
+      // If using a previously selected version, use that
+      versionString = selectedVersions[productId].versionString;
+    } else if (latestEnabledVersion) {
+      // If auto-selecting, use the auto-selected version
+      versionString = latestEnabledVersion.version;
+    }
+    
+    setDownloadVersionString(versionString);
     setDownloadModalOpen(true);
   };
 
-  const handleVersionDownload = async (version: string, productId: string, versionId?: string) => {
-    await handleDownload(productId, versionId);
+  const handleVersionSelect = (productId: string, version: string, versionId?: string) => {
+    // Track the selected version for this product
+    setSelectedVersions(prev => ({
+      ...prev,
+      [productId]: {
+        versionId: versionId || version,
+        versionString: version
+      }
+    }));
   };
+
+
 
   const handleOpenFeedback = (product: ExamProduct) => {
     setFeedbackProduct(product);
@@ -393,7 +908,7 @@ export default function CatalogusPage() {
   const handleSubmitFeedback = async (feedback: any) => {
     try {
       const token = await getToken();
-      const response = await fetch('/api/catalog/feedback', {
+      const response = await fetch('/api/v1/catalog/feedback', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -417,29 +932,22 @@ export default function CatalogusPage() {
   };
 
   // Handler for delete
-  const handleDeleteProduct = async () => {
-    if (!deleteProductId) return;
-    
+  const handleDeleteProduct = async (productId: string) => {
     setDeleting(true);
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${deleteProductId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const { error } = await api.deleteProduct(productId);
 
-      if (response.ok) {
-        setProducts(products.filter(p => p.id !== deleteProductId));
-        setDeleteProductId(null);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Fout bij het verwijderen van het product');
+      if (error) {
+        throw new Error(error.detail || 'Failed to delete product');
       }
+
+      // Remove from local state
+      setProducts(products.filter(p => p.id !== productId));
+      setDeleteProductId(null);
+      toast.success('Product successfully deleted');
     } catch (error) {
-      setError('Fout bij het verwijderen van het product');
+      console.error('Error deleting product:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete product');
     } finally {
       setDeleting(false);
     }
@@ -458,26 +966,17 @@ export default function CatalogusPage() {
 
     setUpdatingStatus(productId);
     try {
-      const token = await getToken();
-      const response = await fetch(`/api/catalog/products/${productId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const { error } = await api.updateProductStatus(productId, newStatus);
 
-      if (response.ok) {
-        setProducts(products.map(p => 
-          p.id === productId ? { ...p, status: newStatus } : p
-        ));
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Fout bij het bijwerken van de status');
+      if (error) {
+        throw new Error(error.detail || 'Failed to update product status');
       }
+
+      setProducts(products.map(p => 
+        p.id === productId ? { ...p, status: newStatus } : p
+      ));
     } catch (error) {
-      setError('Fout bij het bijwerken van de status');
+      setError(error instanceof Error ? error.message : 'Failed to update product status');
     } finally {
       setUpdatingStatus(null);
     }
@@ -507,32 +1006,57 @@ export default function CatalogusPage() {
     if (!purchaseConfirmId) setPurchaseTermsChecked(false);
   }, [purchaseConfirmId]);
 
+  // Debug purchase modal state
+  useEffect(() => {
+    console.log('🔍 Purchase modal state changed:', { purchaseConfirmId, purchaseProduct: !!purchaseProduct });
+  }, [purchaseConfirmId, purchaseProduct]);
+
+  // Loading skeleton component for better perceived performance
+  const LoadingSkeleton = () => (
+    <div className="space-y-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="flex items-center space-x-4 p-4 bg-white rounded-lg shadow">
+          <Skeleton className="h-4 w-16" /> {/* Code */}
+          <Skeleton className="h-4 w-32" /> {/* Title */}
+          <Skeleton className="h-4 w-48" /> {/* Description */}
+          <Skeleton className="h-4 w-20" /> {/* Credits */}
+          <Skeleton className="h-4 w-24" /> {/* Cohort */}
+          <Skeleton className="h-4 w-16" /> {/* Version */}
+          <Skeleton className="h-4 w-20" /> {/* Actions */}
+        </div>
+      ))}
+    </div>
+  );
+
   // Check welcome banner status
   useEffect(() => {
     const checkWelcomeBanner = async () => {
       if (!isSignedIn || !user) return;
       
+      console.log('🔍 Checking welcome banner status for user:', user.id);
+      
       try {
-        const token = await getToken();
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/status`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const { data, error } = await api.getWelcomeVoucherStatus();
 
-        if (response.ok) {
-          const data = await response.json();
-          setShowWelcomeBanner(data.should_show_banner);
+        if (error) {
+          console.error('❌ Error checking welcome banner status:', error);
+          return;
         }
+
+        console.log('📊 Welcome banner API response:', data);
+        const shouldShow = (data as any).should_show_banner;
+        console.log('🎯 Should show welcome banner:', shouldShow);
+        
+        setShowWelcomeBanner(shouldShow);
       } catch (error) {
-        console.error('Error checking welcome banner status:', error);
+        console.error('💥 Exception checking welcome banner status:', error);
       } finally {
         setWelcomeBannerLoading(false);
       }
     };
 
     checkWelcomeBanner();
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user, api]);
 
   // Mark first login
   useEffect(() => {
@@ -540,20 +1064,22 @@ export default function CatalogusPage() {
       if (!isSignedIn || !user) return;
       
       try {
-        const token = await getToken();
-        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/welcome-voucher/mark-first-login`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const { error } = await api.markFirstLogin();
+        
+        if (error) {
+          console.error('Error marking first login:', error);
+          // Don't show error to user for first login marking - it's not critical
+        } else {
+          console.log('✅ First login marked successfully');
+        }
       } catch (error) {
-        console.error('Error marking first login:', error);
+        console.error('Exception marking first login:', error);
+        // Don't show error to user for first login marking - it's not critical
       }
     };
 
     markFirstLogin();
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user, api]);
 
   if (!isLoaded) {
     return (
@@ -580,9 +1106,17 @@ export default function CatalogusPage() {
         </div>
 
         {/* Welcome Banner */}
-        {!welcomeBannerLoading && showWelcomeBanner && (
-          <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
-        )}
+        {(() => {
+          // Debug logging (commented out to reduce console noise)
+          // console.log('🎨 Welcome banner render state:', { 
+          //   welcomeBannerLoading, 
+          //   showWelcomeBanner, 
+          //   shouldRender: !welcomeBannerLoading && showWelcomeBanner 
+          // });
+          return !welcomeBannerLoading && showWelcomeBanner ? (
+            <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
+          ) : null;
+        })()}
 
         {/* Search Bar */}
         <div className="mb-10">
@@ -592,10 +1126,43 @@ export default function CatalogusPage() {
               type="text"
               placeholder="Zoek op code of titel..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-16 h-20 !text-3xl w-full shadow-lg border-2 border-examen-cyan focus:border-examen-cyan focus:ring-2 focus:ring-examen-cyan/30 transition-all"
             />
+            {/* Search loading indicator */}
+            {searchLoading && (
+              <div className="absolute right-5 top-1/2 transform -translate-y-1/2">
+                <Loader2 className="h-8 w-8 animate-spin text-examen-cyan" />
+              </div>
+            )}
+            {/* Search results count */}
+            {searchTerm && !searchLoading && (
+              <div className="absolute right-5 top-1/2 transform -translate-y-1/2">
+                <Badge variant="secondary" className="text-sm">
+                  {products.length} resultaten
+                </Badge>
+              </div>
+            )}
           </div>
+          
+          {/* Search status message */}
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              {searchLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-examen-cyan" />
+                  Zoeken naar "{searchTerm}"...
+                </span>
+              ) : (
+                <span>
+                  {products.length > 0 
+                    ? `Gevonden: ${products.length} resultaten voor "${searchTerm}"`
+                    : `Geen resultaten gevonden voor "${searchTerm}"`
+                  }
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Filter Bar */}
@@ -667,10 +1234,9 @@ export default function CatalogusPage() {
         {/* Responsive Table/Card Layout */}
         {/* Table for md+ screens */}
         <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+          {isPageLoading ? (
+            <div className="p-8">
+              <LoadingSkeleton />
             </div>
           ) : (
             <>
@@ -678,52 +1244,18 @@ export default function CatalogusPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('code')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Code
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
+                      <TableHead className="font-semibold">
+                        Code
                       </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('title')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Titel
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
+                      <TableHead className="font-semibold">Titel</TableHead>
                       <TableHead className="font-semibold">Beschrijving</TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('credits')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          Credits
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort('cohort')}
-                          className="h-auto p-0 font-semibold"
-                        >
-                          v.a. Cohort
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
+                      <TableHead className="font-semibold">Credits</TableHead>
+                      <TableHead className="font-semibold">v.a. Cohort</TableHead>
                       <TableHead className="font-semibold text-center">Versie</TableHead>
 
-                      {isAdmin && (
-                        <TableHead className="font-semibold text-center">Status</TableHead>
-                      )}
+                                                                                              {isAdmin && (
+                           <TableHead className="font-semibold text-center">Status</TableHead>
+                          )}
                       <TableHead className="font-semibold text-center">Acties</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -838,7 +1370,15 @@ export default function CatalogusPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedProducts.map((product) => (
+                      filteredAndSortedProducts.map((product) => {
+                        // Debug logging (commented out to reduce console noise)
+                        // console.log('🎨 === RENDERING PRODUCT ===', {
+                        //   id: product.id,
+                        //   code: product.code,
+                        //   title: product.title,
+                        //   status: product.status
+                        // });
+                        return (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
                             {product.code}
@@ -868,7 +1408,7 @@ export default function CatalogusPage() {
                               versions={product.versions}
                               currentVersion={product.version || (product.versions.length > 0 ? product.versions[0].version : "N/A")}
                               isPurchased={product.isPurchased}
-                              onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)}
+                              onVersionSelect={(version, versionId) => handleVersionSelect(product.id, version, versionId)}
                             />
                           </TableCell>
                           {isAdmin && (
@@ -973,13 +1513,14 @@ export default function CatalogusPage() {
                                   className="flex items-center justify-center w-full"
                                 >
                                   <Edit className="h-4 w-4 mr-1" />
-                                  Bewerken
+                                  Edit
                                 </Button>
                               )}
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -1000,10 +1541,9 @@ export default function CatalogusPage() {
         </div>
         {/* Card layout for mobile (below md) */}
         <div className="md:hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-examen-cyan" />
-              <p className="text-gray-600">Laden van examens...</p>
+          {isPageLoading ? (
+            <div className="p-8">
+              <LoadingSkeleton />
             </div>
           ) : filteredAndSortedProducts.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -1026,7 +1566,7 @@ export default function CatalogusPage() {
                     </div>
                     <div className="flex items-center gap-4 text-sm mb-1">
                       <span className="font-semibold">{formatCredits(product.credits || 0)} credits</span>
-                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onDownload={(version, versionId) => handleVersionDownload(version, product.id, versionId)} /></span>
+                      <span className="ml-auto"><VersionDropdown versions={product.versions} currentVersion={product.version} isPurchased={product.isPurchased} onVersionSelect={(version, versionId) => handleVersionSelect(product.id, version, versionId)} /></span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2">
                       {!product.isPurchased && product.hasPreviewDocument && (
@@ -1137,6 +1677,15 @@ export default function CatalogusPage() {
             setDownloadModalOpen(false);
             setDownloadProduct(null);
             setDownloadVersionId(undefined);
+            setDownloadVersionString(undefined);
+            // Clear the selected version for this product to prevent affecting future downloads
+            if (downloadProduct) {
+              setSelectedVersions(prev => {
+                const newState = { ...prev };
+                delete newState[downloadProduct.id];
+                return newState;
+              });
+            }
           }}
           product={{
             id: downloadProduct.id,
@@ -1145,6 +1694,7 @@ export default function CatalogusPage() {
             versions: downloadProduct.versions.map(v => ({ version: v.version, isLatest: v.isLatest })),
           }}
           versionId={downloadVersionId}
+          versionString={downloadVersionString}
         />
       )}
       {/* Delete confirmation modal */}
@@ -1160,7 +1710,7 @@ export default function CatalogusPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleDeleteProduct}
+              onClick={() => handleDeleteProduct(deleteProductId!)}
               disabled={deleting}
               className="transition-colors hover:bg-red-100 hover:text-red-700"
             >
@@ -1187,7 +1737,10 @@ export default function CatalogusPage() {
               type="checkbox"
               id="purchase-terms"
               checked={purchaseTermsChecked}
-              onChange={e => setPurchaseTermsChecked(e.target.checked)}
+              onChange={e => {
+                console.log('☑️ Purchase terms checkbox changed:', e.target.checked);
+                setPurchaseTermsChecked(e.target.checked);
+              }}
               className="accent-examen-cyan w-5 h-5"
             />
             <label htmlFor="purchase-terms" className="text-sm select-none">
@@ -1208,7 +1761,11 @@ export default function CatalogusPage() {
             <Button
               variant="default"
               className="bg-examen-cyan text-white"
-              onClick={handleConfirmPurchase}
+              onClick={() => {
+                console.log('🔘 Confirm purchase button clicked');
+                console.log('🔍 Button state:', { purchaseLoading, purchaseTermsChecked });
+                handleConfirmPurchase();
+              }}
               disabled={purchaseLoading || !purchaseTermsChecked}
             >
               {purchaseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Bevestigen'}
@@ -1225,10 +1782,59 @@ export default function CatalogusPage() {
             setPdfViewerOpen(false);
             setSelectedProduct(null);
           }}
-          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/catalog/preview/${selectedProduct.id}`}
+          pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}/content`}
           title={`Preview: ${selectedProduct.title}`}
         />
       )}
+
+      {/* 
+       * DocumentList Integration Example:
+       * 
+       * To integrate the DocumentList component with document preview functionality:
+       * 
+       * 1. Add state for documents and document preview:
+       * const [documents, setDocuments] = useState<Document[]>([]);
+       * const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false);
+       * const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+       * 
+       * 2. Add handlers for document management:
+       * const handleSetPreview = (documentId: string) => {
+       *   setDocuments(prev => prev.map(doc => ({
+       *     ...doc,
+       *     isPreview: doc.id === documentId
+       *   })));
+       * };
+       * 
+       * const handlePreviewDocument = (document: Document) => {
+       *   setSelectedDocument(document);
+       *   setDocumentPreviewOpen(true);
+       * };
+       * 
+       * 3. Add the DocumentList component where needed:
+       * <DocumentList
+       *   documents={documents}
+       *   versionId={versionId}
+       *   onDelete={handleDeleteDocument}
+       *   onSetPreview={handleSetPreview}
+       *   onPreviewDocument={handlePreviewDocument}
+       * />
+       * 
+       * 4. Add the PDF viewer for document previews:
+       * {selectedDocument && (
+       *   <PDFViewer
+       *     isOpen={documentPreviewOpen}
+       *     onClose={() => {
+       *       setDocumentPreviewOpen(false);
+       *       setSelectedDocument(null);
+       *     }}
+       *     pdfUrl={`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/catalog/preview/${selectedProduct.id}/content`}
+       *     title={`Document Preview: ${selectedDocument.name}`}
+       *   />
+       * )}
+       * 
+       * The existing "Inkijken" button will continue to work as before,
+       * but now you can also manage individual document previews through the DocumentList.
+       */}
 
     </div>
   );

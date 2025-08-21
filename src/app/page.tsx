@@ -29,12 +29,14 @@ function HomeContent() {
     console.log('Current URL:', window.location.href);
     // Only redirect if user is signed in and there's no 'show' parameter
     if (isLoaded && isSignedIn && !searchParams.get('show')) {
-      router.push('/catalogus');
+      // Use replace instead of push to avoid adding to history stack
+      router.replace('/catalogus');
     }
-  }, [isLoaded, isSignedIn, router, searchParams]);
+  }, [isLoaded, isSignedIn, router, searchParams.get('show')]);
 
   // Show loading state while checking authentication
-  if (!isLoaded) {
+  // For unauthenticated users, show content immediately to avoid loading screen
+  if (!isLoaded && isSignedIn !== false) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

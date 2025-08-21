@@ -10,25 +10,9 @@ export const EmailVerificationForm: React.FC = () => {
   const { signUp, isLoaded } = useSignUp();
   const { switchModalMode } = useAuthModal();
   
-  const [isResending, setIsResending] = useState(false);
-  const [resendSuccess, setResendSuccess] = useState(false);
 
-  const handleResendVerification = async () => {
-    if (!isLoaded || !signUp) return;
-    
-    setIsResending(true);
-    
-    try {
-      // Use Clerk's simplified API for resending
-      await signUp.prepareEmailAddressVerification();
-      setResendSuccess(true);
-      setTimeout(() => setResendSuccess(false), 3000);
-    } catch (error: any) {
-      console.error('Resend error:', error);
-    } finally {
-      setIsResending(false);
-    }
-  };
+
+
 
   return (
     <div className="w-full mx-auto text-center">
@@ -66,33 +50,19 @@ export const EmailVerificationForm: React.FC = () => {
           Terug naar inloggen
         </Button>
         
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 text-left">
           <p className="mb-2">Geen e-mail ontvangen?</p>
-          <Button
-            onClick={handleResendVerification}
-            variant="ghost"
-            size="sm"
-            disabled={isResending}
-            className="text-examen-cyan hover:text-examen-cyan-600"
-          >
-            {isResending ? (
-              <>
-                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                Verzenden...
-              </>
-            ) : (
-              'Verificatie e-mail opnieuw verzenden'
-            )}
-          </Button>
-        </div>
-
-        {resendSuccess && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-green-800 text-sm">
-              ✓ Verificatie e-mail opnieuw verzonden!
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">
+              Controleer je spam/junk folder
+            </p>
+            <p className="text-xs text-gray-500">
+              Wacht enkele minuten - e-mails kunnen vertraagd zijn
             </p>
           </div>
-        )}
+        </div>
+
+
       </div>
     </div>
   );
