@@ -93,18 +93,18 @@ export default function CreditPackagesPage() {
       
       if (error) {
         if (error.status === 403) {
-          console.error('Access denied: Admin privileges required');
+          // console.error('Access denied: Admin privileges required');
           alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
           router.push('/');
           return;
         }
-        console.error('Failed to fetch packages:', error);
+        // console.error('Failed to fetch packages:', error);
         return;
       }
 
       setPackages((data as any).packages || []);
     } catch (error) {
-      console.error('Error fetching packages:', error);
+      // console.error('Error fetching packages:', error);
     } finally {
       setLoading(false);
     }
@@ -152,7 +152,7 @@ export default function CreditPackagesPage() {
       
       toast.success('Package deleted successfully');
     } catch (error) {
-      console.error('Error deleting package:', error);
+      // console.error('Error deleting package:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to delete package');
     } finally {
       setDeleting(null);
@@ -193,7 +193,7 @@ export default function CreditPackagesPage() {
         setError(errorData.detail || 'Failed to save package');
       }
     } catch (error) {
-      console.error('Error saving package:', error);
+      // console.error('Error saving package:', error);
       setError('Failed to save package');
     } finally {
       setSaving(false);

@@ -2958,6 +2958,7 @@ export default function EditExamPage() {
                             <DocumentList
                               documents={version.documents}
                               versionId={version.id}
+                              productId={productId}
                               onDelete={(docId) => removeDocument(version.id, docId)}
                               onSetPreview={(docId) => setPreviewDocument(version.id, docId)}
                               onS3StatusUpdate={(docId, status) => updateDocumentS3Status(version.id, docId, status)}

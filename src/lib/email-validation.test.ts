@@ -50,7 +50,7 @@ describe('Email Validation', () => {
 
 // Manual test function for quick verification
 export const runEmailValidationTests = () => {
-  console.log('Running Email Validation Tests...');
+  // console.log('Running Email Validation Tests...');
   
   const testCases = [
     // Invalid cases (should return false)
@@ -78,7 +78,7 @@ export const runEmailValidationTests = () => {
   testCases.forEach(({ email, expected }) => {
     const result = validateEmail(email);
     const status = result === expected ? '✅ PASS' : '❌ FAIL';
-    console.log(`${status} ${email} -> ${result} (expected: ${expected})`);
+    // console.log(`${status} ${email} -> ${result} (expected: ${expected})`);
     
     if (result === expected) {
       passed++;
@@ -87,6 +87,6 @@ export const runEmailValidationTests = () => {
     }
   });
 
-  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+  // console.log(`\nResults: ${passed} passed, ${failed} failed`);
   return { passed, failed };
 };

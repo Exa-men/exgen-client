@@ -106,55 +106,22 @@ export default function CatalogusPage() {
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [welcomeBannerLoading, setWelcomeBannerLoading] = useState(true);
   
-  // Debug logging (commented out to reduce console noise)
-  // console.log('🔄 === CATALOGUS PAGE RENDER ===');
-  // console.log('🔄 Render state:', {
-  //   isSignedIn,
-  //   isLoaded,
-  //   hasRole,
-  //   isAdmin,
-  //   productsCount: products.length,
-  //   loading,
-  //   loadingMore
-  // });
-  
   // Filter products based on user role: admins see all products, regular users only see available products
   const filteredProducts = useMemo(() => {
-    // Debug logging (commented out to reduce console noise)
-    // console.log('🔍 === FILTERING PRODUCTS ===');
-    // console.log('🔍 Raw products array:', {
-    //   count: products.length,
-    //   products: products.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-    // });
-    // console.log('🔍 User role info:', { isAdmin, hasRole });
-    
     let result;
     if (isAdmin) {
       // Admins can see all products (draft and available)
       result = products;
-      // console.log('🔍 Admin user - showing all products:', result.length);
     } else {
       // Regular users can only see available products
       const availableProducts = products.filter(product => product.status === 'available');
       result = availableProducts;
-      // console.log('🔍 Regular user - filtering for available products only');
-      // console.log('🔍 Available products found:', {
-      //   count: availableProducts.length,
-      //   products: availableProducts.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-      // });
-      // console.log('🔍 Draft products filtered out:', {
-      //   count: products.filter(p => p.status === 'draft').length,
-      //   products: products.filter(p => p.status === 'draft').map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-      // });
+      // Filter out draft products for non-admin users
+      result = result.filter(product => product.status !== 'draft');
     }
     
-    // console.log('🔍 Final filtered result:', {
-    //   count: result.length,
-    //   products: result.map(p => ({ id: p.id, code: p.code, title: p.title, status: p.status }))
-    // });
-    
     return result;
-  }, [products, isAdmin, hasRole]);
+  }, [products, isAdmin]);
 
   // Add search loading state
   const [searchLoading, setSearchLoading] = useState(false);
@@ -200,14 +167,6 @@ export default function CatalogusPage() {
       })) : 
       true; // For non-admin users, assume versions are enabled if they exist
     
-    // Debug logging for validation
-    console.log('🔍 === PRODUCT PUBLICATION VALIDATION ===');
-    console.log('🔍 Product:', { id: product.id, code: product.code, title: product.title, status: product.status });
-    console.log('🔍 Basic info check:', { hasBasicInfo, code: !!product.code, title: !!product.title, description: !!product.description, credits: !!product.credits, cohort: !!product.cohort });
-    console.log('🔍 Version check:', { hasVersion, versionsCount: product.versions?.length, versions: product.versions });
-    console.log('🔍 Enabled version check:', { hasEnabledVersion, isAdmin, versions: product.versions?.map(v => ({ version: v.version, isEnabled: v.isEnabled })) });
-    console.log('🔍 Final validation result:', hasBasicInfo && hasVersion && hasEnabledVersion);
-    
     return hasBasicInfo && hasVersion && hasEnabledVersion;
   };
 
@@ -246,7 +205,6 @@ export default function CatalogusPage() {
 
   // Handler for saving new product
   const handleSaveNewProduct = async () => {
-    console.log('💾 Saving new product:', newProduct);
     setSavingNewProduct(true);
     setError(null);
     try {
@@ -260,19 +218,13 @@ export default function CatalogusPage() {
         status: newProduct.status,
       };
       
-      console.log('📤 Sending product data to API:', productData);
-      
       const { data: created, error } = await api.createProduct(productData);
       
-      console.log('📥 API response:', { created, error });
-      
       if (error) {
-        console.error('❌ API error:', error);
         
         // Handle authentication errors specifically
         if (error.status === 401) {
           if (error.detail.includes('Signature has expired') || error.detail.includes('Invalid Clerk token')) {
-            console.log('🔄 Token expired, attempting to refresh...');
             try {
               // Try to refresh the token
               await api.refreshToken();
@@ -280,7 +232,7 @@ export default function CatalogusPage() {
               setError('Je sessie is verlengd. Probeer het product opnieuw op te slaan.');
               return; // Don't throw error, let user retry
             } catch (refreshError) {
-              console.error('❌ Failed to refresh token:', refreshError);
+              // console.error('❌ Failed to refresh token:', refreshError);
               toast.error('Je sessie is verlopen. Log opnieuw in.');
               setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
               return;
@@ -298,23 +250,17 @@ export default function CatalogusPage() {
         throw new Error(error.detail || 'Failed to add product');
       }
       
-      console.log('✅ Product created successfully:', created);
-      
-      // Check if product already exists to prevent duplicates
       setProducts((prev) => {
         const exists = prev.some(product => product.id === (created as any).id);
         if (exists) {
-          console.log('⚠️ Product already exists in state, not adding duplicate');
           return prev; // Don't add if already exists
         }
-        console.log('➕ Adding new product to state');
         return [(created as any), ...prev];
       });
       
       handleClearNewProduct();
-      console.log('🎉 New product form cleared');
     } catch (err) {
-      console.error('💥 Error saving product:', err);
+      // console.error('💥 Error saving product:', err);
       setError(err instanceof Error ? err.message : 'Failed to add product');
     } finally {
       setSavingNewProduct(false);
@@ -337,11 +283,9 @@ export default function CatalogusPage() {
     // Refresh token every 3 minutes (before the 4-minute cache expires)
     const tokenRefreshInterval = setInterval(async () => {
       try {
-        console.log('🔄 Proactively refreshing token...');
         await api.refreshToken();
-        console.log('✅ Token refreshed proactively');
       } catch (error) {
-        console.warn('⚠️ Failed to refresh token proactively:', error);
+        // console.warn('⚠️ Failed to refresh token proactively:', error);
       }
     }, 3 * 60 * 1000); // 3 minutes
     
@@ -358,24 +302,12 @@ export default function CatalogusPage() {
     // Generate request key for deduplication
     const requestKey = getRequestKey(pageNum, currentSearchTerm, filter);
     
-    console.log('📡 === PRODUCTS FETCH START ===');
-    console.log('📡 Fetching products:', { pageNum, append, searchTerm: currentSearchTerm, filter, requestKey });
-    console.log('📡 Current products state:', { 
-      currentProductsCount: products.length, 
-      currentProductIds: products.map((p: ExamProduct) => p.id),
-      loading,
-      loadingMore 
-    });
-    
     // Check if this exact request is already in progress
     if (activeRequestRef.current && requestKeyRef.current === requestKey) {
-      console.log('🔄 Request already in progress for key:', requestKey, '- waiting for completion');
       try {
         const result = await activeRequestRef.current;
-        console.log('✅ Reused existing request result');
         return result;
       } catch (error) {
-        console.log('❌ Existing request failed, proceeding with new request');
       }
     }
     
@@ -387,26 +319,13 @@ export default function CatalogusPage() {
       requestKeyRef.current = requestKey;
       activeRequestRef.current = api.listProducts(pageNum, PAGE_SIZE, currentSearchTerm, filter);
       
-      console.log('📡 Making API call to listProducts...');
       const { data, error: fetchError } = await activeRequestRef.current;
       
-      console.log('📡 === API RESPONSE RECEIVED ===');
-      console.log('📡 Raw API response:', data);
-      console.log('📡 Response structure:', {
-        hasData: !!data,
-        productsCount: (data as any)?.products?.length || 0,
-        total: (data as any)?.total,
-        hasMore: (data as any)?.hasMore,
-        page: (data as any)?.page
-      });
-      
       if (fetchError) {
-        console.error('❌ API error:', fetchError);
         
         // Handle authentication errors specifically
         if (fetchError.status === 401) {
           if (fetchError.detail.includes('Signature has expired') || fetchError.detail.includes('Invalid Clerk token')) {
-            console.log('🔄 Token expired during product fetch, attempting to refresh...');
             try {
               // Try to refresh the token
               await api.refreshToken();
@@ -418,24 +337,12 @@ export default function CatalogusPage() {
               }
               // Process the retry result
               const retryData = retryResult.data;
-              console.log('📡 Retry successful, processing retry data...');
               setProducts(prev => {
                 if (append) {
                   const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
                   const newProducts = ((retryData as any).products || []).filter((p: any) => !existingIds.has(p.id));
-                  console.log('📥 Retry - Appending products:', { 
-                    previousCount: prev.length, 
-                    newProductsCount: newProducts.length, 
-                    totalAfterAppend: prev.length + newProducts.length,
-                    newProductIds: newProducts.map((p: any) => p.id)
-                  });
                   return [...prev, ...newProducts];
                 } else {
-                  console.log('📥 Retry - Replacing products:', { 
-                    previousCount: prev.length, 
-                    newCount: (retryData as any)?.products?.length || 0,
-                    newProductIds: ((retryData as any)?.products || []).map((p: any) => p.id)
-                  });
                   return ((retryData as any).products || []);
                 }
               });
@@ -443,7 +350,7 @@ export default function CatalogusPage() {
               setPage((retryData as any).page);
               return; // Successfully handled, exit early
             } catch (refreshError) {
-              console.error('❌ Failed to refresh token during product fetch:', refreshError);
+              // console.error('❌ Failed to refresh token during product fetch:', refreshError);
               toast.error('Je sessie is verlopen. Log opnieuw in.');
               setError('Je sessie is verlopen. Log opnieuw in om door te gaan.');
               setProducts([]);
@@ -464,114 +371,32 @@ export default function CatalogusPage() {
         throw new Error(`Failed to fetch products: ${fetchError.detail}`);
       }
       
-      console.log('✅ API response successful, processing data...');
-      console.log('✅ Data to be processed:', {
-        productsCount: (data as any)?.products?.length || 0, 
-        total: (data as any)?.total,
-        hasMore: (data as any)?.hasMore,
-        products: (data as any)?.products?.map((p: any) => ({ id: p.id, code: p.code, title: p.title }))
-      });
-      
-      // Log the setProducts call details
-      console.log('📥 === SETTING PRODUCTS STATE ===');
-      console.log('📥 Current products before update:', {
-        count: products.length,
-        ids: products.map((p: ExamProduct) => p.id)
-      });
-      console.log('📥 New products from API:', {
-        count: (data as any)?.products?.length || 0,
-        ids: ((data as any)?.products || []).map((p: any) => p.id)
-      });
-      console.log('📥 Operation type:', append ? 'APPEND' : 'REPLACE');
-      
       setProducts(prev => {
-        console.log('📥 === INSIDE setProducts CALLBACK ===');
-        console.log('📥 Previous products:', {
-          count: prev.length,
-          ids: prev.map((p: ExamProduct) => p.id)
-        });
-        
         let result;
         if (append) {
           // When appending, filter out any duplicates
           const existingIds = new Set(prev.map((p: ExamProduct) => p.id));
           const newProducts = ((data as any).products || []).filter((p: any) => !existingIds.has(p.id));
-          console.log('📥 Appending products:', { 
-            previousCount: prev.length, 
-            newProductsCount: newProducts.length, 
-            totalAfterAppend: prev.length + newProducts.length,
-            newProductIds: newProducts.map((p: any) => p.id)
-          });
-          result = [...prev, ...newProducts];
-          console.log('📥 Final result after append:', {
-            count: result.length,
-            ids: result.map((p: ExamProduct) => p.id)
-          });
+          return [...prev, ...newProducts];
         } else {
           // When replacing, use the new data directly
-          result = ((data as any).products || []);
-          console.log('📥 Replacing products:', { 
-            previousCount: prev.length, 
-            newCount: result.length,
-            newProductIds: result.map((p: any) => p.id)
-          });
-          console.log('📥 Final result after replace:', {
-            count: result.length,
-            ids: result.map((p: any) => p.id)
-          });
+          return ((data as any).products || []);
         }
-        
-        // Debug: Log the structure of products to check for isEnabled property
-        console.log('🔍 === PRODUCT STRUCTURE DEBUG ===');
-        result.forEach((product: any, index: number) => {
-          console.log(`🔍 Product ${index + 1}:`, {
-            id: product.id,
-            code: product.code,
-            title: product.title,
-            status: product.status,
-            versions: product.versions?.map((v: any) => ({
-              version: v.version,
-              isEnabled: v.isEnabled,
-              is_enabled: v.is_enabled, // Check if database field is present
-              hasIsEnabled: 'isEnabled' in v,
-              hasIsEnabledUnderscore: 'is_enabled' in v,
-              allKeys: Object.keys(v)
-            }))
-          });
-        });
-        
-        return result;
       });
       
       const newHasMore = (data as any)?.hasMore;
-      console.log('📊 === UPDATING PAGINATION STATE ===');
-      console.log('📊 Pagination state update:', { 
-        currentPage: page, 
-        hasMore: newHasMore, 
-        totalProducts: (data as any)?.total,
-        currentProductsCount: (data as any)?.products?.length || 0
-      });
       
       setHasMore(newHasMore);
       setPage((data as any).page);
       
-      console.log('✅ === PRODUCTS FETCH COMPLETED ===');
-      console.log('✅ Final state after update:', {
-        productsCount: products.length,
-        hasMore: newHasMore,
-        page: (data as any).page
-      });
-      
     } catch (err) {
-      console.error('💥 === PRODUCTS FETCH ERROR ===');
-      console.error('Error fetching products:', err);
+      // console.error('💥 === PRODUCTS FETCH ERROR ===');
+      // console.error('Error fetching products:', err);
       setError('Failed to load exam products');
       setProducts([]);
       setHasMore(false);
       setPage(1);
     } finally {
-      console.log('🧹 === CLEANING UP LOADING STATES ===');
-      console.log('🧹 Setting loading states to false');
       setLoading(false);
       setLoadingMore(false);
       setSearchLoading(false);
@@ -584,7 +409,6 @@ export default function CatalogusPage() {
 
   // Debounced search handler
   const handleSearchChange = useCallback((value: string) => {
-    console.log('🔍 Search input changed:', value);
     setSearchTerm(value);
     
     // Clear previous timeout
@@ -597,7 +421,6 @@ export default function CatalogusPage() {
     
     // Debounce the search API call
     searchTimeoutRef.current = setTimeout(() => {
-      console.log('🔍 Executing search for:', value);
       setSearchLoading(false);
       
       // Only search if we have a value or if clearing search
@@ -641,8 +464,6 @@ export default function CatalogusPage() {
   // Fetch products when filter changes
   useEffect(() => {
     if (hasRole && initialFetchMadeRef.current) {
-      console.log('🔄 Filter changed to:', filter);
-      
       // Debounce filter changes to prevent rapid API calls
       const filterTimeout = setTimeout(() => {
         fetchProductsWithSearch(1, false);
@@ -664,15 +485,11 @@ export default function CatalogusPage() {
   // Infinite scroll observer (fetch next page from backend)
   useEffect(() => {
     if (!hasMore || loadingMore || loading) {
-      console.log('🔄 Infinite scroll: skipping due to conditions', { hasMore, loadingMore, loading });
       return;
     }
     
-    console.log('👁️ Setting up infinite scroll observer for page:', page);
-    
     const observer = new window.IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
-        console.log('📱 Infinite scroll triggered for page:', page + 1);
         setLoadingMore(true);
         fetchProductsWithSearch(page + 1, true);
       }
@@ -681,11 +498,9 @@ export default function CatalogusPage() {
     // Observe both desktop and mobile observer refs
     if (observerRef.current) {
       observer.observe(observerRef.current);
-      console.log('👁️ Desktop observer ref attached');
     }
     if (mobileObserverRef.current) {
       observer.observe(mobileObserverRef.current);
-      console.log('👁️ Mobile observer ref attached');
     }
     
     return () => {
@@ -696,20 +511,7 @@ export default function CatalogusPage() {
 
   // Products are now sorted by code column in the backend and filtered by user role
   const filteredAndSortedProducts = useMemo(() => {
-    // Debug logging (commented out to reduce console noise)
-    // console.log('🎯 === FILTERED PRODUCTS CALCULATION ===');
-    // console.log('🎯 Input products:', {
-    //   count: filteredProducts.length,
-    //   ids: filteredProducts.map(p => p.id),
-    //   isAdmin
-    // });
-    
     const result = filteredProducts;
-    
-    // console.log('🎯 Filtered result:', {
-    //   count: result.length,
-    //   ids: result.map(p => p.id)
-    // });
     
     return result;
   }, [filteredProducts, isAdmin]);
@@ -718,22 +520,18 @@ export default function CatalogusPage() {
 
   // Show modal, then confirm purchase
   const handlePurchase = (productId: string) => {
-    console.log('🛒 Purchase button clicked for product:', productId);
     setPurchaseConfirmId(productId);
   };
 
   const handleConfirmPurchase = async () => {
     if (!purchaseConfirmId) return;
-    console.log('🛒 Starting purchase for product:', purchaseConfirmId);
     setPurchasingProduct(purchaseConfirmId);
     setPurchaseLoading(true);
     setError(null);
     try {
       const token = await getToken();
-      console.log('🔑 Got auth token:', !!token);
       
       const requestBody = { productId: purchaseConfirmId };
-      console.log('📤 Sending purchase request:', requestBody);
       
       const response = await fetch(`/api/v1/catalog/purchase`, {
         method: 'POST',
@@ -744,12 +542,9 @@ export default function CatalogusPage() {
         body: JSON.stringify(requestBody),
       });
       
-      console.log('📥 Purchase response status:', response.status);
-      console.log('📥 Purchase response headers:', Object.fromEntries(response.headers.entries()));
-      
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ Purchase failed:', errorData);
+        // console.error('❌ Purchase failed:', errorData);
         if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
           setShowCreditsError(true);
           setPurchaseConfirmId(null);
@@ -759,7 +554,6 @@ export default function CatalogusPage() {
       }
       
       const result = await response.json();
-      console.log('✅ Purchase successful:', result);
       
       // Update the product to show as purchased
       setProducts(prev => prev.map(product =>
@@ -770,12 +564,9 @@ export default function CatalogusPage() {
       setPurchaseConfirmId(null);
       
       // Refresh credit balance to update header
-      console.log('🔄 Refreshing credits...');
       await refreshCredits();
-      console.log('✅ Credits refreshed');
-      
     } catch (err) {
-      console.error('💥 Purchase error:', err);
+      // console.error('💥 Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Failed to purchase product');
     } finally {
       setPurchasingProduct(null);
@@ -808,11 +599,6 @@ export default function CatalogusPage() {
       const selectedVersion = selectedVersions[productId];
       if (selectedVersion) {
         selectedVersionId = selectedVersion.versionId;
-        console.log('🔍 Using selected version for download:', {
-          productId,
-          selectedVersion: selectedVersion.versionString,
-          selectedVersionId: selectedVersion.versionId
-        });
       } else if (product.versions && product.versions.length > 0) {
         // Fallback: automatically select the latest enabled version
         latestEnabledVersion = product.versions.find(v => {
@@ -825,44 +611,31 @@ export default function CatalogusPage() {
         // If the version doesn't have an ID, we need to fetch the product versions to get the actual ID
         if (!latestEnabledVersion.id) {
           try {
-            console.log('🔍 Version has no ID, fetching product versions to get actual version ID...');
             const { data: versionsData, error: versionsError } = await api.getProductVersions(productId);
             
             if (versionsError) {
-              console.warn('⚠️ Failed to fetch product versions, using version string as fallback:', versionsError);
+              // console.warn('⚠️ Failed to fetch product versions, using version string as fallback:', versionsError);
               selectedVersionId = latestEnabledVersion.version;
             } else if (versionsData && Array.isArray(versionsData)) {
               // Find the matching version by version string
               const matchingVersion = versionsData.find((v: any) => v.version === latestEnabledVersion.version);
               if (matchingVersion && matchingVersion.id) {
                 selectedVersionId = matchingVersion.id;
-                console.log('✅ Found version ID from API:', {
-                  version: latestEnabledVersion.version,
-                  versionId: matchingVersion.id
-                });
               } else {
-                console.warn('⚠️ Version not found in API response, using version string as fallback');
+                // console.warn('⚠️ Version not found in API response, using version string as fallback');
                 selectedVersionId = latestEnabledVersion.version;
               }
             } else {
-              console.warn('⚠️ Invalid versions data from API, using version string as fallback');
+              // console.warn('⚠️ Invalid versions data from API, using version string as fallback');
               selectedVersionId = latestEnabledVersion.version;
             }
           } catch (error) {
-            console.warn('⚠️ Error fetching product versions, using version string as fallback:', error);
+            // console.warn('⚠️ Error fetching product versions, using version string as fallback:', error);
             selectedVersionId = latestEnabledVersion.version;
           }
         } else {
           selectedVersionId = latestEnabledVersion.id;
         }
-        
-        console.log('🔍 Auto-selected version for download:', {
-          productId,
-          selectedVersion: latestEnabledVersion.version,
-          selectedVersionId,
-          isLatest: latestEnabledVersion.isLatest,
-          isEnabled: latestEnabledVersion.isEnabled || latestEnabledVersion.is_enabled
-        });
       }
     }
     
@@ -923,7 +696,7 @@ export default function CatalogusPage() {
       const result = await response.json();
       // Optionally show a success message
     } catch (err) {
-      console.error('Feedback submission error:', err);
+      // console.error('Feedback submission error:', err);
       // Optionally show an error message
     } finally {
       setFeedbackOpen(false);
@@ -946,7 +719,7 @@ export default function CatalogusPage() {
       setDeleteProductId(null);
       toast.success('Product successfully deleted');
     } catch (error) {
-      console.error('Error deleting product:', error);
+      // console.error('Error deleting product:', error);
       setError(error instanceof Error ? error.message : 'Failed to delete product');
     } finally {
       setDeleting(false);
@@ -1008,7 +781,6 @@ export default function CatalogusPage() {
 
   // Debug purchase modal state
   useEffect(() => {
-    console.log('🔍 Purchase modal state changed:', { purchaseConfirmId, purchaseProduct: !!purchaseProduct });
   }, [purchaseConfirmId, purchaseProduct]);
 
   // Loading skeleton component for better perceived performance
@@ -1033,23 +805,19 @@ export default function CatalogusPage() {
     const checkWelcomeBanner = async () => {
       if (!isSignedIn || !user) return;
       
-      console.log('🔍 Checking welcome banner status for user:', user.id);
-      
       try {
         const { data, error } = await api.getWelcomeVoucherStatus();
 
         if (error) {
-          console.error('❌ Error checking welcome banner status:', error);
+          // console.error('❌ Error checking welcome banner status:', error);
           return;
         }
 
-        console.log('📊 Welcome banner API response:', data);
         const shouldShow = (data as any).should_show_banner;
-        console.log('🎯 Should show welcome banner:', shouldShow);
         
         setShowWelcomeBanner(shouldShow);
       } catch (error) {
-        console.error('💥 Exception checking welcome banner status:', error);
+        // console.error('💥 Exception checking welcome banner status:', error);
       } finally {
         setWelcomeBannerLoading(false);
       }
@@ -1067,13 +835,13 @@ export default function CatalogusPage() {
         const { error } = await api.markFirstLogin();
         
         if (error) {
-          console.error('Error marking first login:', error);
+          // console.error('Error marking first login:', error);
           // Don't show error to user for first login marking - it's not critical
         } else {
-          console.log('✅ First login marked successfully');
+          // console.log('✅ First login marked successfully');
         }
       } catch (error) {
-        console.error('Exception marking first login:', error);
+        // console.error('Exception marking first login:', error);
         // Don't show error to user for first login marking - it's not critical
       }
     };
@@ -1107,12 +875,6 @@ export default function CatalogusPage() {
 
         {/* Welcome Banner */}
         {(() => {
-          // Debug logging (commented out to reduce console noise)
-          // console.log('🎨 Welcome banner render state:', { 
-          //   welcomeBannerLoading, 
-          //   showWelcomeBanner, 
-          //   shouldRender: !welcomeBannerLoading && showWelcomeBanner 
-          // });
           return !welcomeBannerLoading && showWelcomeBanner ? (
             <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
           ) : null;
@@ -1371,13 +1133,6 @@ export default function CatalogusPage() {
                       </TableRow>
                     ) : (
                       filteredAndSortedProducts.map((product) => {
-                        // Debug logging (commented out to reduce console noise)
-                        // console.log('🎨 === RENDERING PRODUCT ===', {
-                        //   id: product.id,
-                        //   code: product.code,
-                        //   title: product.title,
-                        //   status: product.status
-                        // });
                         return (
                         <TableRow key={product.id}>
                           <TableCell className="font-mono font-medium">
@@ -1738,7 +1493,6 @@ export default function CatalogusPage() {
               id="purchase-terms"
               checked={purchaseTermsChecked}
               onChange={e => {
-                console.log('☑️ Purchase terms checkbox changed:', e.target.checked);
                 setPurchaseTermsChecked(e.target.checked);
               }}
               className="accent-examen-cyan w-5 h-5"
@@ -1762,8 +1516,6 @@ export default function CatalogusPage() {
               variant="default"
               className="bg-examen-cyan text-white"
               onClick={() => {
-                console.log('🔘 Confirm purchase button clicked');
-                console.log('🔍 Button state:', { purchaseLoading, purchaseTermsChecked });
                 handleConfirmPurchase();
               }}
               disabled={purchaseLoading || !purchaseTermsChecked}

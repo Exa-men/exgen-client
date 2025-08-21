@@ -87,12 +87,12 @@ export default function UsersPage() {
       
       if (response.error) {
         if (response.error.status === 403) {
-          console.error('Access denied: Admin privileges required');
+          // console.error('Access denied: Admin privileges required');
           alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
           router.push('/');
           return;
         }
-        console.error('Failed to fetch users:', response.error);
+        // console.error('Failed to fetch users:', response.error);
         return;
       }
 
@@ -100,7 +100,7 @@ export default function UsersPage() {
         setUsers((response.data as any).users || []);
       }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      // console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export default function UsersPage() {
       const response = await api.getWelcomeVoucherStats();
       
       if (response.error) {
-        console.error('Error fetching welcome voucher stats:', response.error);
+        // console.error('Error fetching welcome voucher stats:', response.error);
         return;
       }
 
@@ -119,7 +119,7 @@ export default function UsersPage() {
         setWelcomeVoucherStats(response.data as any);
       }
     } catch (error) {
-      console.error('Error fetching welcome voucher stats:', error);
+      // console.error('Error fetching welcome voucher stats:', error);
     }
   };
 
@@ -152,7 +152,7 @@ export default function UsersPage() {
       
       toast.success('User role updated successfully');
     } catch (error) {
-      console.error('Error updating user role:', error);
+      // console.error('Error updating user role:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update user role');
     } finally {
       setUpdatingRole(null);
@@ -194,7 +194,7 @@ export default function UsersPage() {
       
       toast.success('User credits updated successfully');
     } catch (error) {
-      console.error('Error updating user credits:', error);
+      // console.error('Error updating user credits:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update user credits');
     } finally {
       setUpdatingCredits(null);
@@ -230,7 +230,7 @@ export default function UsersPage() {
       
       toast.success('User email updated successfully');
     } catch (error) {
-      console.error('Error updating user email:', error);
+      // console.error('Error updating user email:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update user email');
     } finally {
       setUpdatingEmail(null);
@@ -266,7 +266,7 @@ export default function UsersPage() {
       
       toast.success('User school updated successfully');
     } catch (error) {
-      console.error('Error updating user school:', error);
+      // console.error('Error updating user school:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to update user school');
     } finally {
       setUpdatingSchool(null);
@@ -302,7 +302,7 @@ export default function UsersPage() {
       
       toast.success('User department updated successfully');
     } catch (err) {
-      console.error('Error updating user department:', err);
+      // console.error('Error updating user department:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update user department');
     } finally {
       setUpdatingUser(null);
@@ -332,7 +332,7 @@ export default function UsersPage() {
       
       toast.success(`User ${userToDelete.first_name} ${userToDelete.last_name} deleted successfully`);
     } catch (error) {
-      console.error('Error deleting user:', error);
+      // console.error('Error deleting user:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
       toast.error(errorMessage);
       

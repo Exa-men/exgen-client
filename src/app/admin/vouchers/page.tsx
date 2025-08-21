@@ -54,7 +54,7 @@ export default function VouchersPage() {
   const router = useRouter();
   const { registerVoucherRefresh, registerVoucherUpdateCallback } = useCredits();
   
-  console.log('🎫 VouchersPage: Component rendered, isSignedIn:', isSignedIn);
+  // console.log('🎫 VouchersPage: Component rendered, isSignedIn:', isSignedIn);
   
   // Removed useRole hook - letting backend handle admin checks
   
@@ -77,14 +77,14 @@ export default function VouchersPage() {
 
   // Function to immediately update a voucher's status (for optimistic updates)
   const updateVoucherStatusImmediately = useCallback((voucherId: string, updates: any) => {
-    console.log('🎫 VouchersPage: updateVoucherStatusImmediately called with:', { voucherId, updates });
+    // console.log('🎫 VouchersPage: updateVoucherStatusImmediately called with:', { voucherId, updates });
     
     setVouchers(prev => {
-      console.log('🎫 VouchersPage: Current vouchers state:', prev.length, 'vouchers');
+      // console.log('🎫 VouchersPage: Current vouchers state:', prev.length, 'vouchers');
       
       return prev.map(voucher => {
         if (voucher.id === voucherId) {
-          console.log('🎫 VouchersPage: Found voucher to update:', voucher);
+          // console.log('🎫 VouchersPage: Found voucher to update:', voucher);
           
           // Update only the specific voucher with the new data
           const updatedVoucher = {
@@ -97,10 +97,10 @@ export default function VouchersPage() {
             user_who_used_name: updates.user_who_used_name || voucher.user_who_used_name
           };
           
-          console.log('🎫 VouchersPage: Voucher updated in admin table:', {
-            before: { id: voucher.id, is_used: voucher.is_used, status: voucher.is_used ? 'Gebruikt' : 'Beschikbaar' },
-            after: { id: updatedVoucher.id, is_used: updatedVoucher.is_used, status: updatedVoucher.is_used ? 'Gebruikt' : 'Beschikbaar' }
-          });
+          // console.log('🎫 VouchersPage: Voucher updated in admin table:', {
+          //   before: { id: voucher.id, is_used: voucher.is_used, status: voucher.is_used ? 'Gebruikt' : 'Beschikbaar' },
+          //   after: { id: updatedVoucher.id, is_used: updatedVoucher.is_used, status: updatedVoucher.is_used ? 'Gebruikt' : 'Beschikbaar' }
+          // });
           
           return updatedVoucher;
         }
@@ -133,9 +133,9 @@ export default function VouchersPage() {
 
   // Register voucher refresh callback
   useEffect(() => {
-    console.log('🎫 VouchersPage: useEffect for voucher refresh callback, isSignedIn:', isSignedIn);
+    // console.log('🎫 VouchersPage: useEffect for voucher refresh callback, isSignedIn:', isSignedIn);
     if (isSignedIn) {
-      console.log('🎫 VouchersPage: Registering voucher refresh callback');
+      // console.log('🎫 VouchersPage: Registering voucher refresh callback');
       const unregister = registerVoucherRefresh(fetchVouchers);
       return unregister;
     }
@@ -143,35 +143,35 @@ export default function VouchersPage() {
 
   // Register immediate voucher update callback for optimistic UI
   useEffect(() => {
-    console.log('🎫 VouchersPage: useEffect for voucher update callback, isSignedIn:', isSignedIn);
+    // console.log('🎫 VouchersPage: useEffect for voucher update callback, isSignedIn:', isSignedIn);
     if (isSignedIn) {
-      console.log('🎫 VouchersPage: Registering voucher update callback');
+      // console.log('🎫 VouchersPage: Registering voucher update callback');
       const unregister = registerVoucherUpdateCallback(updateVoucherStatusImmediately);
       return unregister;
     }
   }, [isSignedIn, registerVoucherUpdateCallback, updateVoucherStatusImmediately]);
 
   const fetchVouchers = async () => {
-    console.log('🎫 VouchersPage: fetchVouchers called');
+    // console.log('🎫 VouchersPage: fetchVouchers called');
     setLoading(true);
     try {
       const { data, error } = await api.getAdminVouchers();
       
       if (error) {
         if (error.status === 403) {
-          console.error('Access denied: Admin privileges required');
+          // console.error('Access denied: Admin privileges required');
           alert('Je hebt geen toegang tot deze pagina. Admin rechten vereist.');
           router.push('/');
           return;
         }
-        console.error('Failed to fetch vouchers:', error);
+        // console.error('Failed to fetch vouchers:', error);
         return;
       }
 
-      console.log('🎫 VouchersPage: Vouchers fetched successfully:', (data as any).vouchers?.length || 0, 'vouchers');
+      // console.log('🎫 VouchersPage: Vouchers fetched successfully:', (data as any).vouchers?.length || 0, 'vouchers');
       setVouchers((data as any).vouchers || []);
     } catch (error) {
-      console.error('Error fetching vouchers:', error);
+      // console.error('Error fetching vouchers:', error);
     } finally {
       setLoading(false);
     }
@@ -207,7 +207,7 @@ export default function VouchersPage() {
       
       toast.success('Voucher created successfully');
     } catch (error) {
-      console.error('Error creating voucher:', error);
+      // console.error('Error creating voucher:', error);
       alert(error instanceof Error ? error.message : 'Failed to create voucher');
     }
   };
@@ -236,7 +236,7 @@ export default function VouchersPage() {
       
       toast.success('Voucher updated successfully');
     } catch (error) {
-      console.error('Error updating voucher:', error);
+      // console.error('Error updating voucher:', error);
       alert(error instanceof Error ? error.message : 'Failed to update voucher');
     } finally {
       setUpdatingVoucher(null);
@@ -261,7 +261,7 @@ export default function VouchersPage() {
       
       toast.success('Voucher deleted successfully');
     } catch (error) {
-      console.error('Error deleting voucher:', error);
+      // console.error('Error deleting voucher:', error);
       alert(error instanceof Error ? error.message : 'Failed to delete voucher');
     } finally {
       setDeletingVoucher(null);
@@ -274,7 +274,7 @@ export default function VouchersPage() {
       setCopiedCode(code);
       setTimeout(() => setCopiedCode(null), 2000);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      // console.error('Failed to copy to clipboard:', error);
     }
   };
 
@@ -304,7 +304,7 @@ export default function VouchersPage() {
         minute: '2-digit'
       });
     } catch (error) {
-      console.error('Error formatting date:', dateString, error);
+      // console.error('Error formatting date:', dateString, error);
       return '-';
     }
   };
@@ -326,7 +326,7 @@ export default function VouchersPage() {
       
       return <Badge variant="default">Beschikbaar</Badge>;
     } catch (error) {
-      console.error('Error checking expiration:', expiresAt, error);
+      // console.error('Error checking expiration:', expiresAt, error);
       return <Badge variant="destructive">Ongeldige datum</Badge>;
     }
   };

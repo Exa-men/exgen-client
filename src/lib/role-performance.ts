@@ -70,22 +70,17 @@ class RolePerformanceMonitor {
 
   // Get performance summary
   getPerformanceSummary(): string {
-    const hitRate = this.getCacheHitRate();
-    const duplicateRate = this.metrics.totalApiCalls > 0 
-      ? (this.metrics.duplicateRequests / this.metrics.totalApiCalls) * 100 
-      : 0;
+    const summary = {
+      totalApiCalls: this.metrics.totalApiCalls,
+      cacheHits: this.metrics.cacheHits,
+      cacheMisses: this.metrics.cacheMisses,
+      duplicateRequests: this.metrics.duplicateRequests,
+      averageResponseTime: this.metrics.averageResponseTime,
+      cacheHitRate: this.getCacheHitRate(),
+      lastUpdated: this.metrics.lastUpdated
+    };
 
-    return `
-Role Performance Summary:
-- Total API Calls: ${this.metrics.totalApiCalls}
-- Cache Hits: ${this.metrics.cacheHits}
-- Cache Misses: ${this.metrics.cacheMisses}
-- Cache Hit Rate: ${hitRate.toFixed(1)}%
-- Duplicate Requests: ${this.metrics.duplicateRequests}
-- Duplicate Rate: ${duplicateRate.toFixed(1)}%
-- Average Response Time: ${this.metrics.averageResponseTime.toFixed(2)}ms
-- Last Updated: ${new Date(this.metrics.lastUpdated).toLocaleTimeString()}
-    `.trim();
+    return JSON.stringify(summary, null, 2);
   }
 
   // Reset metrics
@@ -103,8 +98,8 @@ Role Performance Summary:
 
   // Export metrics to console
   logMetrics() {
-    console.log('🔍 Role Performance Metrics:');
-    console.log(this.getPerformanceSummary());
+    // console.log('🔍 Role Performance Metrics:');
+    // console.log(this.getPerformanceSummary());
   }
 }
 

@@ -57,11 +57,11 @@ export function useApi() {
       const token = await getToken();
       if (token) {
         tokenCache.current = { token, timestamp: now };
-        console.log('🔐 New Clerk token cached at:', new Date().toISOString());
+        // console.log('🔐 New Clerk token cached at:', new Date().toISOString());
       }
       return token;
     } catch (error) {
-      console.warn('⚠️ Failed to fetch Clerk token:', error);
+      // console.warn('⚠️ Failed to fetch Clerk token:', error);
       // Clear expired token from cache
       tokenCache.current = { token: null, timestamp: 0 };
       return null;
@@ -70,7 +70,7 @@ export function useApi() {
 
   const clearTokenCache = useCallback(() => {
     tokenCache.current = { token: null, timestamp: 0 };
-    console.log('🗑️ Token cache cleared');
+    // console.log('🗑️ Token cache cleared');
   }, []);
 
   const makeAuthenticatedRequest = useCallback(async <T>(
@@ -107,7 +107,7 @@ export function useApi() {
         
         // Handle 401 errors with automatic token refresh and retry
         if (response.status === 401 && retryCount === 0) {
-          console.log('🔄 Token expired, refreshing and retrying...');
+          // console.log('🔄 Token expired, refreshing and retrying...');
           // Clear the expired token from cache
           tokenCache.current = { token: null, timestamp: 0 };
           // Retry once with a fresh token
@@ -159,7 +159,7 @@ export function useApi() {
         
         // Handle 401 errors with automatic token refresh and retry
         if (response.status === 401 && retryCount === 0) {
-          console.log('🔄 Token expired during file upload, refreshing and retrying...');
+          // console.log('🔄 Token expired during file upload, refreshing and retrying...');
           // Clear the expired token from cache
           tokenCache.current = { token: null, timestamp: 0 };
           // Retry once with a fresh token
@@ -209,7 +209,7 @@ export function useApi() {
         
         // Handle 401 errors with automatic token refresh and retry
         if (response.status === 401 && retryCount === 0) {
-          console.log('🔄 Token expired during workflow file upload, refreshing and retrying...');
+          // console.log('🔄 Token expired during workflow file upload, refreshing and retrying...');
           // Clear the expired token from cache
           tokenCache.current = { token: null, timestamp: 0 };
           // Retry once with a fresh token
@@ -351,7 +351,7 @@ export function useApi() {
         });
       } else {
         // It's a prompt name - this is not supported by the current backend
-        console.warn('⚠️ updateWorkflowPrompt called with promptName - this is not supported by the current backend');
+        // console.warn('⚠️ updateWorkflowPrompt called with promptName - this is not supported by the current backend');
         return Promise.resolve({
           error: {
             detail: 'Updating prompts by name is not supported. Prompts must be managed as separate entities with IDs.',

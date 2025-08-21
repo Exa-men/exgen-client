@@ -89,11 +89,11 @@ async function handleRequest(
       statusText: response.statusText,
       headers: safeHeaders,
     });
-  } catch (error) {
-    console.error('Proxy error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+      } catch (error) {
+      // console.error('Proxy error:', error);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
 } 

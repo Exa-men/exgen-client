@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useClerk } from '@clerk/nextjs';
-import { clearAllUserCaches } from '../lib/utils';
+import { clearAllCaches } from '../lib/utils';
 
 /**
  * Custom hook for comprehensive sign out with complete cache clearing
@@ -9,38 +9,36 @@ import { clearAllUserCaches } from '../lib/utils';
 export const useSignOut = () => {
   const { signOut } = useClerk();
 
-  const handleSignOut = useCallback(async () => {
+  const handleSignOut = async () => {
     try {
-      console.log('🔐 Starting comprehensive sign out process...');
+      // Remove verbose logging for production
+      // console.log('🔐 Starting comprehensive sign out process...');
       
-      // Step 1: Clear all application caches
-      await clearAllUserCaches();
+      // Clear all caches first
+      await clearAllCaches();
       
-      // Step 2: Clear any remaining in-memory state
-      // This will be handled by the various context cleanup effects
+      // console.log('🔐 Cache cleanup complete, proceeding with Clerk sign out...');
       
-      // Step 3: Proceed with Clerk's sign out
-      console.log('🔐 Cache cleanup complete, proceeding with Clerk sign out...');
+      // Sign out from Clerk
       await signOut();
       
-      console.log('✅ Sign out completed successfully');
+      // console.log('✅ Sign out completed successfully');
       
     } catch (error) {
-      console.error('❌ Error during sign out:', error);
+      // console.error('❌ Error during sign out:', error);
       
-      // Fallback: try to sign out anyway
+      // Fallback: try to clear everything and redirect
       try {
-        await signOut();
-        console.log('✅ Fallback sign out completed');
+        clearAllCaches(); // Use the existing function
+        window.location.href = '/';
+        // console.log('✅ Fallback sign out completed');
       } catch (fallbackError) {
-        console.error('❌ Fallback sign out also failed:', fallbackError);
+        // console.error('❌ Fallback sign out also failed:', fallbackError);
         // Last resort: force page refresh
-        if (typeof window !== 'undefined') {
-          window.location.href = '/';
-        }
+        window.location.reload();
       }
     }
-  }, [signOut]);
+  };
 
   return {
     signOut: handleSignOut,

@@ -100,7 +100,7 @@ export function DocumentList({
         }
       }
     } catch (error) {
-      console.error('S3 verification failed:', error);
+      // console.error('S3 verification failed:', error);
     }
   };
 
@@ -110,9 +110,9 @@ export function DocumentList({
       if (isPreview) {
         try {
           await api.cleanupProductPreview(productId);
-          console.log('Cleaned up preview inconsistencies for product:', productId);
+          // console.log('Cleaned up preview inconsistencies for product:', productId);
         } catch (cleanupError) {
-          console.warn('Failed to cleanup preview inconsistencies:', cleanupError);
+          // console.warn('Failed to cleanup preview inconsistencies:', cleanupError);
           // Continue with setting preview status even if cleanup fails
         }
       }
@@ -133,7 +133,7 @@ export function DocumentList({
         toast.success('Document preview disabled');
       }
     } catch (error) {
-      console.error('Failed to set preview status:', error);
+      // console.error('Failed to set preview status:', error);
       toast.error('Failed to set preview status');
     }
   };
