@@ -45,7 +45,7 @@ const UnifiedHeader: React.FC = () => {
   // Helper to determine if a path is active
   const isActive = (href: string) => {
     if (href === '/catalogus') return pathname.startsWith('/catalogus');
-    if (href === '/agents') return pathname.startsWith('/agents');
+    if (href === '/workflows') return pathname.startsWith('/workflows');
     if (href === '/verificatie') return pathname.startsWith('/verificatie');
     if (href === '/users') return pathname.startsWith('/users');
     if (href === '/admin/credit-orders') return pathname.startsWith('/admin/credit-orders');
@@ -100,16 +100,16 @@ const UnifiedHeader: React.FC = () => {
                 {/* Admin Navigation */}
                 {isAdmin && (
                   <>
-                    <Link href="/agents">
+                    <Link href="/workflows">
                       <Button
                         variant="ghost"
                         className={
-                          isActive('/agents')
+                          isActive('/workflows')
                             ? "text-examen-cyan font-bold underline underline-offset-4"
                             : "text-gray-700 hover:text-examen-cyan transition-colors"
                         }
                       >
-                        Agents
+                        Ontwikkelen
                       </Button>
                     </Link>
                     <Link href="/users">
@@ -229,16 +229,16 @@ const UnifiedHeader: React.FC = () => {
                   {/* Admin Navigation */}
                   {isAdmin && (
                     <>
-                      <Link href="/agents">
+                      <Link href="/workflows">
                         <Button
                           variant="ghost"
                           className={
-                            isActive('/agents')
+                            isActive('/workflows')
                               ? "text-examen-cyan font-bold underline underline-offset-4 w-full justify-start"
                               : "text-gray-700 hover:text-examen-cyan transition-colors w-full justify-start"
                           }
                         >
-                          Agents
+                          Ontwikkelen
                         </Button>
                       </Link>
                       <Link href="/users">

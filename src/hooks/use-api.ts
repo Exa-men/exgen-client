@@ -185,7 +185,55 @@ export function useApi() {
     }
   }, [getCachedToken]);
 
+  const uploadWorkflowFile = useCallback(async (file: File, templateName: string, retryCount = 0) => {
+    try {
+      const token = await getCachedToken(retryCount > 0);
+      if (!token) {
+        return { error: { detail: 'No authentication token available', status: 401 } };
+      }
 
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('template_name', templateName);
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/workflows/upload-template`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        
+        // Handle 401 errors with automatic token refresh and retry
+        if (response.status === 401 && retryCount === 0) {
+          // console.log('🔄 Token expired during workflow file upload, refreshing and retrying...');
+          // Clear the expired token from cache
+          tokenCache.current = { token: null, timestamp: 0 };
+          // Retry once with a fresh token
+          return uploadWorkflowFile(file, templateName, retryCount + 1);
+        }
+        
+        return {
+          error: {
+            detail: errorData.detail || `Upload failed: ${response.status}`,
+            status: response.status,
+          },
+        };
+      }
+
+      const data = await response.json();
+      return { data };
+    } catch (error) {
+      return {
+        error: {
+          detail: error instanceof Error ? error.message : 'Upload failed',
+        },
+      };
+    }
+  }, [getCachedToken]);
 
   // Use useMemo to prevent the API object from being recreated on every render
   return useMemo(() => ({
@@ -273,7 +321,73 @@ export function useApi() {
       body: JSON.stringify(data),
     }),
 
-
+    // Workflow operations
+    getWorkflowGroups: () => makeAuthenticatedRequest('/api/v1/workflows/groups'),
+    createWorkflowGroup: (data: any) => makeAuthenticatedRequest('/api/v1/workflows/groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    updateWorkflowGroup: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+    deleteWorkflowGroup: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'DELETE',
+    }),
+    getWorkflowPrompts: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts`),
+    createWorkflowPrompt: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    updateWorkflowPrompt: (groupId: string, promptIdOrName: string, data: any) => {
+      // Check if this is a prompt ID (UUID format) or a prompt name
+      const isPromptId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(promptIdOrName);
+      
+      if (isPromptId) {
+        // It's a prompt ID, use the standard endpoint
+        return makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptIdOrName}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        });
+      } else {
+        // It's a prompt name - this is not supported by the current backend
+        // console.warn('⚠️ updateWorkflowPrompt called with promptName - this is not supported by the current backend');
+        return Promise.resolve({
+          error: {
+            detail: 'Updating prompts by name is not supported. Prompts must be managed as separate entities with IDs.',
+            status: 400
+          }
+        });
+      }
+    },
+    deleteWorkflowPrompt: (groupId: string, promptId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/prompts/${promptId}`, {
+      method: 'DELETE',
+    }),
+    runWorkflow: (groupId: string, data: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/run`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    getWorkflowRuns: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/runs`),
+    getWorkflowRun: (groupId: string, runId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/runs/${runId}`),
+    updateWorkflowBaseInstructions: (groupId: string, content: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify({ base_instructions: content }),
+    }),
+    getAvailableModels: () => makeAuthenticatedRequest('/api/v1/workflows/models/available'),
+    
+    // Workflow group specific operations
+    renameWorkflowGroup: (groupId: string, name: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+    activateWorkflowGroup: (groupId: string) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: true }),
+    }),
+    updateWorkflowConfig: (groupId: string, config: any) => makeAuthenticatedRequest(`/api/v1/workflows/groups/${groupId}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(config),
+    }),
 
 
 
@@ -409,6 +523,7 @@ export function useApi() {
     
     // File upload operations
     uploadFile,
+    uploadWorkflowFile,
 
     // Document management operations
     setPreviewDocument: (documentId: string, isPreview: boolean) => makeAuthenticatedRequest(`/api/v1/catalog/documents/${documentId}/preview`, {
@@ -440,6 +555,8 @@ export function useApi() {
       method: 'POST',
     }),
 
-
-  }), [makeAuthenticatedRequest, uploadFile, getCachedToken, clearTokenCache]);
+    // Workflow configuration operations
+    getWorkflowStepsConfig: () => makeAuthenticatedRequest('/api/v1/workflows/steps-config'),
+    getJobStatus: (jobId: string) => makeAuthenticatedRequest(`/api/v1/workflows/jobs/${jobId}/detailed-status`),
+  }), [makeAuthenticatedRequest, uploadFile, uploadWorkflowFile, getCachedToken, clearTokenCache]);
 } 
