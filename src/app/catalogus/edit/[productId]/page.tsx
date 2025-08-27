@@ -2112,6 +2112,14 @@ export default function EditExamPage() {
         )
       } : null);
 
+      // Update lastSavedData to reflect the new version status state
+      setLastSavedData(JSON.stringify(product ? {
+        ...product,
+        versions: product.versions.map(v => 
+          v.id === versionId ? { ...v, isEnabled } : v
+        )
+      } : null));
+
       // No need to update versionStates since we're using version.isEnabled directly
 
       console.log('Toggle successful:', { versionId, isEnabled });
@@ -2163,6 +2171,11 @@ export default function EditExamPage() {
 
   // Enhanced unsaved changes detection
   const hasProductChanges = (): boolean => {
+    // Disable product change detection during version creation
+    if (isCreatingVersion) {
+      return false;
+    }
+    
     if (!product || !lastSavedData) return false;
     const currentData = JSON.stringify(product);
     return lastSavedData !== currentData;
@@ -2179,6 +2192,11 @@ export default function EditExamPage() {
   };
 
   const checkUnsavedChanges = (): boolean => {
+    // Disable unsaved changes detection during version creation
+    if (isCreatingVersion) {
+      return false;
+    }
+    
     // Check product-level changes
     const hasProductUnsavedChanges = saveStatus === 'dirty' || saveStatus === 'saving' || hasProductChanges();
     
