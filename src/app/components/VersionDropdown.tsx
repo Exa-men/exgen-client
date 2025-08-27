@@ -94,9 +94,6 @@ export default function VersionDropdown({
     return (
       <Badge variant="outline" className="font-mono">
         {latestVersion.version}
-        {latestVersion.isLatest && (
-          <span className="ml-1 text-xs text-gray-500">(Nieuwste)</span>
-        )}
       </Badge>
     );
   }
@@ -127,9 +124,6 @@ export default function VersionDropdown({
             <div className="flex flex-col">
               <div className="flex items-center space-x-2">
                 <span className="font-mono font-medium">{version.version}</span>
-                {version.isLatest && (
-                  <Badge variant="secondary" className="text-xs">Nieuwste</Badge>
-                )}
               </div>
               {formatDate(version.releaseDate) && (
                 <span className="text-xs text-gray-500">
