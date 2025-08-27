@@ -72,7 +72,6 @@ export default function CatalogusPage() {
   const mobileObserverRef = useRef<HTMLDivElement | null>(null);
   const PAGE_SIZE = 10;
   const [error, setError] = useState<string | null>(null);
-  const [showCreditsError, setShowCreditsError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(null);
   // State for purchase confirmation modal
@@ -98,6 +97,8 @@ export default function CatalogusPage() {
   const [deleting, setDeleting] = useState(false);
   // State for purchase terms checkbox
   const [purchaseTermsChecked, setPurchaseTermsChecked] = useState(false);
+  // State for insufficient credits error in purchase modal
+  const [purchaseModalError, setPurchaseModalError] = useState<string | null>(null);
   
   // State for status updates
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
@@ -521,6 +522,7 @@ export default function CatalogusPage() {
   // Show modal, then confirm purchase
   const handlePurchase = (productId: string) => {
     setPurchaseConfirmId(productId);
+    setPurchaseModalError(null); // Reset any previous errors
   };
 
   const handleConfirmPurchase = async () => {
@@ -528,6 +530,7 @@ export default function CatalogusPage() {
     setPurchasingProduct(purchaseConfirmId);
     setPurchaseLoading(true);
     setError(null);
+    setPurchaseModalError(null); // Reset modal error
     try {
       const token = await getToken();
       
@@ -544,13 +547,40 @@ export default function CatalogusPage() {
       
       if (!response.ok) {
         const errorData = await response.json();
-        // console.error('❌ Purchase failed:', errorData);
-        if (errorData.error && errorData.error.toLowerCase().includes('insufficient credits')) {
-          setShowCreditsError(true);
-          setPurchaseConfirmId(null);
+        
+        // Check multiple possible error field names
+        const errorMessage = errorData.error || errorData.detail || errorData.message || '';
+        
+        // Handle specific error cases
+        if (errorMessage && (errorMessage.toLowerCase().includes('insufficient credits') || errorMessage.toLowerCase().includes('onvoldoende credits'))) {
+          setPurchaseModalError('Je hebt onvoldoende credits om dit exameninstrument in te kopen.');
           return;
         }
-        throw new Error(errorData.error || 'Purchase failed');
+        
+        if (errorMessage && errorMessage.toLowerCase().includes('already purchased')) {
+          setPurchaseModalError('Je hebt dit product al gekocht.');
+          return;
+        }
+        
+        if (errorMessage && errorMessage.toLowerCase().includes('not found')) {
+          setPurchaseModalError('Product niet gevonden.');
+          return;
+        }
+        
+        if (errorMessage && errorMessage.toLowerCase().includes('forbidden')) {
+          setPurchaseModalError('Je bent niet geautoriseerd om dit product te kopen.');
+          return;
+        }
+        
+        // If we have a specific error message from the server, use it
+        if (errorMessage && errorMessage.trim()) {
+          setPurchaseModalError(errorMessage);
+          return;
+        }
+        
+        // Only show generic message if we truly don't know what went wrong
+        setPurchaseModalError('Er is een onbekende fout opgetreden bij het kopen van het product.');
+        return;
       }
       
       const result = await response.json();
@@ -567,7 +597,26 @@ export default function CatalogusPage() {
       await refreshCredits();
     } catch (err) {
       // console.error('💥 Purchase error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to purchase product');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      // Check if this is an insufficient credits error
+      if (errorMessage.toLowerCase().includes('insufficient credits') || errorMessage.toLowerCase().includes('onvoldoende credits')) {
+        setPurchaseModalError('Je hebt onvoldoende credits om dit exameninstrument in te kopen.');
+      } else if (errorMessage.toLowerCase().includes('already purchased')) {
+        setPurchaseModalError('Je hebt dit product al gekocht.');
+      } else if (errorMessage.toLowerCase().includes('not found')) {
+        setPurchaseModalError('Product niet gevonden.');
+      } else if (errorMessage.toLowerCase().includes('forbidden')) {
+        setPurchaseModalError('Je bent niet geautoriseerd om dit product te kopen.');
+      } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
+        setPurchaseModalError('Netwerkfout. Controleer je internetverbinding en probeer het opnieuw.');
+      } else if (errorMessage.trim() && errorMessage !== 'Unknown error') {
+        // If we have a specific error message, use it
+        setPurchaseModalError(errorMessage);
+      } else {
+        // Only show generic message if we truly don't know what went wrong
+        setPurchaseModalError('Er is een onbekende fout opgetreden bij het kopen van het product.');
+      }
     } finally {
       setPurchasingProduct(null);
       setPurchaseLoading(false);
@@ -957,32 +1006,6 @@ export default function CatalogusPage() {
         <CreditBanner onOrderCredits={openModal} hideWhenWelcomeBannerShown={showWelcomeBanner} />
         
         {/* Error Messages */}
-        {showCreditsError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                <div>
-                  <h3 className="text-sm font-medium text-red-800">
-                    Onvoldoende credits beschikbaar
-                  </h3>
-                  <p className="text-sm text-red-700 mt-1">
-                    Je hebt momenteel onvoldoende credits om dit examen te kopen. Bestel credits om door te gaan.
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={openModal}
-                className="bg-red-600 hover:bg-red-700 text-white"
-                size="sm"
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Credits Bestellen
-              </Button>
-            </div>
-          </div>
-        )}
-        
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center gap-3">
@@ -1475,7 +1498,12 @@ export default function CatalogusPage() {
         </DialogContent>
       </Dialog>
       {/* Purchase confirmation modal */}
-      <Dialog open={!!purchaseConfirmId} onOpenChange={open => !open && setPurchaseConfirmId(null)}>
+      <Dialog open={!!purchaseConfirmId} onOpenChange={open => {
+        if (!open) {
+          setPurchaseConfirmId(null);
+          setPurchaseModalError(null); // Reset error when modal closes
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Bevestig aankoop</DialogTitle>
@@ -1508,6 +1536,33 @@ export default function CatalogusPage() {
               </button>
             </label>
           </div>
+          {purchaseModalError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                  <div>
+                    <h3 className="text-sm font-medium text-red-800">
+                      {(purchaseModalError.toLowerCase().includes('insufficient credits') || purchaseModalError.toLowerCase().includes('onvoldoende credits')) 
+                        ? 'Aankoop niet mogelijk. Je hebt onvoldoende credits'
+                        : 'Aankoop niet mogelijk'
+                      }
+                    </h3>
+                  </div>
+                </div>
+                {(purchaseModalError.toLowerCase().includes('insufficient credits') || purchaseModalError.toLowerCase().includes('onvoldoende credits')) && (
+                  <Button
+                    onClick={openModal}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    size="sm"
+                  >
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Credits Bestellen
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPurchaseConfirmId(null)} disabled={purchaseLoading}>
               Annuleren
