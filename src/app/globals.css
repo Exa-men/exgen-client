@@ -135,3 +135,19 @@
 html {
   scroll-padding-top: 0; /* Removed the offset that was causing the page to start scrolled down */
 }
+
+/* Easter egg animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}

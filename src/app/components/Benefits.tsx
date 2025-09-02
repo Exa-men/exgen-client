@@ -1,7 +1,11 @@
 
 import { CheckCircle } from "lucide-react";
+import { useState } from "react";
 
 const Benefits = () => {
+  const [clickCount, setClickCount] = useState(0);
+  const [showEasterEgg, setShowEasterEgg] = useState(false);
+
   const benefits = [
     "Naadloze integratie van examinering in het leerproces",
     "Minder werkdruk voor docenten en examencommissies",
@@ -12,6 +16,15 @@ const Benefits = () => {
     "Volledig schaalbaar en kostenefficiënt",
     "Toekomstbestendig dankzij AI-technologie"
   ];
+
+  const handleContainerClick = () => {
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+    
+    if (newCount === 10) {
+      setShowEasterEgg(true);
+    }
+  };
 
   return (
     <section id="voordelen" className="py-16 bg-gradient-to-br from-examen-cyan-100 to-white">
@@ -42,7 +55,12 @@ const Benefits = () => {
           </div>
 
           <div className="lg:w-1/2 lg:pl-12">
-            <div className="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+            <div 
+              className={`bg-white rounded-xl p-8 shadow-lg border border-gray-100 transition-all duration-300 cursor-pointer ${
+                clickCount > 0 && clickCount < 10 ? 'scale-105 shadow-xl' : ''
+              } ${showEasterEgg ? 'hidden' : ''}`}
+              onClick={handleContainerClick}
+            >
               <h3 className="text-xl font-semibold mb-6 text-examen-dark">
                 Wat Exa.men voor uw onderwijsinstelling betekent:
               </h3>
@@ -55,6 +73,16 @@ const Benefits = () => {
                 ))}
               </ul>
             </div>
+            
+            {showEasterEgg && (
+              <div className="bg-white rounded-xl p-8 shadow-lg border border-gray-100 animate-fade-in">
+                <img 
+                  src="/easter_egg_1.png" 
+                  alt="Easter Egg!" 
+                  className="w-full h-auto rounded-lg"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
