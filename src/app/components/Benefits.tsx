@@ -55,26 +55,26 @@ const Benefits = () => {
           </div>
 
           <div className="lg:w-1/2 lg:pl-12">
-            <div 
-              className={`bg-white rounded-xl p-8 shadow-lg border border-gray-100 transition-all duration-300 cursor-pointer ${
-                clickCount > 0 && clickCount < 10 ? 'scale-105 shadow-xl' : ''
-              } ${showEasterEgg ? 'hidden' : ''}`}
-              onClick={handleContainerClick}
-            >
-              <h3 className="text-xl font-semibold mb-6 text-examen-dark">
-                Wat Exa.men voor uw onderwijsinstelling betekent:
-              </h3>
-              <ul className="space-y-4">
-                {benefits.map((benefit, index) => (
-                  <li key={index} className="flex items-start">
-                    <CheckCircle className="h-5 w-5 text-examen-cyan mr-3 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">{benefit}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            {showEasterEgg && (
+            {!showEasterEgg ? (
+              <div 
+                className={`bg-white rounded-xl p-8 shadow-lg border border-gray-100 transition-all duration-300 cursor-pointer ${
+                  clickCount > 0 && clickCount < 10 ? 'scale-105 shadow-xl' : ''
+                }`}
+                onClick={handleContainerClick}
+              >
+                <h3 className="text-xl font-semibold mb-6 text-examen-dark">
+                  Wat Exa.men voor uw onderwijsinstelling betekent:
+                </h3>
+                <ul className="space-y-4">
+                  {benefits.map((benefit, index) => (
+                    <li key={index} className="flex items-start">
+                      <CheckCircle className="h-5 w-5 text-examen-cyan mr-3 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">{benefit}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
               <div className="bg-white rounded-xl p-8 shadow-lg border border-gray-100 animate-fade-in">
                 <img 
                   src="/easter_egg_1.png" 
