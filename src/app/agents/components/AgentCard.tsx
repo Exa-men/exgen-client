@@ -42,7 +42,7 @@ export default function AgentCard({
           <h3 className="text-sm font-semibold text-black truncate">
             {name}
           </h3>
-          <p className="text-xs text-white/70 mt-0.5 leading-relaxed">
+          <p className="text-xs text-black mt-0.5 leading-relaxed">
             {description}
           </p>
         </div>
@@ -54,7 +54,7 @@ export default function AgentCard({
               e.stopPropagation();
               onConfigure(id);
             }}
-            className="flex-shrink-0 p-1.5 text-white/60 hover:text-white hover:bg-white/20 rounded-full transition-colors"
+            className="flex-shrink-0 p-1.5 text-black/60 hover:text-black hover:bg-black/10 rounded-full transition-colors"
             title="Configure Agent"
           >
             <Settings className="w-4 h-4" />

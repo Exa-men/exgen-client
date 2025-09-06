@@ -1,136 +1,183 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useUser, useAuth } from '@clerk/nextjs';
-import { AdminOnly } from '../../components/RoleGuard';
-import AgentsSidebar from './components/AgentsSidebar';
-import ChatInterface from './components/ChatInterface';
-import AgentConfiguration from './components/AgentConfiguration';
-import Prism from './components/Prism';
-import { useAgents, Agent, Process, Conversation } from '../../hooks/use-agents';
+import { useState, useEffect } from "react";
+import { useUser, useAuth } from "@clerk/nextjs";
+import { AdminOnly } from "../../components/RoleGuard";
+import { useRoleContext } from "../contexts/RoleContext";
+import AgentsSidebar from "./components/AgentsSidebar";
+import ChatInterface from "./components/ChatInterface";
+import AgentConfiguration from "./components/AgentConfiguration";
+import AdminAgentView from "./components/AdminAgentView";
+import ConfigurationEditor from "./components/ConfigurationEditor";
+import CreateAgentModal from "./components/CreateAgentModal";
+import Prism from "./components/Prism";
+import {
+  useAgents,
+  Agent,
+  Process,
+  Conversation,
+} from "../../hooks/use-agents";
+import { useAdminAgents } from "../../hooks/use-admin-agents";
 
 interface Message {
   id: string;
   content: string;
-  sender: 'user' | 'agent';
+  sender: "user" | "agent";
   timestamp: Date;
 }
 
 export default function AgentsPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
-  const { getAgents, startProcess, getProcess, addConversation, executeStep, isLoading: apiLoading } = useAgents();
-  
+  const { isAdmin } = useRoleContext();
+  const {
+    getAgents,
+    startProcess,
+    getProcess,
+    addConversation,
+    executeStep,
+    isLoading: apiLoading,
+  } = useAgents();
+  const { getSystemInfo } = useAdminAgents();
+
   // Real agents data from API
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [systemInfo, setSystemInfo] = useState<any>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [currentProcess, setCurrentProcess] = useState<Process | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
-  const [currentView, setCurrentView] = useState<'chat' | 'config'>('chat');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configAgentId, setConfigAgentId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<"chat" | "config" | "admin">(
+    "chat",
+  );
 
-  // Load agents on component mount
+  // Load agents and system info on component mount
   useEffect(() => {
-    const loadAgents = async () => {
-      const agentsData = await getAgents();
+    const loadData = async () => {
+      const [agentsData, systemData] = await Promise.all([
+        getAgents(),
+        getSystemInfo()
+      ]);
+      
       if (agentsData) {
         setAgents(agentsData.agents);
       }
+      
+      if (systemData) {
+        setSystemInfo(systemData);
+      }
     };
-    
-    if (isLoaded && isSignedIn) {
-      loadAgents();
-    }
-  }, [isLoaded, isSignedIn, getAgents]);
 
-  // Check if user is admin
-  const isAdmin = user?.publicMetadata?.role === 'admin';
+    if (isLoaded && isSignedIn) {
+      loadData();
+    }
+  }, [isLoaded, isSignedIn, getAgents, getSystemInfo]);
+
+  // Admin status is determined by useRoleContext() which checks the database
+
+  // Handle admin view toggle
+  const handleToggleAdminView = () => {
+    if (currentView === "admin") {
+      setCurrentView("chat");
+    } else {
+      setCurrentView("admin");
+      setSelectedAgentId(null);
+      setCurrentProcess(null);
+      setMessages([]);
+    }
+  };
 
   // Handle agent selection
   const handleSelectAgent = async (agentId: string) => {
     if (!user?.id) return;
-    
+
     setSelectedAgentId(agentId);
-    setCurrentView('chat');
+    setCurrentView("chat");
     setIsConfiguring(false);
     setIsLoading(true);
-    
+
     try {
       // Start a new process with the selected agent
       const process = await startProcess(agentId, {
         user_id: user.id,
-        process_type: 'general',
+        process_type: "general",
         total_steps: 5,
-        context: { step: 'introduction' }
+        context: { step: "introduction" },
       });
-      
+
       if (process) {
         setCurrentProcess(process);
-        
+
         // Get the selected agent info
-        const selectedAgent = agents.find(agent => agent.id === agentId);
+        const selectedAgent = agents.find((agent) => agent.id === agentId);
         if (selectedAgent) {
           // Show thinking indicator first
           const thinkingMessage: Message = {
-            id: Date.now().toString() + '_thinking',
-            content: '', // Empty content for thinking state
-            sender: 'agent',
-            timestamp: new Date()
+            id: Date.now().toString() + "_thinking",
+            content: "", // Empty content for thinking state
+            sender: "agent",
+            timestamp: new Date(),
           };
           setMessages([thinkingMessage]);
-          
+
           // Execute the introduction step to get AI-generated greeting
           try {
-            const introProcess = await executeStep(process.id, 'introduction', {
-              user_context: 'agent_selection',
+            const introProcess = await executeStep(process.id, "introduction", {
+              user_context: "agent_selection",
               agent_name: selectedAgent.name,
-              agent_description: selectedAgent.description
+              agent_description: selectedAgent.description,
             });
-            
-            if (introProcess && introProcess.context?.step_introduction?.output) {
+
+            if (
+              introProcess &&
+              introProcess.context?.step_introduction?.output
+            ) {
               // Replace thinking message with AI-generated greeting
               const aiGreeting = introProcess.context.step_introduction.output;
               const greetingMessage: Message = {
-                id: Date.now().toString() + '_greeting',
+                id: Date.now().toString() + "_greeting",
                 content: aiGreeting,
-                sender: 'agent',
-                timestamp: new Date()
+                sender: "agent",
+                timestamp: new Date(),
               };
               setMessages([greetingMessage]);
             } else {
               // Fallback to default greeting if AI doesn't respond
               const fallbackMessage: Message = {
-                id: Date.now().toString() + '_fallback',
+                id: Date.now().toString() + "_fallback",
                 content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
-                sender: 'agent',
-                timestamp: new Date()
+                sender: "agent",
+                timestamp: new Date(),
               };
               setMessages([fallbackMessage]);
             }
           } catch (error) {
-            console.error('Error getting AI greeting:', error);
+            console.error("Error getting AI greeting:", error);
             // Fallback to default greeting
             const fallbackMessage: Message = {
-              id: Date.now().toString() + '_fallback',
+              id: Date.now().toString() + "_fallback",
               content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
-              sender: 'agent',
-              timestamp: new Date()
+              sender: "agent",
+              timestamp: new Date(),
             };
             setMessages([fallbackMessage]);
           }
         }
       }
     } catch (error) {
-      console.error('Error starting process:', error);
+      console.error("Error starting process:", error);
       // Fallback to mock message
-      const selectedAgent = agents.find(agent => agent.id === agentId);
+      const selectedAgent = agents.find((agent) => agent.id === agentId);
       if (selectedAgent) {
         const introMessage: Message = {
           id: Date.now().toString(),
           content: `Hallo! Ik ben ${selectedAgent.name}. Ik ben ${selectedAgent.description.toLowerCase()}. Hoe kan ik u vandaag helpen?`,
-          sender: 'agent',
-          timestamp: new Date()
+          sender: "agent",
+          timestamp: new Date(),
         };
         setMessages([introMessage]);
       }
@@ -139,11 +186,77 @@ export default function AgentsPage() {
     }
   };
 
-  // Handle agent configuration
+  // Handle agent configuration - show modal instead of changing view
   const handleConfigureAgent = (agentId: string) => {
-    setSelectedAgentId(agentId);
-    setCurrentView('config');
-    setIsConfiguring(true);
+    setConfigAgentId(agentId);
+    setShowConfigModal(true);
+  };
+
+  // Handle create agent - show modal without switching views
+  const handleCreateAgent = () => {
+    setShowCreateModal(true);
+  };
+
+  // Handle create agent modal close
+  const handleCreateModalClose = () => {
+    setShowCreateModal(false);
+  };
+
+  // Handle agent created
+  const handleAgentCreated = (newAgent: any) => {
+    setShowCreateModal(false);
+    // Optionally refresh agents list
+    const loadData = async () => {
+      const [agentsData, systemData] = await Promise.all([
+        getAgents(),
+        getSystemInfo()
+      ]);
+      
+      if (agentsData) {
+        setAgents(agentsData.agents);
+      }
+      
+      if (systemData) {
+        setSystemInfo(systemData);
+      }
+    };
+    
+    loadData();
+  };
+
+  // Handle configuration modal close
+  const handleConfigModalClose = () => {
+    setShowConfigModal(false);
+    setConfigAgentId(null);
+  };
+
+  // Handle configuration save
+  const handleConfigSave = () => {
+    setShowConfigModal(false);
+    setConfigAgentId(null);
+    // Optionally refresh agents list if needed
+  };
+
+  // Convert Agent to AgentSummary format for ConfigurationEditor
+  const convertAgentToSummary = (agent: Agent) => {
+    return {
+      agent_id: agent.id,
+      name: agent.name,
+      description: agent.description,
+      type: agent.agent_type,
+      is_active: agent.is_active,
+      llm_model: 'gpt-4', // Default or from configuration
+      temperature: 0.7, // Default or from configuration
+      enabled_tools_count: 0, // Will be populated by ConfigurationEditor
+      enabled_tools: [], // Will be populated by ConfigurationEditor
+      workflow_steps_count: 0, // Will be populated by ConfigurationEditor
+      memory_size: 1000, // Default or from configuration
+      configuration_health: 'healthy' as const,
+      caching_enabled: false, // Default or from configuration
+      config_version: '1.0', // Default or from configuration
+      last_modified: agent.updated_at,
+      modified_by: 'system'
+    };
   };
 
   // Handle sending messages
@@ -154,122 +267,142 @@ export default function AgentsPage() {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: messageContent,
-      sender: 'user',
-      timestamp: new Date()
+      sender: "user",
+      timestamp: new Date(),
     };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+    setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
       // Add conversation to backend
       const conversation = await addConversation(currentProcess.id, {
         content: messageContent,
-        message_metadata: { step: 'user_input' }
+        message_metadata: { step: "user_input" },
       });
 
       if (conversation) {
         // Execute the next step in the process
-        const updatedProcess = await executeStep(currentProcess.id, 'user_feedback', {
-          user_message: messageContent,
-          context: currentProcess.context
-        });
+        const updatedProcess = await executeStep(
+          currentProcess.id,
+          "user_feedback",
+          {
+            user_message: messageContent,
+            context: currentProcess.context,
+          },
+        );
 
         if (updatedProcess) {
           setCurrentProcess(updatedProcess);
-          
+
           // Debug: Log the entire updated process to see what we're getting
-          console.log('Updated process from backend:', updatedProcess);
-          console.log('Process context:', updatedProcess.context);
-          console.log('Process context keys:', Object.keys(updatedProcess.context || {}));
-          
+          console.log("Updated process from backend:", updatedProcess);
+          console.log("Process context:", updatedProcess.context);
+          console.log(
+            "Process context keys:",
+            Object.keys(updatedProcess.context || {}),
+          );
+
           // Check if the context has the step result
-          if (updatedProcess.context && updatedProcess.context.step_user_feedback) {
+          if (
+            updatedProcess.context &&
+            updatedProcess.context.step_user_feedback
+          ) {
             // Great! We have the AI response
             const stepResult = updatedProcess.context.step_user_feedback;
-            console.log('Step result from backend:', stepResult);
-            
+            console.log("Step result from backend:", stepResult);
+
             // Extract the AI response
-            let aiResponse = 'Ik heb uw vraag verwerkt, maar kon geen antwoord ophalen.';
-            
+            let aiResponse =
+              "Ik heb uw vraag verwerkt, maar kon geen antwoord ophalen.";
+
             if (stepResult) {
-              if (typeof stepResult === 'string') {
+              if (typeof stepResult === "string") {
                 aiResponse = stepResult;
               } else if (stepResult.output) {
                 aiResponse = stepResult.output;
               } else if (stepResult.content) {
                 aiResponse = stepResult.content;
               } else {
-                console.log('Step result structure:', JSON.stringify(stepResult, null, 2));
-                aiResponse = 'AI response received but format unclear.';
+                console.log(
+                  "Step result structure:",
+                  JSON.stringify(stepResult, null, 2),
+                );
+                aiResponse = "AI response received but format unclear.";
               }
             }
-            
-            console.log('Final extracted AI response:', aiResponse);
-            
+
+            console.log("Final extracted AI response:", aiResponse);
+
             // Show the real AI response with enhanced interface
             const agentMessage: Message = {
-              id: (Date.now() + 1).toString() + '_typing',
+              id: (Date.now() + 1).toString() + "_typing",
               content: aiResponse,
-              sender: 'agent',
-              timestamp: new Date()
+              sender: "agent",
+              timestamp: new Date(),
             };
-            setMessages(prev => [...prev, agentMessage]);
+            setMessages((prev) => [...prev, agentMessage]);
           } else {
             // Context doesn't have the step result yet - this suggests a timing issue
-            console.log('⚠️ Step result not found in context - this suggests a backend timing issue');
-            console.log('Context received:', updatedProcess.context);
-            
+            console.log(
+              "⚠️ Step result not found in context - this suggests a backend timing issue",
+            );
+            console.log("Context received:", updatedProcess.context);
+
             // Show a message that we're waiting for the AI response
             const waitingMessage: Message = {
-              id: Date.now().toString() + '_waiting',
-              content: '🤔 De AI is nog bezig met het verwerken van uw vraag...',
-              sender: 'agent',
-              timestamp: new Date()
+              id: Date.now().toString() + "_waiting",
+              content:
+                "🤔 De AI is nog bezig met het verwerken van uw vraag...",
+              sender: "agent",
+              timestamp: new Date(),
             };
-            setMessages(prev => [...prev, waitingMessage]);
-            
+            setMessages((prev) => [...prev, waitingMessage]);
+
             // Try to fetch the updated process again after a short delay
             setTimeout(async () => {
               try {
-                console.log('🔄 Retrying to fetch updated process...');
+                console.log("🔄 Retrying to fetch updated process...");
                 const retryProcess = await getProcess(currentProcess.id);
                 if (retryProcess && retryProcess.context?.step_user_feedback) {
-                  console.log('✅ Got updated process with AI response!');
-                  
+                  console.log("✅ Got updated process with AI response!");
+
                   // Remove waiting message
-                  setMessages(prev => prev.filter(msg => msg.id !== waitingMessage.id));
-                  
+                  setMessages((prev) =>
+                    prev.filter((msg) => msg.id !== waitingMessage.id),
+                  );
+
                   // Show the real AI response with enhanced interface
                   const stepResult = retryProcess.context.step_user_feedback;
-                  const aiResponse = stepResult.output || 'AI response received';
-                  
+                  const aiResponse =
+                    stepResult.output || "AI response received";
+
                   const agentMessage: Message = {
-                    id: (Date.now() + 1).toString() + '_typing',
+                    id: (Date.now() + 1).toString() + "_typing",
                     content: aiResponse,
-                    sender: 'agent',
-                    timestamp: new Date()
+                    sender: "agent",
+                    timestamp: new Date(),
                   };
-                  setMessages(prev => [...prev, agentMessage]);
+                  setMessages((prev) => [...prev, agentMessage]);
                 }
               } catch (error) {
-                console.error('Error retrying process fetch:', error);
+                console.error("Error retrying process fetch:", error);
               }
             }, 2000); // Wait 2 seconds then retry
           }
         }
       }
     } catch (error) {
-      console.error('Error processing message:', error);
-      
+      console.error("Error processing message:", error);
+
       // Fallback response
       const agentMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: `Ik begrijp uw vraag over "${messageContent}". Er is een technische fout opgetreden, maar ik werk eraan om u te helpen.`,
-        sender: 'agent',
-        timestamp: new Date()
+        sender: "agent",
+        timestamp: new Date(),
       };
-      setMessages(prev => [...prev, agentMessage]);
+      setMessages((prev) => [...prev, agentMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -277,15 +410,15 @@ export default function AgentsPage() {
 
   // Handle configuration save
   const handleSaveConfiguration = (config: any) => {
-    console.log('Saving configuration:', config);
+    console.log("Saving configuration:", config);
     // TODO: Implement API call to save configuration
-    setCurrentView('chat');
+    setCurrentView("chat");
     setIsConfiguring(false);
   };
 
   // Handle back from configuration
   const handleBackFromConfig = () => {
-    setCurrentView('chat');
+    setCurrentView("chat");
     setIsConfiguring(false);
   };
 
@@ -320,64 +453,90 @@ export default function AgentsPage() {
       fallback={
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-8 border border-white/20">
-            <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
-            <p className="text-white/70">You need admin privileges to access this page.</p>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              Access Denied
+            </h1>
+            <p className="text-white/70">
+              You need admin privileges to access this page.
+            </p>
           </div>
         </div>
       }
     >
       <div className="min-h-screen flex">
-        {/* Agents Sidebar */}
-        <AgentsSidebar
-          agents={agents}
-          selectedAgentId={selectedAgentId}
-          isAdmin={isAdmin}
-          onSelectAgent={handleSelectAgent}
-          onConfigureAgent={handleConfigureAgent}
-        />
+        {/* Conditionally render sidebar only for chat/config views */}
+        {currentView !== "admin" && (
+          <AgentsSidebar
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            isAdmin={isAdmin}
+            onSelectAgent={handleSelectAgent}
+            onConfigureAgent={handleConfigureAgent}
+            onToggleAdminView={isAdmin ? handleToggleAdminView : undefined}
+            onCreateAgent={isAdmin ? handleCreateAgent : undefined}
+            currentView={currentView}
+          />
+        )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col relative">
-          {/* Prism Background */}
-          <div className="absolute inset-0 opacity-20 pointer-events-none">
-            <Prism
-              animationType="rotate"
-              timeScale={0.5}
-              height={3.5}
-              baseWidth={5.5}
-              scale={3.6}
-              hueShift={0}
-              colorFrequency={1}
-              noise={0.5}
-              glow={1}
-            />
-          </div>
-          
+        <div
+          className={`flex-1 flex flex-col relative ${currentView === "admin" ? "" : ""}`}
+        >
+          {/* Prism Background - only for non-admin views */}
+          {currentView !== "admin" && (
+            <div className="absolute inset-0 opacity-20 pointer-events-none">
+              <Prism
+                animationType="rotate"
+                timeScale={0.5}
+                height={3.5}
+                baseWidth={5.5}
+                scale={3.6}
+                hueShift={0}
+                colorFrequency={1}
+                noise={0.5}
+                glow={1}
+              />
+            </div>
+          )}
+
           {/* Content Area */}
-          <div className="flex-1 p-2 pb-0 relative z-10">
-            {!selectedAgentId ? (
+          <div
+            className={`flex-1 relative z-10 ${currentView === "admin" ? "p-0" : "p-2 pb-0"}`}
+          >
+            {currentView === "admin" ? (
+              // Admin management view
+              <AdminAgentView 
+                onBackToChat={handleToggleAdminView}
+              />
+            ) : !selectedAgentId ? (
               // No agent selected
               <div className="h-full flex items-center justify-center">
                 <div className="text-center bg-white/10 backdrop-blur-md rounded-lg p-6 border border-white/20">
                   <div className="text-6xl mb-4">🤖</div>
-                  <h2 className="text-2xl font-semibold text-black mb-2">Selecteer een Ontwikkelaar</h2>
-                  <p className="text-white/70">
-                    Kies één van de ontwikkelaars om een project te starten.
+                  <h2 className="text-2xl font-semibold text-black mb-2">
+                    Selecteer een specialist
+                  </h2>
+                  <p className="text-black">
+                    Kies één van onze specialisten om een project te starten.
                   </p>
                 </div>
               </div>
-            ) : currentView === 'config' ? (
+            ) : currentView === "config" ? (
               // Agent configuration view
               <AgentConfiguration
                 agentId={selectedAgentId}
-                agentName={agents.find(a => a.id === selectedAgentId)?.name || ''}
+                agentName={
+                  agents.find((a) => a.id === selectedAgentId)?.name || ""
+                }
                 onBack={handleBackFromConfig}
                 onSave={handleSaveConfiguration}
               />
             ) : (
               // Chat interface view
               <ChatInterface
-                agentName={agents.find(a => a.id === selectedAgentId)?.name || ''}
+                agentName={
+                  agents.find((a) => a.id === selectedAgentId)?.name || ""
+                }
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
@@ -386,6 +545,30 @@ export default function AgentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Configuration Editor Modal */}
+      {showConfigModal && configAgentId && systemInfo && (() => {
+        const agent = agents.find(a => a.id === configAgentId);
+        return agent ? (
+          <ConfigurationEditor
+            agent={convertAgentToSummary(agent)}
+            isOpen={showConfigModal}
+            onClose={handleConfigModalClose}
+            onSave={handleConfigSave}
+            systemInfo={systemInfo}
+          />
+        ) : null;
+      })()}
+
+      {/* Create Agent Modal */}
+      {showCreateModal && systemInfo && (
+        <CreateAgentModal
+          isOpen={showCreateModal}
+          onClose={handleCreateModalClose}
+          onAgentCreated={handleAgentCreated}
+          systemInfo={systemInfo}
+        />
+      )}
     </AdminOnly>
   );
-} 
+}
