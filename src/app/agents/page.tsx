@@ -463,7 +463,7 @@ export default function AgentsPage() {
         </div>
       }
     >
-      <div className="min-h-screen flex">
+      <div className="h-[calc(100vh-4rem)] flex">
         {/* Conditionally render sidebar only for chat/config views */}
         {currentView !== "admin" && (
           <AgentsSidebar

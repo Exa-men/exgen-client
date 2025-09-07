@@ -52,37 +52,9 @@ export default function AgentsSidebar({
 
       {/* Sidebar Content */}
       <div className="h-full flex flex-col">
-        {/* Header with Admin Toggle */}
-        {!isCollapsed && isAdmin && onToggleAdminView && (
-          <div className="p-2 border-b border-white/20 space-y-2">
-            <button
-              onClick={onToggleAdminView}
-              className={`w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                currentView === 'admin' 
-                  ? 'bg-gray-600 text-white hover:bg-gray-700' 
-                  : 'bg-blue-600 text-white hover:bg-blue-700 font-medium'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                {currentView === 'admin' ? 'Back to Chat' : 'System Settings'}
-              </span>
-            </button>
-            
-            {onCreateAgent && (
-              <button
-                onClick={onCreateAgent}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 font-medium transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="text-sm font-medium">Create Agent</span>
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Agents List */}
-        <div className="flex-1 overflow-y-auto p-2 pb-0">
+        <div className="flex-1 overflow-y-auto p-2 pb-0 min-h-0">
           {!isCollapsed ? (
             <div className="space-y-1">
               {agents.map((agent) => (
@@ -132,10 +104,40 @@ export default function AgentsSidebar({
 
         {/* Footer */}
         {!isCollapsed && (
-          <div className="p-2 pt-2 pb-0 border-t border-white/20">
+          <div className="flex-shrink-0 p-2 pt-2 border-t border-white/20 space-y-2">
+            {/* Agent count */}
             <p className="text-xs text-white/70 text-center">
               {agents.length} agent{agents.length !== 1 ? 's' : ''} available
             </p>
+            
+            {/* Admin buttons - always at bottom */}
+            {isAdmin && onToggleAdminView && (
+              <div className="space-y-2">
+                <button
+                  onClick={onToggleAdminView}
+                  className={`w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                    currentView === 'admin' 
+                      ? 'bg-gray-600 text-white hover:bg-gray-700' 
+                      : 'bg-blue-600 text-white hover:bg-blue-700 font-medium'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    {currentView === 'admin' ? 'Back to Chat' : 'System Settings'}
+                  </span>
+                </button>
+                
+                {onCreateAgent && (
+                  <button
+                    onClick={onCreateAgent}
+                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 font-medium transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="text-sm font-medium">Create Agent</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

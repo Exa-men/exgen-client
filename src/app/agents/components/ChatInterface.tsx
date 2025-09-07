@@ -87,14 +87,14 @@ export default function ChatInterface({
       </div>
 
       {/* Input Area */}
-      <div className="p-2 pb-0 border-t border-white/20">
+      <div className="p-2 pb-5 border-t border-white/20">
         <form onSubmit={handleSubmit} className="flex space-x-2">
           <input
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder="Type your message..."
-            className="flex-1 px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-black placeholder-white/60"
+            className="flex-1 px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-black placeholder-gray-500"
             disabled={isLoading}
           />
           <button
