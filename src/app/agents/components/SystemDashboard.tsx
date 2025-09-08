@@ -16,7 +16,7 @@ import {
   RefreshCw,
   Database,
   Cpu,
-  Memory
+  HardDrive
 } from 'lucide-react';
 
 interface SystemDashboardProps {

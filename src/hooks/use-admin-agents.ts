@@ -133,7 +133,7 @@ export const useAdminAgents = () => {
       const response = await makeAuthenticatedRequest(`/api/v1/admin/agents?${queryParams.toString()}`);
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch agents');
+        throw new Error(response.error.detail || 'Failed to fetch agents');
       }
 
       return response.data as AgentListResponse;
@@ -155,7 +155,7 @@ export const useAdminAgents = () => {
       const response = await makeAuthenticatedRequest(`/api/v1/admin/agents/${agentId}`);
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch agent');
+        throw new Error(response.error.detail || 'Failed to fetch agent');
       }
 
       const apiResponse = response.data as ApiResponse<AgentDetail>;
@@ -192,7 +192,7 @@ export const useAdminAgents = () => {
       });
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to create agent');
+        throw new Error(response.error.detail || 'Failed to create agent');
       }
 
       const apiResponse = response.data as ApiResponse<AgentDetail>;
@@ -229,7 +229,7 @@ export const useAdminAgents = () => {
       });
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to update configuration');
+        throw new Error(response.error.detail || 'Failed to update configuration');
       }
 
       const apiResponse = response.data as ApiResponse<AgentDetail>;
@@ -258,7 +258,7 @@ export const useAdminAgents = () => {
       });
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to delete agent');
+        throw new Error(response.error.detail || 'Failed to delete agent');
       }
 
       const apiResponse = response.data as ApiResponse<void>;
@@ -287,7 +287,7 @@ export const useAdminAgents = () => {
       });
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to toggle agent status');
+        throw new Error(response.error.detail || 'Failed to toggle agent status');
       }
 
       const apiResponse = response.data as ApiResponse<AgentDetail>;
@@ -317,7 +317,7 @@ export const useAdminAgents = () => {
       });
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to validate configuration');
+        throw new Error(response.error.detail || 'Failed to validate configuration');
       }
 
       return response.data as ValidationResult;
@@ -339,7 +339,7 @@ export const useAdminAgents = () => {
       const response = await makeAuthenticatedRequest(`/api/v1/admin/agents/${agentId}/history?limit=${limit}`);
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch configuration history');
+        throw new Error(response.error.detail || 'Failed to fetch configuration history');
       }
 
       return response.data as {
@@ -369,7 +369,7 @@ export const useAdminAgents = () => {
       const response = await makeAuthenticatedRequest(`/api/v1/admin/templates?${queryParams.toString()}`);
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch templates');
+        throw new Error(response.error.detail || 'Failed to fetch templates');
       }
 
       return response.data as {
@@ -395,7 +395,7 @@ export const useAdminAgents = () => {
       const response = await makeAuthenticatedRequest('/api/v1/admin/system-info');
       
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to fetch system info');
+        throw new Error(response.error.detail || 'Failed to fetch system info');
       }
 
       return response.data as SystemInfo;
