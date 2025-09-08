@@ -43,11 +43,22 @@ const nextConfig: NextConfig = {
     ];
   },
   
-  // Security headers
+  // Cache busting and security headers
   async headers() {
     return [
       {
-        source: '/(.*)',
+        // Static assets should be cached with immutable flag
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // HTML pages should not be cached aggressively to prevent stale content
+        source: '/((?!_next/static|favicon.ico).*)',
         headers: [
           {
             key: 'X-Frame-Options',
@@ -61,14 +72,18 @@ const nextConfig: NextConfig = {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin',
           },
-          // Add caching headers for better performance
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'no-cache, no-store, must-revalidate',
           },
         ],
       },
     ];
+  },
+  
+  // Generate unique build IDs to prevent chunk conflicts
+  generateBuildId: async () => {
+    return `build-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   },
 };
 
