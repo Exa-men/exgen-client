@@ -110,17 +110,20 @@ interface AssessmentLevel {
   id: string;
   label: string;
   value: string;
+  order?: number; // ✅ Add order field
 }
 
 interface AssessmentCriteria {
   id: string;
   criteria: string;
+  order?: number; // ✅ Add order field
   levels: AssessmentLevel[];
 }
 
 interface AssessmentOnderdeel {
   id: string;
   onderdeel: string;
+  order?: number; // ✅ Add order field
   criteria: AssessmentCriteria[];
 }
 
@@ -187,6 +190,21 @@ export default function EditExamPage() {
   const [criteriaEditValues, setCriteriaEditValues] = useState<ExamProduct | null>(null);
   const [criteriaSaving, setCriteriaSaving] = useState(false);
   const [criteriaSaveStatus, setCriteriaSaveStatus] = useState<'saved' | 'saving' | 'error' | 'dirty'>('saved');
+  
+  // Order validation helper functions
+  const validateOrderSequence = (items: any[]): boolean => {
+    if (!items || items.length === 0) return true;
+    return items.every((item, index) => item.order === index + 1);
+  };
+
+  const normalizeOrders = <T extends { order: number }>(items: T[]): T[] => {
+    return items.map((item, index) => ({ ...item, order: index + 1 }));
+  };
+
+  // Defensive sorting helper function
+  const sortByOrder = <T extends { order?: number }>(items: T[]): T[] => {
+    return items.sort((a, b) => (a.order || 999) - (b.order || 999));
+  };
   
   // Version management
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
@@ -300,7 +318,8 @@ export default function EditExamPage() {
     return labels.map((label, index) => ({
       id: generateId(),
       label,
-      value: ''
+      value: '',
+      order: index + 1 // ✅ Sequential numbering for levels
     }));
   };
 
@@ -379,10 +398,14 @@ export default function EditExamPage() {
     
     console.log('Adding onderdeel to version:', versionId);
     
+    const version = product.versions?.find(v => v.id === versionId);
+    if (!version) return;
+
     const newOnderdeel: AssessmentOnderdeel = {
       id: generateId(),
       onderdeel: '',
-      criteria: []
+      criteria: [],
+      order: (version.assessmentOnderdelen?.length || 0) + 1 // ✅ Append to end
     };
 
     setProduct(prev => {
@@ -412,11 +435,20 @@ export default function EditExamPage() {
       if (!prev) return prev;
       const updatedProduct = {
         ...prev,
-        versions: (prev.versions || []).map(v => 
-          v.id === versionId 
-            ? { ...v, assessmentOnderdelen: (v.assessmentOnderdelen || []).filter(o => o.id !== onderdeelId) }
-            : v
-        )
+        versions: (prev.versions || []).map(v => {
+          if (v.id !== versionId) return v;
+          
+          // Remove the component
+          const filteredOnderdelen = (v.assessmentOnderdelen || []).filter(o => o.id !== onderdeelId);
+          
+          // Normalize remaining orders
+          const normalizedOnderdelen = filteredOnderdelen.map((component, index) => ({
+            ...component,
+            order: index + 1
+          }));
+          
+          return { ...v, assessmentOnderdelen: normalizedOnderdelen };
+        })
       };
       // Update lastSavedData to reflect the new state after onderdeel removal
       setLastSavedData(JSON.stringify(updatedProduct));
@@ -456,10 +488,14 @@ export default function EditExamPage() {
     const version = product.versions?.find(v => v.id === versionId);
     if (!version) return;
     
+    const component = version.assessmentOnderdelen?.find(o => o.id === onderdeelId);
+    if (!component) return;
+
     const newCriteria: AssessmentCriteria = {
       id: generateId(),
       criteria: '',
-      levels: createEmptyLevels(version.rubricLevels)
+      levels: createEmptyLevels(version.rubricLevels),
+      order: (component.criteria?.length || 0) + 1 // ✅ Append to end
     };
 
     setProduct(prev => {
@@ -500,11 +536,20 @@ export default function EditExamPage() {
           v.id === versionId 
             ? {
                 ...v,
-                assessmentOnderdelen: (v.assessmentOnderdelen || []).map(o =>
-                  o.id === onderdeelId
-                    ? { ...o, criteria: (o.criteria || []).filter(c => c.id !== criteriaId) }
-                    : o
-                )
+                assessmentOnderdelen: (v.assessmentOnderdelen || []).map(o => {
+                  if (o.id !== onderdeelId) return o;
+                  
+                  // Remove the criteria
+                  const filteredCriteria = (o.criteria || []).filter(c => c.id !== criteriaId);
+                  
+                  // Normalize remaining orders
+                  const normalizedCriteria = filteredCriteria.map((criteria, index) => ({
+                    ...criteria,
+                    order: index + 1
+                  }));
+                  
+                  return { ...o, criteria: normalizedCriteria };
+                })
               }
             : v
         )
@@ -758,19 +803,19 @@ export default function EditExamPage() {
 
           is_enabled: version.isEnabled,
           is_latest: version.isLatest,
-          assessment_components: (version.assessmentOnderdelen || []).map(component => ({
+          assessment_components: (version.assessmentOnderdelen || []).map((component, compIndex) => ({
             id: isTemporaryId(component.id) ? undefined : component.id,  // Only include real database IDs
             component: component.onderdeel,  // Changed from "name" to "component"
-            order: 1, // Will be calculated by backend
-            assessment_criteria: (component.criteria || []).map(criteria => ({
+            order: compIndex + 1, // ✅ Sequential numbering
+            assessment_criteria: (component.criteria || []).map((criteria, critIndex) => ({
               id: isTemporaryId(criteria.id) ? undefined : criteria.id,  // Only include real database IDs
               criteria: criteria.criteria,
-              order: 1, // Will be calculated by backend
-              assessment_levels: (criteria.levels || []).map(level => ({
+              order: critIndex + 1, // ✅ Sequential numbering
+              assessment_levels: (criteria.levels || []).map((level, levelIndex) => ({
                 id: isTemporaryId(level.id) ? undefined : level.id,  // Only include real database IDs
                 label: level.label,
                 value: level.value,
-                order: 1, // Will be calculated by backend
+                order: levelIndex + 1, // ✅ Sequential numbering
               }))
             }))
           }))
@@ -963,19 +1008,25 @@ export default function EditExamPage() {
       id: backendVersion.id,
       version: backendVersion.version,
       releaseDate: backendVersion.release_date,
-      assessmentOnderdelen: (backendVersion.assessment_components || []).map((component: any) => ({
-        id: component.id,
-        onderdeel: component.component,
-        criteria: (component.criteria || []).map((criteria: any) => ({
-          id: criteria.id,
-          criteria: criteria.criteria,
-          levels: (criteria.levels || []).map((level: any) => ({
-            id: level.id,
-            label: level.label,
-            value: level.value
-          }))
-        }))
-      })),
+      assessmentOnderdelen: sortByOrder(backendVersion.assessment_components || [])  // ✅ Sort components
+        .map((component: any) => ({
+          id: component.id,
+          onderdeel: component.component,
+          order: component.order, // ✅ Include order for transparency
+          criteria: sortByOrder(component.criteria || [])  // ✅ Sort criteria
+            .map((criteria: any) => ({
+              id: criteria.id,
+              criteria: criteria.criteria,
+              order: criteria.order, // ✅ Include order for transparency
+              levels: sortByOrder(criteria.levels || [])  // ✅ Sort levels
+                .map((level: any) => ({
+                  id: level.id,
+                  label: level.label,
+                  value: level.value,
+                  order: level.order // ✅ Include order for transparency
+                }))
+            }))
+        })),
       rubricLevels: backendVersion.rubric_levels || 3,
       documents: (backendVersion.documents || []).map((doc: any) => ({
         id: doc.id,
@@ -1169,24 +1220,47 @@ export default function EditExamPage() {
             rubric_levels: version.rubricLevels,
             is_enabled: version.isEnabled,
             is_latest: version.isLatest,
-            assessment_components: (version.assessmentOnderdelen || []).map(component => ({
+            assessment_components: (version.assessmentOnderdelen || []).map((component, compIndex) => ({
               id: isTemporaryId(component.id) ? undefined : component.id,
               component: component.onderdeel,
-              order: 1,
-              assessment_criteria: (component.criteria || []).map(criteria => ({
+              order: compIndex + 1, // ✅ Sequential numbering
+              assessment_criteria: (component.criteria || []).map((criteria, critIndex) => ({
                 id: isTemporaryId(criteria.id) ? undefined : criteria.id,
                 criteria: criteria.criteria,
-                order: 1,
-                assessment_levels: (criteria.levels || []).map(level => ({
+                order: critIndex + 1, // ✅ Sequential numbering
+                assessment_levels: (criteria.levels || []).map((level, levelIndex) => ({
                   id: isTemporaryId(level.id) ? undefined : level.id,
                   label: level.label,
                   value: level.value,
-                  order: 1,
+                  order: levelIndex + 1, // ✅ Sequential numbering
                 }))
               }))
             }))
           }))
         };
+        
+        // Validate and normalize component orders
+        saveData.versions_data.forEach(version => {
+          if (version.assessment_components && !validateOrderSequence(version.assessment_components)) {
+            console.warn("Component order sequence validation failed, normalizing...");
+            version.assessment_components = normalizeOrders(version.assessment_components);
+          }
+          
+          // Validate criteria and levels for each component
+          version.assessment_components?.forEach(component => {
+            if (component.assessment_criteria && !validateOrderSequence(component.assessment_criteria)) {
+              console.warn(`Criteria order sequence validation failed for component ${component.id}, normalizing...`);
+              component.assessment_criteria = normalizeOrders(component.assessment_criteria);
+            }
+            
+            component.assessment_criteria?.forEach(criteria => {
+              if (criteria.assessment_levels && !validateOrderSequence(criteria.assessment_levels)) {
+                console.warn(`Level order sequence validation failed for criteria ${criteria.id}, normalizing...`);
+                criteria.assessment_levels = normalizeOrders(criteria.assessment_levels);
+              }
+            });
+          });
+        });
         
         console.log(`Attempt ${retryCount + 1}/${maxRetries}: Saving criteria data...`);
         const result = await api.saveProductAssessment(productId, saveData);
@@ -2701,7 +2775,7 @@ export default function EditExamPage() {
                         </div>
                         
                         <div className="space-y-6">
-                          {(version.assessmentOnderdelen || []).map((onderdeel) => (
+                          {sortByOrder(version.assessmentOnderdelen || []).map((onderdeel) => (  // ✅ Defensive sort
                             <div key={onderdeel.id} className="border rounded-lg p-4 bg-gray-50">
                               {/* Onderdeel Header */}
                               <div className="flex items-end justify-between mb-4">
@@ -2758,7 +2832,7 @@ export default function EditExamPage() {
                                     </Button>
                                   </div>
                                                                  ) : (
-                                   (onderdeel.criteria || []).map((criteria, index) => (
+                                   sortByOrder(onderdeel.criteria || []).map((criteria, index) => (  // ✅ Defensive sort
                                      <div key={criteria.id} className="border rounded-lg bg-white">
                                        {version.rubricLevels >= 4 ? (
                                          // Accordion layout for 4+ rubric levels
@@ -2796,7 +2870,7 @@ export default function EditExamPage() {
                                                      <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
                                                    )}
                                                  </div>
-                                                 {(criteria.levels || []).map((level, levelIndex) => (
+                                                 {sortByOrder(criteria.levels || []).map((level, levelIndex) => (  // ✅ Defensive sort
                                                    <div key={level.id}>
                                                      <label className={`text-sm font-medium ${
                                                        level.label === 'Onvoldoende' ? 'text-red-600' :
@@ -2863,7 +2937,7 @@ export default function EditExamPage() {
                                                  <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
                                                )}
                                              </div>
-                                             {(criteria.levels || []).map((level, levelIndex) => (
+                                             {sortByOrder(criteria.levels || []).map((level, levelIndex) => (  // ✅ Defensive sort
                                                <div key={level.id}>
                                                  <label className={`text-sm font-medium ${
                                                    level.label === 'Onvoldoende' ? 'text-red-600' :
