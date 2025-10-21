@@ -758,20 +758,32 @@ export default function EditExamPage() {
 
           is_enabled: version.isEnabled,
           is_latest: version.isLatest,
-          assessment_components: (version.assessmentOnderdelen || []).map(component => ({
+          assessment_components: (version.assessmentOnderdelen || []).map((component, componentIndex) => ({
             id: isTemporaryId(component.id) ? undefined : component.id,  // Only include real database IDs
             component: component.onderdeel,  // Changed from "name" to "component"
-            order: 1, // Will be calculated by backend
-            assessment_criteria: (component.criteria || []).map(criteria => ({
+            order: componentIndex + 1, // Frontend calculates order
+            assessment_criteria: (component.criteria || []).map((criteria, criteriaIndex) => ({
               id: isTemporaryId(criteria.id) ? undefined : criteria.id,  // Only include real database IDs
               criteria: criteria.criteria,
-              order: 1, // Will be calculated by backend
-              assessment_levels: (criteria.levels || []).map(level => ({
-                id: isTemporaryId(level.id) ? undefined : level.id,  // Only include real database IDs
-                label: level.label,
-                value: level.value,
-                order: 1, // Will be calculated by backend
-              }))
+              order: criteriaIndex + 1, // Frontend calculates order
+              assessment_levels: (criteria.levels || []).map((level, levelIndex) => {
+                // For new levels, calculate order based on existing levels
+                let order = level.order;
+                if (isTemporaryId(level.id)) {
+                  const existingOrders = criteria.levels
+                    .filter(l => !isTemporaryId(l.id))
+                    .map(l => l.order);
+                  const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+                  const newLevelIndex = criteria.levels.slice(0, levelIndex).filter(l => isTemporaryId(l.id)).length;
+                  order = maxOrder + newLevelIndex + 1;
+                }
+                return {
+                  id: isTemporaryId(level.id) ? undefined : level.id,  // Only include real database IDs
+                  label: level.label,
+                  value: level.value,
+                  order: order,
+                };
+              })
             }))
           }))
         }))
@@ -1169,20 +1181,32 @@ export default function EditExamPage() {
             rubric_levels: version.rubricLevels,
             is_enabled: version.isEnabled,
             is_latest: version.isLatest,
-            assessment_components: (version.assessmentOnderdelen || []).map(component => ({
+            assessment_components: (version.assessmentOnderdelen || []).map((component, componentIndex) => ({
               id: isTemporaryId(component.id) ? undefined : component.id,
               component: component.onderdeel,
-              order: 1,
-              assessment_criteria: (component.criteria || []).map(criteria => ({
+              order: componentIndex + 1,
+              assessment_criteria: (component.criteria || []).map((criteria, criteriaIndex) => ({
                 id: isTemporaryId(criteria.id) ? undefined : criteria.id,
                 criteria: criteria.criteria,
-                order: 1,
-                assessment_levels: (criteria.levels || []).map(level => ({
-                  id: isTemporaryId(level.id) ? undefined : level.id,
-                  label: level.label,
-                  value: level.value,
-                  order: 1,
-                }))
+                order: criteriaIndex + 1,
+                assessment_levels: (criteria.levels || []).map((level, levelIndex) => {
+                  // For new levels, calculate order based on existing levels
+                  let order = level.order;
+                  if (isTemporaryId(level.id)) {
+                    const existingOrders = criteria.levels
+                      .filter(l => !isTemporaryId(l.id))
+                      .map(l => l.order);
+                    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+                    const newLevelIndex = criteria.levels.slice(0, levelIndex).filter(l => isTemporaryId(l.id)).length;
+                    order = maxOrder + newLevelIndex + 1;
+                  }
+                  return {
+                    id: isTemporaryId(level.id) ? undefined : level.id,
+                    label: level.label,
+                    value: level.value,
+                    order: order,
+                  };
+                })
               }))
             }))
           }))
@@ -2796,13 +2820,15 @@ export default function EditExamPage() {
                                                      <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
                                                    )}
                                                  </div>
-                                                 {(criteria.levels || []).map((level, levelIndex) => (
+                                                 {(criteria.levels || []).sort((a, b) => a.order - b.order).map((level, levelIndex) => (
                                                    <div key={level.id}>
                                                      <label className={`text-sm font-medium ${
-                                                       level.label === 'Onvoldoende' ? 'text-red-600' :
-                                                       level.label === 'Voldoende' ? 'text-yellow-600' :
-                                                       level.label === 'Goed' ? 'text-green-600' :
-                                                       level.label === 'Uitstekend' ? 'text-blue-600' :
+                                                       level.order === 1 ? 'text-red-600' :     // Poor quality = Red
+                                                       level.order === 2 ? 'text-yellow-600' :  // OK quality = Yellow
+                                                       level.order === 3 ? 'text-green-600' :   // Good quality = Green
+                                                       level.order === 4 ? 'text-blue-600' :    // Excellent = Blue
+                                                       level.order === 5 ? 'text-purple-600' :  // Very good = Purple
+                                                       level.order === 6 ? 'text-indigo-600' :  // Outstanding = Indigo
                                                        'text-gray-700'
                                                      }`}>
                                                        {level.label}
@@ -2863,13 +2889,15 @@ export default function EditExamPage() {
                                                  <p className="mt-1 text-sm text-gray-700 bg-gray-50 p-3 rounded border">{criteria.criteria}</p>
                                                )}
                                              </div>
-                                             {(criteria.levels || []).map((level, levelIndex) => (
+                                             {(criteria.levels || []).sort((a, b) => a.order - b.order).map((level, levelIndex) => (
                                                <div key={level.id}>
                                                  <label className={`text-sm font-medium ${
-                                                   level.label === 'Onvoldoende' ? 'text-red-600' :
-                                                   level.label === 'Voldoende' ? 'text-yellow-600' :
-                                                   level.label === 'Goed' ? 'text-green-600' :
-                                                   level.label === 'Uitstekend' ? 'text-blue-600' :
+                                                   level.order === 1 ? 'text-red-600' :     // Poor quality = Red
+                                                   level.order === 2 ? 'text-yellow-600' :  // OK quality = Yellow
+                                                   level.order === 3 ? 'text-green-600' :   // Good quality = Green
+                                                   level.order === 4 ? 'text-blue-600' :    // Excellent = Blue
+                                                   level.order === 5 ? 'text-purple-600' :  // Very good = Purple
+                                                   level.order === 6 ? 'text-indigo-600' :  // Outstanding = Indigo
                                                    'text-gray-700'
                                                  }`}>
                                                    {level.label}
