@@ -1,6 +1,6 @@
 # ExGen Client
 
-A modern, high-performance Next.js frontend application for ExGen, an examination provider platform for MBO (Middle Vocational Education) institutions in the Netherlands.
+A modern, high-performance Next.js frontend application for ExGen, an examination provider platform for MBO (Middle Vocational Education) institutions in the Netherlands..
 
 ## 🚀 Features
 
@@ -47,7 +47,7 @@ src/
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 - Access to Clerk authentication service
 - Backend API server running
