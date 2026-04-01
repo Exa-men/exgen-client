@@ -9,14 +9,8 @@ const Footer = () => {
 
   // Function to handle PDF download
   const handleDownload = (fileName: string) => {
-    // Create an empty PDF blob - in a real scenario, this would be replaced with actual PDF content
-    const emptyPdfBlob = new Blob([''], {
-      type: 'application/pdf'
-    });
-
-    // Create a download link and trigger it
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(emptyPdfBlob);
+    link.href = `/${fileName}`;
     link.download = fileName;
     document.body.appendChild(link);
     link.click();

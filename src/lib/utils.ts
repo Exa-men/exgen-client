@@ -1,17 +1,17 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 /**
  * Downloads the inkoopvoorwaarden PDF file
  */
 export function downloadInkoopvoorwaarden() {
-  const link = document.createElement('a');
-  link.href = '/inkoopvoorwaarden.pdf';
-  link.download = 'inkoopvoorwaarden.pdf';
+  const link = document.createElement("a");
+  link.href = "/nldigital_voorwaarden.pdf";
+  link.download = "nldigital_voorwaarden.pdf";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -21,7 +21,7 @@ export async function clearAllCaches(): Promise<void> {
   try {
     // Remove verbose logging for production
     // console.log('🧹 Starting comprehensive cache cleanup...');
-    
+
     // Clear localStorage
     const localStorageKeys = Object.keys(localStorage);
     for (const key of localStorageKeys) {
@@ -34,10 +34,10 @@ export async function clearAllCaches(): Promise<void> {
     // console.log('🗑️ Cleared sessionStorage');
 
     // Clear HTTP caches
-    if ('caches' in window) {
+    if ("caches" in window) {
       try {
         const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.map(name => caches.delete(name)));
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
         // console.log('🗑️ Cleared HTTP caches:', cacheNames.length, 'caches');
       } catch (error) {
         // console.warn('Could not clear HTTP caches:', error);
@@ -45,7 +45,7 @@ export async function clearAllCaches(): Promise<void> {
     }
 
     // Clear IndexedDB
-    if ('indexedDB' in window) {
+    if ("indexedDB" in window) {
       try {
         const databases = await window.indexedDB.databases();
         for (const db of databases) {
@@ -65,7 +65,7 @@ export async function clearAllCaches(): Promise<void> {
     }
 
     // Clear Next.js data cache
-    if (typeof window !== 'undefined' && 'next' in window) {
+    if (typeof window !== "undefined" && "next" in window) {
       try {
         // @ts-ignore
         window.next?.router?.reload();
@@ -76,12 +76,13 @@ export async function clearAllCaches(): Promise<void> {
     }
 
     // Clear cookies
-    if (typeof document !== 'undefined') {
-      const cookies = document.cookie.split(';');
+    if (typeof document !== "undefined") {
+      const cookies = document.cookie.split(";");
       for (const c of cookies) {
-        const eqPos = c.indexOf('=');
+        const eqPos = c.indexOf("=");
         const name = eqPos > -1 ? c.substr(0, eqPos) : c;
-        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+        document.cookie =
+          name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
         // console.log('🗑️ Cleared cookie:', c.trim().split('=')[0]);
       }
     }
@@ -96,11 +97,11 @@ export async function forceRefreshPage(): Promise<void> {
   try {
     // Clear all caches first
     await clearAllCaches();
-    
+
     // Force a hard refresh
     // console.log('🔄 Force refreshing page for complete state reset...');
-    
-    if (typeof window !== 'undefined') {
+
+    if (typeof window !== "undefined") {
       // Clear any remaining state
       window.location.reload();
     }
@@ -120,18 +121,19 @@ export function clearBrowserStorage(): void {
     // console.log('🗑️ Cleared sessionStorage completely');
 
     // Clear accessible cookies
-    if (typeof document !== 'undefined') {
-      const cookies = document.cookie.split(';');
+    if (typeof document !== "undefined") {
+      const cookies = document.cookie.split(";");
       for (const c of cookies) {
-        const eqPos = c.indexOf('=');
+        const eqPos = c.indexOf("=");
         const name = eqPos > -1 ? c.substr(0, eqPos) : c;
-        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+        document.cookie =
+          name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
       }
       // console.log('🗑️ Cleared accessible cookies');
     }
 
     // Clear Next.js data cache
-    if (typeof window !== 'undefined' && 'next' in window) {
+    if (typeof window !== "undefined" && "next" in window) {
       try {
         // @ts-ignore
         window.next?.router?.reload();
@@ -145,4 +147,4 @@ export function clearBrowserStorage(): void {
   } catch (error) {
     // console.error('❌ Error clearing browser storage:', error);
   }
-} 
+}
