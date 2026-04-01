@@ -1,23 +1,45 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { X, Check, Loader2, CreditCard, Building, User, MapPin, FileText, Gift, Pencil, Trash2, Plus, Check as CheckIcon, X as XIcon, AlertCircle } from 'lucide-react';
-import { useUser, useAuth } from '@clerk/nextjs';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
-import { Checkbox } from './ui/checkbox';
-import { Label } from './ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { cn } from '../../lib/utils';
-import { useCredits } from '../contexts/CreditContext';
-import { useCreditModal } from '../contexts/CreditModalContext';
-import { useRoleContext } from '../contexts/RoleContext';
-import { downloadInkoopvoorwaarden } from '../../lib/utils';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
-import { useApi } from '@/hooks/use-api';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  Check,
+  Loader2,
+  CreditCard,
+  Building,
+  User,
+  MapPin,
+  FileText,
+  Gift,
+  Pencil,
+  Trash2,
+  Plus,
+  Check as CheckIcon,
+  X as XIcon,
+  AlertCircle,
+} from "lucide-react";
+import { useUser, useAuth } from "@clerk/nextjs";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Checkbox } from "./ui/checkbox";
+import { Label } from "./ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { cn } from "../../lib/utils";
+import { useCredits } from "../contexts/CreditContext";
+import { useCreditModal } from "../contexts/CreditModalContext";
+import { useRoleContext } from "../contexts/RoleContext";
+import { downloadInkoopvoorwaarden } from "../../lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { useApi } from "@/hooks/use-api";
+import { toast } from "sonner";
 
 interface CreditPackage {
   id: string;
@@ -60,25 +82,29 @@ const CreditOrderModal: React.FC = () => {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
-  const [step, setStep] = useState<'packages' | 'voucher' | 'form' | 'success'>('packages');
-  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+  const [step, setStep] = useState<"packages" | "voucher" | "form" | "success">(
+    "packages",
+  );
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(
+    null,
+  );
   const [orderForm, setOrderForm] = useState<CreditOrderForm>({
-    package_id: '',
-    school_name: '',
-    purchaser_name: '',
-    purchase_reference: '',
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    postal_code: '',
-    country: 'Netherlands',
+    package_id: "",
+    school_name: "",
+    purchaser_name: "",
+    purchase_reference: "",
+    address_line1: "",
+    address_line2: "",
+    city: "",
+    postal_code: "",
+    country: "Netherlands",
     terms_accepted: false,
-    quantity: 1
+    quantity: 1,
   });
 
   // Voucher redemption state
   const { refreshCredits, refreshVouchers, updateVoucherStatus } = useCredits();
-  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherCode, setVoucherCode] = useState("");
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isVoucherFocused, setIsVoucherFocused] = useState(false);
   const [redeemResult, setRedeemResult] = useState<{
@@ -92,18 +118,24 @@ const CreditOrderModal: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<CreditPackage>>({});
   const [creating, setCreating] = useState(false);
-  const [createData, setCreateData] = useState<Partial<CreditPackage>>({ name: '', credits: 0, price: 0, description: '', is_active: true });
+  const [createData, setCreateData] = useState<Partial<CreditPackage>>({
+    name: "",
+    credits: 0,
+    price: 0,
+    description: "",
+    is_active: true,
+  });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [crudError, setCrudError] = useState<string | null>(null);
 
   // Price input display states for better UX
-  const [editPriceDisplay, setEditPriceDisplay] = useState<string>('');
-  const [createPriceDisplay, setCreatePriceDisplay] = useState<string>('');
-  
+  const [editPriceDisplay, setEditPriceDisplay] = useState<string>("");
+  const [createPriceDisplay, setCreatePriceDisplay] = useState<string>("");
+
   // Credits input display states for better UX
-  const [editCreditsDisplay, setEditCreditsDisplay] = useState<string>('');
-  const [createCreditsDisplay, setCreateCreditsDisplay] = useState<string>('');
+  const [editCreditsDisplay, setEditCreditsDisplay] = useState<string>("");
+  const [createCreditsDisplay, setCreateCreditsDisplay] = useState<string>("");
 
   // Form validation state
   const [fieldValidation, setFieldValidation] = useState<FieldValidation>({
@@ -127,7 +159,7 @@ const CreditOrderModal: React.FC = () => {
     setLoading(true);
     try {
       const { data, error } = await api.getCreditPackages();
-      
+
       if (error) {
         toast.error(`Failed to fetch packages: ${error.detail}`);
         setPackages([]); // Set empty array on error
@@ -135,7 +167,7 @@ const CreditOrderModal: React.FC = () => {
         setPackages(data as CreditPackage[]);
       }
     } catch (error) {
-      console.error('Error fetching packages:', error);
+      console.error("Error fetching packages:", error);
       setPackages([]); // Set empty array on error
     } finally {
       setLoading(false);
@@ -144,22 +176,25 @@ const CreditOrderModal: React.FC = () => {
 
   const handlePackageSelect = (pkg: CreditPackage) => {
     setSelectedPackage(pkg);
-    setOrderForm(prev => ({ ...prev, package_id: pkg.id }));
-    setStep('form');
+    setOrderForm((prev) => ({ ...prev, package_id: pkg.id }));
+    setStep("form");
   };
 
-  const handleFormChange = (field: keyof CreditOrderForm, value: string | boolean) => {
-    setOrderForm(prev => ({ ...prev, [field]: value }));
-    
+  const handleFormChange = (
+    field: keyof CreditOrderForm,
+    value: string | boolean,
+  ) => {
+    setOrderForm((prev) => ({ ...prev, [field]: value }));
+
     // Validate field if it's a required field
     if (field in fieldValidation) {
-      const isValid = typeof value === 'string' && value.trim().length > 0;
-      setFieldValidation(prev => ({ ...prev, [field]: isValid }));
+      const isValid = typeof value === "string" && value.trim().length > 0;
+      setFieldValidation((prev) => ({ ...prev, [field]: isValid }));
     }
   };
 
   const handleFieldBlur = (field: keyof CreditOrderForm) => {
-    setTouchedFields(prev => new Set(prev).add(field));
+    setTouchedFields((prev) => new Set(prev).add(field));
   };
 
   const isFieldValid = (field: keyof FieldValidation): boolean => {
@@ -172,44 +207,47 @@ const CreditOrderModal: React.FC = () => {
 
   const getFieldError = (field: keyof FieldValidation): string => {
     const fieldLabels = {
-      school_name: 'onderwijsorganisatie',
-      purchaser_name: 'contactpersoon',
-      purchase_reference: 'factuurreferentie',
-      address_line1: 'factuuradres',
-      city: 'plaats',
-      postal_code: 'postcode',
+      school_name: "onderwijsorganisatie",
+      purchaser_name: "contactpersoon",
+      purchase_reference: "factuurreferentie",
+      address_line1: "factuuradres",
+      city: "plaats",
+      postal_code: "postcode",
     };
     return `Vul de ${fieldLabels[field]} in`;
   };
 
   const isFormValid = (): boolean => {
-    return Object.values(fieldValidation).every(valid => valid) && orderForm.terms_accepted;
+    return (
+      Object.values(fieldValidation).every((valid) => valid) &&
+      orderForm.terms_accepted
+    );
   };
 
   const getInvalidFieldCount = (): number => {
-    return Object.values(fieldValidation).filter(valid => !valid).length;
+    return Object.values(fieldValidation).filter((valid) => !valid).length;
   };
 
   const handleSubmitOrder = async () => {
     if (!orderForm.terms_accepted) {
-      alert('Je moet de inkoopvoorwaarden accepteren om door te gaan.');
+      alert("Je moet de NLdigital Voorwaarden accepteren om door te gaan.");
       return;
     }
 
     setOrderLoading(true);
     try {
       const { data, error } = await api.createCreditOrder(orderForm);
-      
+
       if (error) {
         alert(`Fout bij het plaatsen van de bestelling: ${error.detail}`);
         return;
       }
-      
-      setStep('success');
+
+      setStep("success");
       await refreshCredits();
     } catch (error) {
-      console.error('Error submitting order:', error);
-      alert('Er is een fout opgetreden bij het plaatsen van de bestelling.');
+      console.error("Error submitting order:", error);
+      alert("Er is een fout opgetreden bij het plaatsen van de bestelling.");
     } finally {
       setOrderLoading(false);
     }
@@ -220,23 +258,23 @@ const CreditOrderModal: React.FC = () => {
   };
 
   const handleClose = () => {
-    setStep('packages');
+    setStep("packages");
     setSelectedPackage(null);
     setOrderForm({
-      package_id: '',
-      school_name: '',
-      purchaser_name: '',
-      purchase_reference: '',
-      address_line1: '',
-      address_line2: '',
-      city: '',
-      postal_code: '',
-      country: 'Netherlands',
+      package_id: "",
+      school_name: "",
+      purchaser_name: "",
+      purchase_reference: "",
+      address_line1: "",
+      address_line2: "",
+      city: "",
+      postal_code: "",
+      country: "Netherlands",
       terms_accepted: false,
-      quantity: 1
+      quantity: 1,
     });
     // Reset voucher state
-    setVoucherCode('');
+    setVoucherCode("");
     setRedeemResult(null);
     setIsVoucherFocused(false);
     closeModal();
@@ -246,7 +284,7 @@ const CreditOrderModal: React.FC = () => {
     if (!voucherCode.trim()) {
       setRedeemResult({
         success: false,
-        message: 'Voer een voucher code in'
+        message: "Voer een voucher code in",
       });
       return;
     }
@@ -255,12 +293,16 @@ const CreditOrderModal: React.FC = () => {
     setRedeemResult(null);
 
     try {
-      const { data, error } = await api.redeemVoucher({ code: voucherCode.trim().toUpperCase() });
+      const { data, error } = await api.redeemVoucher({
+        code: voucherCode.trim().toUpperCase(),
+      });
 
       if (error) {
         setRedeemResult({
           success: false,
-          message: error.detail || 'Er is een fout opgetreden bij het inwisselen van de voucher'
+          message:
+            error.detail ||
+            "Er is een fout opgetreden bij het inwisselen van de voucher",
         });
         return;
       }
@@ -268,20 +310,26 @@ const CreditOrderModal: React.FC = () => {
       setRedeemResult({
         success: true,
         message: (data as any).message,
-        creditsAdded: (data as any).credits_added
+        creditsAdded: (data as any).credits_added,
       });
-      setVoucherCode('');
-      
+      setVoucherCode("");
+
       // Optimistic UI update: immediately update voucher status in admin table
       if ((data as any).data?.voucher_id) {
-        console.log('🎫 CreditOrderModal: Voucher redemption successful, data:', data);
-        
+        console.log(
+          "🎫 CreditOrderModal: Voucher redemption successful, data:",
+          data,
+        );
+
         // Find and update the voucher in the admin vouchers table
         const voucherId = (data as any).data.voucher_id;
         const voucherCode = (data as any).data.voucher_code;
-        
-        console.log('🎫 CreditOrderModal: Extracted voucher data:', { voucherId, voucherCode });
-        
+
+        console.log("🎫 CreditOrderModal: Extracted voucher data:", {
+          voucherId,
+          voucherCode,
+        });
+
         // Update the voucher status immediately for better UX
         // This will make the admin see "Gebruikt" status right away
         const updateVoucherInAdminTable = () => {
@@ -295,30 +343,47 @@ const CreditOrderModal: React.FC = () => {
               is_used: true,
               used_by: currentUser.id,
               used_at: new Date().toISOString(),
-              user_who_used_name: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.emailAddresses[0]?.emailAddress || 'Unknown User',
+              user_who_used_name:
+                `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim() ||
+                currentUser.emailAddresses[0]?.emailAddress ||
+                "Unknown User",
               // Include credits info for completeness
-              credits: (data as any).data.credits_added
+              credits: (data as any).data.credits_added,
             };
-            
-            console.log('🎫 CreditOrderModal: Calling updateVoucherStatus with:', optimisticVoucherUpdate);
-            
+
+            console.log(
+              "🎫 CreditOrderModal: Calling updateVoucherStatus with:",
+              optimisticVoucherUpdate,
+            );
+
             // Use the new updateVoucherStatus function for immediate updates
             // This will update just the specific voucher in the admin table
             updateVoucherStatus(voucherId, optimisticVoucherUpdate, true); // Skip full refresh for efficiency
-            
-            console.log('🎫 Voucher redeemed successfully, updating admin view:', optimisticVoucherUpdate);
+
+            console.log(
+              "🎫 Voucher redeemed successfully, updating admin view:",
+              optimisticVoucherUpdate,
+            );
           } else {
-            console.warn('🎫 CreditOrderModal: No current user found for voucher update');
+            console.warn(
+              "🎫 CreditOrderModal: No current user found for voucher update",
+            );
           }
         };
-        
+
         // Execute the optimistic update
         updateVoucherInAdminTable();
       } else {
-        console.warn('🎫 CreditOrderModal: No voucher_id in response data:', data);
-        console.log('🎫 CreditOrderModal: Full response structure:', JSON.stringify(data, null, 2));
+        console.warn(
+          "🎫 CreditOrderModal: No voucher_id in response data:",
+          data,
+        );
+        console.log(
+          "🎫 CreditOrderModal: Full response structure:",
+          JSON.stringify(data, null, 2),
+        );
       }
-      
+
       // Refresh user credits
       await refreshCredits();
       // Note: refreshVouchers() is no longer needed here since updateVoucherStatus()
@@ -328,10 +393,10 @@ const CreditOrderModal: React.FC = () => {
         handleClose();
       }, 2000);
     } catch (error) {
-      console.error('Error redeeming voucher:', error);
+      console.error("Error redeeming voucher:", error);
       setRedeemResult({
         success: false,
-        message: 'Er is een fout opgetreden bij het inwisselen van de voucher'
+        message: "Er is een fout opgetreden bij het inwisselen van de voucher",
       });
     } finally {
       setIsRedeeming(false);
@@ -339,7 +404,7 @@ const CreditOrderModal: React.FC = () => {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isRedeeming) {
+    if (e.key === "Enter" && !isRedeeming) {
       handleVoucherRedeem();
     }
   };
@@ -348,53 +413,62 @@ const CreditOrderModal: React.FC = () => {
   const handleEdit = (pkg: CreditPackage) => {
     setEditingId(pkg.id);
     setEditData({ ...pkg });
-    setEditPriceDisplay(pkg.price ? (pkg.price / 100).toFixed(2) : '');
-    setEditCreditsDisplay(pkg.credits ? pkg.credits.toString() : '');
+    setEditPriceDisplay(pkg.price ? (pkg.price / 100).toFixed(2) : "");
+    setEditCreditsDisplay(pkg.credits ? pkg.credits.toString() : "");
     setCrudError(null);
   };
-  const handleEditChange = (field: keyof CreditPackage, value: string | number | boolean) => {
+  const handleEditChange = (
+    field: keyof CreditPackage,
+    value: string | number | boolean,
+  ) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
   };
   const handleEditPriceChange = (value: string) => {
     setEditPriceDisplay(value);
     // Only update the actual price if it's a valid number
-    if (value === '' || value === '.') {
-      setEditData(prev => ({ ...prev, price: 0 }));
+    if (value === "" || value === ".") {
+      setEditData((prev) => ({ ...prev, price: 0 }));
     } else {
       const euroValue = parseFloat(value);
       if (!isNaN(euroValue) && euroValue >= 0) {
-        setEditData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+        setEditData((prev) => ({
+          ...prev,
+          price: Math.round(euroValue * 100),
+        }));
       }
     }
   };
   const handleEditCreditsChange = (value: string) => {
     setEditCreditsDisplay(value);
     // Only update the actual credits if it's a valid number
-    if (value === '') {
-      setEditData(prev => ({ ...prev, credits: 0 }));
+    if (value === "") {
+      setEditData((prev) => ({ ...prev, credits: 0 }));
     } else {
       const creditsValue = parseInt(value);
       if (!isNaN(creditsValue) && creditsValue >= 0) {
-        setEditData(prev => ({ ...prev, credits: creditsValue }));
+        setEditData((prev) => ({ ...prev, credits: creditsValue }));
       }
     }
   };
   const handleEditSave = async () => {
     if (!editData.name || !editData.credits || !editData.price) {
-      setCrudError('Vul alle verplichte velden in');
+      setCrudError("Vul alle verplichte velden in");
       return;
     }
     try {
       setCrudError(null);
-      const { data, error } = await api.updateAdminCreditPackage(editingId!, editData);
+      const { data, error } = await api.updateAdminCreditPackage(
+        editingId!,
+        editData,
+      );
       if (error) {
-        setCrudError(error.detail || 'Fout bij opslaan');
+        setCrudError(error.detail || "Fout bij opslaan");
         return;
       }
       await fetchPackages();
       setEditingId(null);
     } catch (e) {
-      setCrudError('Fout bij opslaan');
+      setCrudError("Fout bij opslaan");
     }
   };
   const handleEditCancel = () => {
@@ -413,13 +487,13 @@ const CreditOrderModal: React.FC = () => {
     try {
       const { error } = await api.deleteAdminCreditPackage(deleteId);
       if (error) {
-        setCrudError(error.detail || 'Fout bij verwijderen');
+        setCrudError(error.detail || "Fout bij verwijderen");
         return;
       }
       await fetchPackages();
       setDeleteId(null);
     } catch (e) {
-      setCrudError('Fout bij verwijderen');
+      setCrudError("Fout bij verwijderen");
     } finally {
       setDeleteLoading(false);
     }
@@ -427,54 +501,66 @@ const CreditOrderModal: React.FC = () => {
   // Admin: handle create
   const handleCreate = () => {
     setCreating(true);
-    setCreateData({ name: '', credits: 0, price: 0, description: '', is_active: true });
-    setCreatePriceDisplay('');
-    setCreateCreditsDisplay('');
+    setCreateData({
+      name: "",
+      credits: 0,
+      price: 0,
+      description: "",
+      is_active: true,
+    });
+    setCreatePriceDisplay("");
+    setCreateCreditsDisplay("");
     setCrudError(null);
   };
-  const handleCreateChange = (field: keyof CreditPackage, value: string | number | boolean) => {
+  const handleCreateChange = (
+    field: keyof CreditPackage,
+    value: string | number | boolean,
+  ) => {
     setCreateData((prev) => ({ ...prev, [field]: value }));
   };
   const handleCreatePriceChange = (value: string) => {
     setCreatePriceDisplay(value);
     // Only update the actual price if it's a valid number
-    if (value === '' || value === '.') {
-      setCreateData(prev => ({ ...prev, price: 0 }));
+    if (value === "" || value === ".") {
+      setCreateData((prev) => ({ ...prev, price: 0 }));
     } else {
       const euroValue = parseFloat(value);
       if (!isNaN(euroValue) && euroValue >= 0) {
-        setCreateData(prev => ({ ...prev, price: Math.round(euroValue * 100) }));
+        setCreateData((prev) => ({
+          ...prev,
+          price: Math.round(euroValue * 100),
+        }));
       }
     }
   };
   const handleCreateCreditsChange = (value: string) => {
     setCreateCreditsDisplay(value);
     // Only update the actual credits if it's a valid number
-    if (value === '') {
-      setCreateData(prev => ({ ...prev, credits: 0 }));
+    if (value === "") {
+      setCreateData((prev) => ({ ...prev, credits: 0 }));
     } else {
       const creditsValue = parseInt(value);
       if (!isNaN(creditsValue) && creditsValue >= 0) {
-        setCreateData(prev => ({ ...prev, credits: creditsValue }));
+        setCreateData((prev) => ({ ...prev, credits: creditsValue }));
       }
     }
   };
   const handleCreateSave = async () => {
     if (!createData.name || !createData.credits || !createData.price) {
-      setCrudError('Vul alle verplichte velden in');
+      setCrudError("Vul alle verplichte velden in");
       return;
     }
     try {
       setCrudError(null);
       const { data, error } = await api.createAdminCreditPackage(createData);
       if (error) {
-        setCrudError(error.detail || 'Fout bij aanmaken');
+        setCrudError(error.detail || "Fout bij aanmaken");
         return;
       }
       await fetchPackages();
       setCreating(false);
     } catch (e) {
-      setCrudError('Fout bij aanmaken');
+      setCrudError("Fout bij aanmaken");
     }
   };
   const handleCreateCancel = () => {
@@ -489,10 +575,10 @@ const CreditOrderModal: React.FC = () => {
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {step === 'packages' && 'Credits Bestellen'}
-            {step === 'voucher' && 'Voucher Inwisselen'}
-            {step === 'form' && 'Bestelling Plaatsen'}
-            {step === 'success' && 'Bestelling Succesvol'}
+            {step === "packages" && "Credits Bestellen"}
+            {step === "voucher" && "Voucher Inwisselen"}
+            {step === "form" && "Bestelling Plaatsen"}
+            {step === "success" && "Bestelling Succesvol"}
           </h2>
           <button
             onClick={handleClose}
@@ -503,7 +589,7 @@ const CreditOrderModal: React.FC = () => {
         </div>
 
         <div className="p-6">
-          {step === 'packages' && (
+          {step === "packages" && (
             <div className="space-y-4">
               {crudError && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">
@@ -524,7 +610,8 @@ const CreditOrderModal: React.FC = () => {
                         key={pkg.id}
                         className={cn(
                           "relative transition-all hover:shadow-md",
-                          selectedPackage?.id === pkg.id && "ring-2 ring-examen-cyan"
+                          selectedPackage?.id === pkg.id &&
+                            "ring-2 ring-examen-cyan",
                         )}
                         onClick={() => !editingId && handlePackageSelect(pkg)}
                       >
@@ -534,15 +621,31 @@ const CreditOrderModal: React.FC = () => {
                               <>
                                 <Input
                                   value={editData.name as string}
-                                  onChange={e => handleEditChange('name', e.target.value)}
+                                  onChange={(e) =>
+                                    handleEditChange("name", e.target.value)
+                                  }
                                   className="text-lg font-semibold"
                                   placeholder="Pakket naam"
                                 />
                                 <div className="flex gap-2">
-                                  <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEditSave(); }}>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditSave();
+                                    }}
+                                  >
                                     <CheckIcon className="h-4 w-4 text-green-500" />
                                   </Button>
-                                  <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEditCancel(); }}>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditCancel();
+                                    }}
+                                  >
                                     <XIcon className="h-4 w-4 text-gray-500" />
                                   </Button>
                                 </div>
@@ -553,10 +656,24 @@ const CreditOrderModal: React.FC = () => {
                                   {pkg.name}
                                   {isAdmin && (
                                     <>
-                                      <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleEdit(pkg); }}>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEdit(pkg);
+                                        }}
+                                      >
                                         <Pencil className="h-4 w-4 text-gray-500" />
                                       </Button>
-                                      <Button size="icon" variant="ghost" onClick={e => { e.stopPropagation(); handleDelete(pkg.id); }}>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDelete(pkg.id);
+                                        }}
+                                      >
                                         <Trash2 className="h-4 w-4 text-red-500" />
                                       </Button>
                                     </>
@@ -571,12 +688,16 @@ const CreditOrderModal: React.FC = () => {
                           {editingId === pkg.id ? (
                             <Textarea
                               value={editData.description as string}
-                              onChange={e => handleEditChange('description', e.target.value)}
+                              onChange={(e) =>
+                                handleEditChange("description", e.target.value)
+                              }
                               className="mt-2"
                               placeholder="Beschrijving"
                             />
                           ) : (
-                            <p className="text-gray-600 text-sm">{pkg.description}</p>
+                            <p className="text-gray-600 text-sm">
+                              {pkg.description}
+                            </p>
                           )}
                         </CardHeader>
                         <CardContent>
@@ -591,7 +712,9 @@ const CreditOrderModal: React.FC = () => {
                                     type="number"
                                     min={1}
                                     value={editCreditsDisplay}
-                                    onChange={e => handleEditCreditsChange(e.target.value)}
+                                    onChange={(e) =>
+                                      handleEditCreditsChange(e.target.value)
+                                    }
                                     className="w-full"
                                     placeholder="Bijv. 100"
                                   />
@@ -605,24 +728,37 @@ const CreditOrderModal: React.FC = () => {
                                     min={0.01}
                                     step={0.01}
                                     value={editPriceDisplay}
-                                    onChange={e => handleEditPriceChange(e.target.value)}
+                                    onChange={(e) =>
+                                      handleEditPriceChange(e.target.value)
+                                    }
                                     className="w-full"
                                     placeholder="Bijv. 0.50"
                                   />
                                 </div>
                               </div>
                               <div className="text-center p-3 bg-gray-50 rounded-lg">
-                                <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                                <div className="text-sm text-gray-600 mb-1">
+                                  Totaalprijs pakket:
+                                </div>
                                 <div className="text-xl font-bold text-examen-cyan">
-                                  €{(() => {
-                                    const pricePerCredit = (editData.price as number) / 100;
-                                    const totalCredits = editData.credits as number;
-                                    const totalPrice = pricePerCredit * totalCredits;
-                                    return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                  €
+                                  {(() => {
+                                    const pricePerCredit =
+                                      (editData.price as number) / 100;
+                                    const totalCredits =
+                                      editData.credits as number;
+                                    const totalPrice =
+                                      pricePerCredit * totalCredits;
+                                    return totalPrice > 0
+                                      ? totalPrice.toFixed(2)
+                                      : "0.00";
                                   })()}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {editData.credits || 0} credits × €{((editData.price as number) / 100).toFixed(2)}
+                                  {editData.credits || 0} credits × €
+                                  {((editData.price as number) / 100).toFixed(
+                                    2,
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -636,7 +772,11 @@ const CreditOrderModal: React.FC = () => {
                     ))}
                     {/* Admin: create new package */}
                     {isAdmin && !creating && (
-                      <Button variant="outline" className="flex items-center gap-2 mt-2" onClick={handleCreate}>
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2 mt-2"
+                        onClick={handleCreate}
+                      >
                         <Plus className="h-4 w-4" />
                         Nieuw pakket
                       </Button>
@@ -648,22 +788,34 @@ const CreditOrderModal: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <Input
                               value={createData.name as string}
-                              onChange={e => handleCreateChange('name', e.target.value)}
+                              onChange={(e) =>
+                                handleCreateChange("name", e.target.value)
+                              }
                               className="text-lg font-semibold"
                               placeholder="Pakket naam"
                             />
                             <div className="flex gap-2">
-                              <Button size="icon" variant="ghost" onClick={handleCreateSave}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={handleCreateSave}
+                              >
                                 <CheckIcon className="h-4 w-4 text-green-500" />
                               </Button>
-                              <Button size="icon" variant="ghost" onClick={handleCreateCancel}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={handleCreateCancel}
+                              >
                                 <XIcon className="h-4 w-4 text-gray-500" />
                               </Button>
                             </div>
                           </div>
                           <Textarea
                             value={createData.description as string}
-                            onChange={e => handleCreateChange('description', e.target.value)}
+                            onChange={(e) =>
+                              handleCreateChange("description", e.target.value)
+                            }
                             className="mt-2"
                             placeholder="Beschrijving"
                           />
@@ -679,7 +831,9 @@ const CreditOrderModal: React.FC = () => {
                                   type="number"
                                   min={1}
                                   value={createCreditsDisplay}
-                                  onChange={e => handleCreateCreditsChange(e.target.value)}
+                                  onChange={(e) =>
+                                    handleCreateCreditsChange(e.target.value)
+                                  }
                                   className="w-full"
                                   placeholder="Bijv. 100"
                                 />
@@ -693,24 +847,37 @@ const CreditOrderModal: React.FC = () => {
                                   min={0.01}
                                   step={0.01}
                                   value={createPriceDisplay}
-                                  onChange={e => handleCreatePriceChange(e.target.value)}
+                                  onChange={(e) =>
+                                    handleCreatePriceChange(e.target.value)
+                                  }
                                   className="w-full"
                                   placeholder="Bijv. 0.50"
                                 />
                               </div>
                             </div>
                             <div className="text-center p-3 bg-gray-50 rounded-lg">
-                              <div className="text-sm text-gray-600 mb-1">Totaalprijs pakket:</div>
+                              <div className="text-sm text-gray-600 mb-1">
+                                Totaalprijs pakket:
+                              </div>
                               <div className="text-xl font-bold text-examen-cyan">
-                                €{(() => {
-                                  const pricePerCredit = (createData.price as number) / 100;
-                                  const totalCredits = createData.credits as number;
-                                  const totalPrice = pricePerCredit * totalCredits;
-                                  return totalPrice > 0 ? totalPrice.toFixed(2) : '0.00';
+                                €
+                                {(() => {
+                                  const pricePerCredit =
+                                    (createData.price as number) / 100;
+                                  const totalCredits =
+                                    createData.credits as number;
+                                  const totalPrice =
+                                    pricePerCredit * totalCredits;
+                                  return totalPrice > 0
+                                    ? totalPrice.toFixed(2)
+                                    : "0.00";
                                 })()}
                               </div>
                               <div className="text-xs text-gray-500">
-                                {createData.credits || 0} credits × €{((createData.price as number) / 100).toFixed(2)}
+                                {createData.credits || 0} credits × €
+                                {((createData.price as number) / 100).toFixed(
+                                  2,
+                                )}
                               </div>
                             </div>
                           </div>
@@ -723,19 +890,27 @@ const CreditOrderModal: React.FC = () => {
                   <div className="border-t pt-4">
                     <Card
                       className="cursor-pointer transition-all hover:shadow-md border-green-200 hover:border-green-300"
-                      onClick={() => setStep('voucher')}
+                      onClick={() => setStep("voucher")}
                     >
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Gift className="h-5 w-5 text-green-600" />
-                            <CardTitle className="text-lg text-green-700">Voucher inwisselen</CardTitle>
+                            <CardTitle className="text-lg text-green-700">
+                              Voucher inwisselen
+                            </CardTitle>
                           </div>
-                          <Badge variant="secondary" className="text-sm bg-green-100 text-green-700">
+                          <Badge
+                            variant="secondary"
+                            className="text-sm bg-green-100 text-green-700"
+                          >
                             Gratis
                           </Badge>
                         </div>
-                        <p className="text-gray-600 text-sm">Heb je een voucher code? Wissel deze hier in voor credits.</p>
+                        <p className="text-gray-600 text-sm">
+                          Heb je een voucher code? Wissel deze hier in voor
+                          credits.
+                        </p>
                       </CardHeader>
                       <CardContent>
                         <div className="text-sm text-green-600 font-medium">
@@ -748,20 +923,36 @@ const CreditOrderModal: React.FC = () => {
               )}
               {/* Delete confirmation modal */}
               {deleteId && (
-                <Dialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
+                <Dialog
+                  open={!!deleteId}
+                  onOpenChange={(open) => !open && setDeleteId(null)}
+                >
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Pakket verwijderen</DialogTitle>
                     </DialogHeader>
                     <div className="py-4">
-                      Weet je zeker dat je dit pakket wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.
+                      Weet je zeker dat je dit pakket wilt verwijderen? Deze
+                      actie kan niet ongedaan worden gemaakt.
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setDeleteId(null)} disabled={deleteLoading}>
+                      <Button
+                        variant="outline"
+                        onClick={() => setDeleteId(null)}
+                        disabled={deleteLoading}
+                      >
                         Annuleren
                       </Button>
-                      <Button variant="destructive" onClick={confirmDelete} disabled={deleteLoading}>
-                        {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verwijderen'}
+                      <Button
+                        variant="destructive"
+                        onClick={confirmDelete}
+                        disabled={deleteLoading}
+                      >
+                        {deleteLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Verwijderen"
+                        )}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -770,18 +961,23 @@ const CreditOrderModal: React.FC = () => {
             </div>
           )}
 
-          {step === 'voucher' && (
+          {step === "voucher" && (
             <div className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="voucher-code" className="text-sm font-medium text-gray-700">
+                  <Label
+                    htmlFor="voucher-code"
+                    className="text-sm font-medium text-gray-700"
+                  >
                     Voucher Code
                   </Label>
                   <div className="flex gap-2">
                     <Input
                       id="voucher-code"
                       type="text"
-                      placeholder={isVoucherFocused ? "" : "Voer je voucher code in"}
+                      placeholder={
+                        isVoucherFocused ? "" : "Voer je voucher code in"
+                      }
                       value={voucherCode}
                       onChange={(e) => {
                         setVoucherCode(e.target.value.toUpperCase());
@@ -801,18 +997,20 @@ const CreditOrderModal: React.FC = () => {
                       {isRedeeming ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Inwisselen'
+                        "Inwisselen"
                       )}
                     </Button>
                   </div>
                 </div>
 
                 {redeemResult && (
-                  <div className={`p-3 rounded-lg border ${
-                    redeemResult.success 
-                      ? 'bg-green-50 border-green-200 text-green-800' 
-                      : 'bg-red-50 border-red-200 text-red-800'
-                  }`}>
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      redeemResult.success
+                        ? "bg-green-50 border-green-200 text-green-800"
+                        : "bg-red-50 border-red-200 text-red-800"
+                    }`}
+                  >
                     <div className="flex items-center gap-2">
                       {redeemResult.success ? (
                         <Check className="h-4 w-4 text-green-600" />
@@ -825,7 +1023,10 @@ const CreditOrderModal: React.FC = () => {
                     </div>
                     {redeemResult.success && redeemResult.creditsAdded && (
                       <div className="mt-1 text-sm">
-                        <span className="font-medium">{redeemResult.creditsAdded} credits</span> zijn toegevoegd aan je account.
+                        <span className="font-medium">
+                          {redeemResult.creditsAdded} credits
+                        </span>{" "}
+                        zijn toegevoegd aan je account.
                       </div>
                     )}
                   </div>
@@ -840,17 +1041,14 @@ const CreditOrderModal: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="flex justify-between pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setStep('packages')}
-                >
+                <Button variant="outline" onClick={() => setStep("packages")}>
                   Terug naar opties
                 </Button>
               </div>
             </div>
           )}
 
-          {step === 'form' && selectedPackage && (
+          {step === "form" && selectedPackage && (
             <div className="space-y-6">
               {/* Selected Package Summary */}
               <Card className="bg-gray-50">
@@ -858,13 +1056,19 @@ const CreditOrderModal: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">{selectedPackage.name}</h3>
-                      <p className="text-sm text-gray-600">{selectedPackage.description}</p>
+                      <p className="text-sm text-gray-600">
+                        {selectedPackage.description}
+                      </p>
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-examen-cyan">
-                        {formatPrice(selectedPackage.price * selectedPackage.credits)}
+                        {formatPrice(
+                          selectedPackage.price * selectedPackage.credits,
+                        )}
                       </div>
-                      <div className="text-sm text-gray-600">{selectedPackage.credits} credits</div>
+                      <div className="text-sm text-gray-600">
+                        {selectedPackage.credits} credits
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -874,191 +1078,249 @@ const CreditOrderModal: React.FC = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="school-name" className="text-sm font-medium text-gray-700">
+                    <Label
+                      htmlFor="school-name"
+                      className="text-sm font-medium text-gray-700"
+                    >
                       Onderwijsorganisatie *
                     </Label>
                     <div className="relative">
-                      <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
-                        isFieldTouched('school_name') 
-                          ? isFieldValid('school_name') ? 'text-green-500' : 'text-red-500'
-                          : 'text-gray-400'
-                      }`} />
+                      <Building
+                        className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                          isFieldTouched("school_name")
+                            ? isFieldValid("school_name")
+                              ? "text-green-500"
+                              : "text-red-500"
+                            : "text-gray-400"
+                        }`}
+                      />
                       <Input
                         id="school-name"
                         type="text"
                         value={orderForm.school_name}
-                        onChange={(e) => handleFormChange('school_name', e.target.value)}
-                        onBlur={() => handleFieldBlur('school_name')}
+                        onChange={(e) =>
+                          handleFormChange("school_name", e.target.value)
+                        }
+                        onBlur={() => handleFieldBlur("school_name")}
                         className={`pl-10 ${
-                          isFieldTouched('school_name')
-                            ? isFieldValid('school_name') 
-                              ? 'border-green-500 focus:border-green-500' 
-                              : 'border-red-500 focus:border-red-500'
-                            : ''
+                          isFieldTouched("school_name")
+                            ? isFieldValid("school_name")
+                              ? "border-green-500 focus:border-green-500"
+                              : "border-red-500 focus:border-red-500"
+                            : ""
                         }`}
                         placeholder="Naam school of instelling"
                         required
                       />
                     </div>
-                    {isFieldTouched('school_name') && !isFieldValid('school_name') && (
-                      <p className="text-sm text-red-600">{getFieldError('school_name')}</p>
-                    )}
+                    {isFieldTouched("school_name") &&
+                      !isFieldValid("school_name") && (
+                        <p className="text-sm text-red-600">
+                          {getFieldError("school_name")}
+                        </p>
+                      )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="purchaser-name" className="text-sm font-medium text-gray-700">
+                    <Label
+                      htmlFor="purchaser-name"
+                      className="text-sm font-medium text-gray-700"
+                    >
                       Contactpersoon *
                     </Label>
                     <div className="relative">
-                      <User className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
-                        isFieldTouched('purchaser_name') 
-                          ? isFieldValid('purchaser_name') ? 'text-green-500' : 'text-red-500'
-                          : 'text-gray-400'
-                      }`} />
+                      <User
+                        className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                          isFieldTouched("purchaser_name")
+                            ? isFieldValid("purchaser_name")
+                              ? "text-green-500"
+                              : "text-red-500"
+                            : "text-gray-400"
+                        }`}
+                      />
                       <Input
                         id="purchaser-name"
                         type="text"
                         value={orderForm.purchaser_name}
-                        onChange={(e) => handleFormChange('purchaser_name', e.target.value)}
-                        onBlur={() => handleFieldBlur('purchaser_name')}
+                        onChange={(e) =>
+                          handleFormChange("purchaser_name", e.target.value)
+                        }
+                        onBlur={() => handleFieldBlur("purchaser_name")}
                         className={`pl-10 ${
-                          isFieldTouched('purchaser_name')
-                            ? isFieldValid('purchaser_name') 
-                              ? 'border-green-500 focus:border-green-500' 
-                              : 'border-red-500 focus:border-red-500'
-                            : ''
+                          isFieldTouched("purchaser_name")
+                            ? isFieldValid("purchaser_name")
+                              ? "border-green-500 focus:border-green-500"
+                              : "border-red-500 focus:border-red-500"
+                            : ""
                         }`}
                         placeholder="Contactpersoon"
                         required
                       />
                     </div>
-                    {isFieldTouched('purchaser_name') && !isFieldValid('purchaser_name') && (
-                      <p className="text-sm text-red-600">{getFieldError('purchaser_name')}</p>
-                    )}
+                    {isFieldTouched("purchaser_name") &&
+                      !isFieldValid("purchaser_name") && (
+                        <p className="text-sm text-red-600">
+                          {getFieldError("purchaser_name")}
+                        </p>
+                      )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="purchase-reference" className="text-sm font-medium text-gray-700">
+                    <Label
+                      htmlFor="purchase-reference"
+                      className="text-sm font-medium text-gray-700"
+                    >
                       Factuurreferentie/Kostenplaats *
                     </Label>
                     <div className="relative">
-                      <FileText className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
-                        isFieldTouched('purchase_reference') 
-                          ? isFieldValid('purchase_reference') ? 'text-green-500' : 'text-red-500'
-                          : 'text-gray-400'
-                      }`} />
+                      <FileText
+                        className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${
+                          isFieldTouched("purchase_reference")
+                            ? isFieldValid("purchase_reference")
+                              ? "text-green-500"
+                              : "text-red-500"
+                            : "text-gray-400"
+                        }`}
+                      />
                       <Input
                         id="purchase-reference"
                         type="text"
                         value={orderForm.purchase_reference}
-                        onChange={(e) => handleFormChange('purchase_reference', e.target.value)}
-                        onBlur={() => handleFieldBlur('purchase_reference')}
+                        onChange={(e) =>
+                          handleFormChange("purchase_reference", e.target.value)
+                        }
+                        onBlur={() => handleFieldBlur("purchase_reference")}
                         className={`pl-10 ${
-                          isFieldTouched('purchase_reference')
-                            ? isFieldValid('purchase_reference') 
-                              ? 'border-green-500 focus:border-green-500' 
-                              : 'border-red-500 focus:border-red-500'
-                            : ''
+                          isFieldTouched("purchase_reference")
+                            ? isFieldValid("purchase_reference")
+                              ? "border-green-500 focus:border-green-500"
+                              : "border-red-500 focus:border-red-500"
+                            : ""
                         }`}
                         placeholder="Factuurreferentie"
                         required
                       />
                     </div>
-                    {isFieldTouched('purchase_reference') && !isFieldValid('purchase_reference') && (
-                      <p className="text-sm text-red-600">{getFieldError('purchase_reference')}</p>
-                    )}
+                    {isFieldTouched("purchase_reference") &&
+                      !isFieldValid("purchase_reference") && (
+                        <p className="text-sm text-red-600">
+                          {getFieldError("purchase_reference")}
+                        </p>
+                      )}
                   </div>
-
-
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address-line1" className="text-sm font-medium text-gray-700">
+                  <Label
+                    htmlFor="address-line1"
+                    className="text-sm font-medium text-gray-700"
+                  >
                     Factuuradres *
                   </Label>
                   <Input
                     id="address-line1"
                     type="text"
                     value={orderForm.address_line1}
-                    onChange={(e) => handleFormChange('address_line1', e.target.value)}
-                    onBlur={() => handleFieldBlur('address_line1')}
+                    onChange={(e) =>
+                      handleFormChange("address_line1", e.target.value)
+                    }
+                    onBlur={() => handleFieldBlur("address_line1")}
                     className={`${
-                      isFieldTouched('address_line1')
-                        ? isFieldValid('address_line1') 
-                          ? 'border-green-500 focus:border-green-500' 
-                          : 'border-red-500 focus:border-red-500'
-                        : ''
+                      isFieldTouched("address_line1")
+                        ? isFieldValid("address_line1")
+                          ? "border-green-500 focus:border-green-500"
+                          : "border-red-500 focus:border-red-500"
+                        : ""
                     }`}
                     placeholder="Straatnaam en huisnummer"
                     required
                   />
-                  {isFieldTouched('address_line1') && !isFieldValid('address_line1') && (
-                    <p className="text-sm text-red-600">{getFieldError('address_line1')}</p>
-                  )}
+                  {isFieldTouched("address_line1") &&
+                    !isFieldValid("address_line1") && (
+                      <p className="text-sm text-red-600">
+                        {getFieldError("address_line1")}
+                      </p>
+                    )}
                 </div>
-
-
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="postal-code" className="text-sm font-medium text-gray-700">
+                    <Label
+                      htmlFor="postal-code"
+                      className="text-sm font-medium text-gray-700"
+                    >
                       Postcode *
                     </Label>
                     <Input
                       id="postal-code"
                       type="text"
                       value={orderForm.postal_code}
-                      onChange={(e) => handleFormChange('postal_code', e.target.value)}
-                      onBlur={() => handleFieldBlur('postal_code')}
+                      onChange={(e) =>
+                        handleFormChange("postal_code", e.target.value)
+                      }
+                      onBlur={() => handleFieldBlur("postal_code")}
                       className={`${
-                        isFieldTouched('postal_code')
-                          ? isFieldValid('postal_code') 
-                            ? 'border-green-500 focus:border-green-500' 
-                            : 'border-red-500 focus:border-red-500'
-                          : ''
+                        isFieldTouched("postal_code")
+                          ? isFieldValid("postal_code")
+                            ? "border-green-500 focus:border-green-500"
+                            : "border-red-500 focus:border-red-500"
+                          : ""
                       }`}
                       placeholder="Postcode"
                       required
                     />
-                    {isFieldTouched('postal_code') && !isFieldValid('postal_code') && (
-                      <p className="text-sm text-red-600">{getFieldError('postal_code')}</p>
-                    )}
+                    {isFieldTouched("postal_code") &&
+                      !isFieldValid("postal_code") && (
+                        <p className="text-sm text-red-600">
+                          {getFieldError("postal_code")}
+                        </p>
+                      )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="city" className="text-sm font-medium text-gray-700">
+                    <Label
+                      htmlFor="city"
+                      className="text-sm font-medium text-gray-700"
+                    >
                       Stad *
                     </Label>
                     <Input
                       id="city"
                       type="text"
                       value={orderForm.city}
-                      onChange={(e) => handleFormChange('city', e.target.value)}
-                      onBlur={() => handleFieldBlur('city')}
+                      onChange={(e) => handleFormChange("city", e.target.value)}
+                      onBlur={() => handleFieldBlur("city")}
                       className={`${
-                        isFieldTouched('city')
-                          ? isFieldValid('city') 
-                            ? 'border-green-500 focus:border-green-500' 
-                            : 'border-red-500 focus:border-red-500'
-                          : ''
+                        isFieldTouched("city")
+                          ? isFieldValid("city")
+                            ? "border-green-500 focus:border-green-500"
+                            : "border-red-500 focus:border-red-500"
+                          : ""
                       }`}
                       placeholder="Stad"
                       required
                     />
-                    {isFieldTouched('city') && !isFieldValid('city') && (
-                      <p className="text-sm text-red-600">{getFieldError('city')}</p>
+                    {isFieldTouched("city") && !isFieldValid("city") && (
+                      <p className="text-sm text-red-600">
+                        {getFieldError("city")}
+                      </p>
                     )}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="comments" className="text-sm font-medium text-gray-700">
+                  <Label
+                    htmlFor="comments"
+                    className="text-sm font-medium text-gray-700"
+                  >
                     Opmerkingen
                   </Label>
                   <Textarea
                     id="comments"
-                    value={orderForm.comments || ''}
-                    onChange={(e) => handleFormChange('comments', e.target.value)}
+                    value={orderForm.comments || ""}
+                    onChange={(e) =>
+                      handleFormChange("comments", e.target.value)
+                    }
                     placeholder="Optionele opmerkingen voor je bestelling"
                     className="min-h-[80px]"
                   />
@@ -1068,18 +1330,18 @@ const CreditOrderModal: React.FC = () => {
                   <Checkbox
                     id="terms"
                     checked={orderForm.terms_accepted}
-                    onCheckedChange={(checked) => 
-                      handleFormChange('terms_accepted', checked as boolean)
+                    onCheckedChange={(checked) =>
+                      handleFormChange("terms_accepted", checked as boolean)
                     }
                   />
                   <Label htmlFor="terms" className="text-sm">
-                    Ik ga akkoord met de{' '}
+                    Ik ga akkoord met de{" "}
                     <button
                       type="button"
                       onClick={downloadInkoopvoorwaarden}
                       className="text-examen-cyan hover:underline cursor-pointer"
                     >
-                      inkoopvoorwaarden
+                      NLdigital Voorwaarden
                     </button>
                   </Label>
                 </div>
@@ -1087,10 +1349,7 @@ const CreditOrderModal: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="flex justify-between pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setStep('packages')}
-                >
+                <Button variant="outline" onClick={() => setStep("packages")}>
                   Terug naar pakketten
                 </Button>
                 <div className="flex flex-col items-end space-y-2">
@@ -1098,9 +1357,9 @@ const CreditOrderModal: React.FC = () => {
                     onClick={handleSubmitOrder}
                     disabled={orderLoading || !isFormValid()}
                     className={`${
-                      isFormValid() 
-                        ? 'bg-examen-cyan hover:bg-examen-cyan-600' 
-                        : 'bg-gray-300 cursor-not-allowed'
+                      isFormValid()
+                        ? "bg-examen-cyan hover:bg-examen-cyan-600"
+                        : "bg-gray-300 cursor-not-allowed"
                     }`}
                   >
                     {orderLoading ? (
@@ -1125,7 +1384,7 @@ const CreditOrderModal: React.FC = () => {
             </div>
           )}
 
-          {step === 'success' && (
+          {step === "success" && (
             <div className="text-center py-8">
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <Check className="h-8 w-8 text-green-600" />
@@ -1134,14 +1393,14 @@ const CreditOrderModal: React.FC = () => {
                 Bestelling succesvol geplaatst!
               </h3>
               <div className="space-y-3 text-gray-600 mb-6">
+                <p>Je pakket wordt momenteel voorbereid voor verzending.</p>
                 <p>
-                  Je pakket wordt momenteel voorbereid voor verzending.
-                </p>
-                <p>
-                  We verifiëren je gegevens en verwerken je bestelling. Je hebt een bevestigingsmail ontvangen met alle details.
+                  We verifiëren je gegevens en verwerken je bestelling. Je hebt
+                  een bevestigingsmail ontvangen met alle details.
                 </p>
                 <p className="font-medium">
-                  Levering van je credits kan binnen 2 werkdagen worden verwacht.
+                  Levering van je credits kan binnen 2 werkdagen worden
+                  verwacht.
                 </p>
               </div>
               <Button
@@ -1158,4 +1417,4 @@ const CreditOrderModal: React.FC = () => {
   );
 };
 
-export default CreditOrderModal; 
+export default CreditOrderModal;
