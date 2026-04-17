@@ -8,7 +8,8 @@ import { AuthModalProvider } from './contexts/AuthModalContext';
 import SmartPrefetcher from './components/SmartPrefetcher';
 import PageTransitionLoader from './components/PageTransitionLoader';
 import UnifiedHeader from './components/UnifiedHeader';
-import CreditOrderModal from './components/CreditOrderModal';
+// import CreditOrderModal from './components/CreditOrderModal';
+import CreditInfoModal from './components/CreditInfoModal';
 import { AuthModal } from './components/auth/AuthModal';
 import ClerkErrorBoundary from './components/ClerkErrorBoundary';
 import type { Metadata } from 'next';
@@ -63,7 +64,8 @@ export default function RootLayout({
                     <PageTransitionLoader />
                     <UnifiedHeader />
                     {children}
-                    <CreditOrderModal />
+                    {/* <CreditOrderModal /> */}
+                    <CreditInfoModal />
                     <AuthModal />
                     {/* Development-only performance monitoring - REMOVED due to performance impact */}
                     {/* {process.env.NODE_ENV === 'development' && <RolePerformanceDebug />} */}
