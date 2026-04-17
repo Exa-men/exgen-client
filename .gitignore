@@ -43,3 +43,6 @@ next-env.d.ts
 
 # cleanup scripts
 cleanup-builds.sh
+
+# clerk configuration (can include secrets)
+/.clerk/
