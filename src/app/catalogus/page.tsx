@@ -1089,12 +1089,12 @@ export default function CatalogusPage() {
           </h1>
         </div>
 
-        {/* Welcome Banner */}
-        {(() => {
+        {/* Welcome Banner — temporarily disabled */}
+        {/* {(() => {
           return !welcomeBannerLoading && showWelcomeBanner ? (
             <WelcomeBanner onVoucherActivated={handleVoucherActivated} />
           ) : null;
-        })()}
+        })()} */}
 
         {/* Search Bar */}
         <div className="mb-10">
